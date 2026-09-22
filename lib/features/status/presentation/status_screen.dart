@@ -1,13 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/app_dependencies.dart';
+import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/utils/arabic_format.dart';
 import '../../protection/domain/protection.dart';
+import '../../protection/presentation/protection_controller.dart';
+import '../../protection/presentation/protection_ui.dart';
 
-/// What is actually enforced right now, layer by layer, and what can't be.
-class StatusScreen extends StatelessWidget {
+/// What is actually enforced right now, layer by layer, what was blocked,
+/// and what can't be blocked.
+class StatusScreen extends StatefulWidget {
   const StatusScreen({super.key});
+
+  @override
+  State<StatusScreen> createState() => _StatusScreenState();
+}
+
+class _StatusScreenState extends State<StatusScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final protection = AppScope.of(context).protection;
+      protection.refreshStatus();
+      protection.refreshStats();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,17 +36,22 @@ class StatusScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([deps.protection, deps.settings]),
       builder: (context, _) {
-        final state = deps.protection.state;
-        final engine = deps.protection.engineStatus;
-        final stats = deps.protection.stats;
+        final protection = deps.protection;
+        final state = protection.state;
+        final snap = protection.snapshot;
+        final stats = protection.stats;
         final appLock = deps.settings.settings.appLockEnabled;
-        final searchOn =
-            state.enabled && state.isActive(ProtectionCategory.unsafeSearch);
+        final supported = snap.isSupported;
 
-        final (SgStatus engineStatus, String engineLabel) = switch (engine) {
-          EngineStatus.running => (SgStatus.active, 'تعمل'),
-          EngineStatus.stopped => (SgStatus.paused, 'متوقفة'),
-          EngineStatus.notInstalled => (SgStatus.unavailable, 'غير متاحة بعد'),
+        final (SgStatus vpnStatus, String vpnLabel) = switch (snap.vpnState) {
+          VpnState.running => (SgStatus.active, 'يعمل'),
+          VpnState.starting => (SgStatus.unavailable, 'يبدأ'),
+          VpnState.stopping => (SgStatus.unavailable, 'يتوقف'),
+          VpnState.stopped => (SgStatus.paused, 'متوقف'),
+          VpnState.permissionRequired => (SgStatus.error, 'بلا موافقة'),
+          VpnState.revoked => (SgStatus.error, 'مفصول'),
+          VpnState.error => (SgStatus.error, 'خطأ'),
+          VpnState.unsupported => (SgStatus.unavailable, 'غير متاح'),
         };
 
         return SgPage(
@@ -33,40 +59,57 @@ class StatusScreen extends StatelessWidget {
           subtitle: 'ما يعمل الآن على هذا الجهاز',
           children: [
             const SizedBox(height: SgSpace.x6),
-            _Summary(state: state),
+            _Summary(health: protection.health, state: state),
+            EngineWarnings(snapshot: snap),
             const SectionHeader(title: 'طبقات الحماية'),
             SgGroupedCard(
               children: [
                 _LayerRow(
-                  icon: Icons.rule_rounded,
-                  title: 'سياسة الحماية',
-                  subtitle:
-                      '${state.activeCount} من '
-                      '${ProtectionCategory.values.length} فئات محددة',
-                  status: state.enabled ? SgStatus.active : SgStatus.paused,
-                  label: state.enabled ? 'مفعّلة' : 'متوقفة',
+                  icon: Icons.vpn_key_outlined,
+                  title: 'VPN محلي',
+                  subtitle: 'على الجهاز فقط، دون أي خادم',
+                  status: vpnStatus,
+                  label: vpnLabel,
                 ),
                 _LayerRow(
                   icon: Icons.dns_outlined,
-                  title: 'فلترة الشبكة (DNS)',
-                  subtitle: 'حجب النطاقات قبل تحميلها',
-                  status: engineStatus,
-                  label: engineLabel,
+                  title: 'فلتر DNS',
+                  subtitle: 'فحص أسماء النطاقات قبل الاتصال',
+                  status: snap.dnsFilterActive
+                      ? SgStatus.active
+                      : supported
+                      ? SgStatus.paused
+                      : SgStatus.unavailable,
+                  label: snap.dnsFilterActive
+                      ? 'يعمل'
+                      : supported
+                      ? 'متوقف'
+                      : 'غير متاح',
                 ),
                 _LayerRow(
-                  icon: Icons.manage_search_rounded,
-                  title: 'البحث الآمن',
-                  subtitle: 'Google وBing وYouTube',
-                  status: !searchOn
-                      ? SgStatus.paused
-                      : engine == EngineStatus.running
+                  icon: Icons.rule_rounded,
+                  title: 'القواعد',
+                  subtitle: supported
+                      ? '${ArabicFormat.count(snap.blockingRuleCount, 'قاعدة حظر', 'قاعدتا حظر', 'قواعد حظر')} · '
+                            '${state.activeNetworkCount} فئات مفعّلة'
+                      : '${state.activeNetworkCount} فئات مفعّلة',
+                  status: !supported
+                      ? SgStatus.unavailable
+                      : snap.rulesReady
                       ? SgStatus.active
-                      : SgStatus.unavailable,
-                  label: !searchOn
-                      ? 'متوقف'
-                      : engine == EngineStatus.running
-                      ? 'مفعّل'
-                      : 'بانتظار الشبكة',
+                      : SgStatus.paused,
+                  label: !supported
+                      ? 'غير متاحة'
+                      : snap.rulesReady
+                      ? 'محمّلة'
+                      : 'غير محمّلة',
+                ),
+                const _LayerRow(
+                  icon: Icons.manage_search_rounded,
+                  title: 'فلترة البحث',
+                  subtitle: 'البحث الآمن في Google وBing وYouTube',
+                  status: SgStatus.unavailable,
+                  label: 'قريبًا',
                 ),
                 _LayerRow(
                   icon: Icons.lock_outline_rounded,
@@ -77,21 +120,49 @@ class StatusScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SectionHeader(title: 'المحتوى المحجوب'),
+            SectionHeader(
+              title: 'المحتوى المحجوب',
+              trailing: supported
+                  ? TextButton(
+                      onPressed: () => context.push(Routes.activity),
+                      child: const Text('السجل'),
+                    )
+                  : null,
+            ),
             _StatsRow(stats: stats),
+            if (stats.byCategory.isNotEmpty) ...[
+              const SizedBox(height: SgSpace.x3),
+              _CategoryBreakdown(stats: stats),
+            ],
             const SizedBox(height: SgSpace.x3),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: SgSpace.x1),
               child: Text(
                 stats.isAvailable
-                    ? 'تُحسب على جهازك فقط ولا تُرسل إلى أي جهة.'
-                    : 'تظهر الإحصاءات بعد تفعيل فلترة الشبكة. '
+                    ? 'تكرار الطلب للنطاق نفسه خلال 30 ثانية يُحتسب مرة واحدة. '
+                          'تُحسب على جهازك فقط ولا تُرسل إلى أي جهة.'
+                    : 'تظهر الإحصاءات عندما تعمل فلترة الشبكة. '
                           'تُحسب على جهازك فقط ولا تُرسل إلى أي جهة.',
                 style: context.text.bodySmall!.copyWith(
                   color: context.colors.textTertiary,
                 ),
               ),
             ),
+            if (supported) ...[
+              const SectionHeader(title: 'بعد إعادة تشغيل الجهاز'),
+              SgGroupedCard(
+                children: [
+                  SecuritySettingTile(
+                    icon: Icons.restart_alt_rounded,
+                    title: 'VPN الدائم',
+                    subtitle:
+                        'فعّل «VPN دائم التشغيل» لـ SafeGuard في إعدادات Android '
+                        'ليعمل تلقائيًا بعد إعادة التشغيل.',
+                    onTap: protection.engine.openVpnSettings,
+                  ),
+                ],
+              ),
+            ],
             const SectionHeader(title: 'حدود الحماية'),
             const _Limitations(),
           ],
@@ -101,35 +172,102 @@ class StatusScreen extends StatelessWidget {
   }
 }
 
-class _Summary extends StatelessWidget {
-  const _Summary({required this.state});
+class _CategoryBreakdown extends StatelessWidget {
+  const _CategoryBreakdown({required this.stats});
 
+  final ProtectionStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final entries = stats.byCategory.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final max = entries.first.value.clamp(1, 1 << 30);
+    return SgCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('حسب الفئة · آخر 30 يومًا', style: context.text.labelSmall),
+          const SizedBox(height: SgSpace.x3),
+          for (final e in entries)
+            Padding(
+              padding: const EdgeInsets.only(bottom: SgSpace.x3),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 104,
+                    child: Text(
+                      e.key.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.bodySmall,
+                    ),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: SgRadius.pillAll,
+                      child: LinearProgressIndicator(
+                        value: e.value / max,
+                        minHeight: 6,
+                        backgroundColor: c.surfaceSunken,
+                        color: c.accent,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 44,
+                    child: Text(
+                      '${e.value}',
+                      textAlign: TextAlign.end,
+                      style: context.text.labelMedium!.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Summary extends StatelessWidget {
+  const _Summary({required this.health, required this.state});
+
+  final ProtectionHealth health;
   final ProtectionState state;
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final updated = state.updatedAt;
+    final (String title, Color tone) = switch (health) {
+      ProtectionHealth.active => ('الحماية نشطة', c.accent),
+      ProtectionHealth.transitioning => ('جارٍ التشغيل', c.info),
+      ProtectionHealth.inactive => ('الحماية غير نشطة', c.danger),
+      ProtectionHealth.paused => ('الحماية متوقفة', c.warning),
+      ProtectionHealth.unsupported => ('الفلترة غير متاحة', c.info),
+    };
     return SgCard(
       child: Row(
         children: [
           ShieldMark(
             size: 32,
-            muted: !state.enabled,
-            color: state.enabled ? null : context.colors.warning,
+            muted: health != ProtectionHealth.active,
+            color: tone,
           ),
           const SizedBox(width: SgSpace.x4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  state.enabled ? 'الحماية مفعّلة' : 'الحماية متوقفة',
-                  style: context.text.titleLarge,
-                ),
+                Text(title, style: context.text.titleLarge),
                 Text(
                   updated == null
                       ? 'الإعدادات الافتراضية'
-                      : 'آخر تغيير ${ArabicFormat.relative(updated)}',
+                      : 'آخر تغيير للإعدادات ${ArabicFormat.relative(updated)}',
                   style: context.text.bodySmall,
                 ),
               ],
@@ -168,7 +306,7 @@ class _LayerRow extends StatelessWidget {
           builder: (context, constraints) {
             // On narrow rows (small phones, large text) the status moves under
             // the title instead of squeezing it.
-            final stacked = constraints.maxWidth < 330;
+            final stacked = constraints.maxWidth < 300;
             final pill = StatusIndicator(
               status: status,
               label: label,
@@ -215,7 +353,7 @@ class _StatsRow extends StatelessWidget {
           children: [
             _Stat(label: 'اليوم', value: stats.today),
             VerticalDivider(color: context.colors.border, width: 1),
-            _Stat(label: 'هذا الأسبوع', value: stats.thisWeek),
+            _Stat(label: 'آخر 7 أيام', value: stats.last7Days),
             VerticalDivider(color: context.colors.border, width: 1),
             _Stat(label: 'الإجمالي', value: stats.total),
           ],
@@ -260,11 +398,14 @@ class _Limitations extends StatelessWidget {
   const _Limitations();
 
   static const _points = [
-    'Android لا يسمح لأي تطبيق بقراءة محتوى التطبيقات الأخرى. '
-        'الحجب يتم على مستوى النطاقات، لا على مستوى الصور أو المنشورات داخل التطبيق.',
-    'المتصفحات أو التطبيقات التي تستخدم DNS مشفّرًا خاصًا بها، أو شبكة VPN أخرى، '
-        'قد تتجاوز الفلترة.',
-    'يستطيع مالك الجهاز إزالة التطبيق أو مسح بياناته من إعدادات Android.',
+    'Android لا يسمح لأي تطبيق بقراءة محتوى التطبيقات الأخرى. الحجب يتم على '
+        'مستوى أسماء النطاقات، لا على مستوى الصور أو المنشورات أو الصفحات.',
+    'المتصفحات والتطبيقات التي تستخدم DNS مشفّرًا خاصًا بها (DNS over HTTPS '
+        'أو DNS over TLS) أو خوادم DNS مثبتة في الكود قد تتجاوز الفلترة.',
+    'ميزة «DNS الخاص» في Android عند ضبطها على مزوّد محدد تتجاوز فلترة '
+        'SafeGuard.',
+    'يعمل تطبيق VPN واحد فقط في الوقت نفسه. تشغيل VPN آخر يوقف SafeGuard.',
+    'يستطيع مالك الجهاز فصل VPN أو إزالة التطبيق أو مسح بياناته من إعدادات Android.',
   ];
 
   @override

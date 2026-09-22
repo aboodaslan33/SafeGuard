@@ -6,32 +6,76 @@ SafeGuard تطبيق Flutter + Kotlin يهدف إلى حجب المحتوى غي
 (جنسي، عنف، محتوى دموي، مقامرة، مخدرات، محتوى خطِر، بحث غير آمن) على
 مستوى الشبكة في الجهاز، دون حسابات أو خوادم.
 
-> **الحالة: المرحلة الأولى (Phase 1).** هذا الإصدار يبني الأساس الكامل:
-> البنية المعمارية، نظام التصميم، واجهة عربية RTL، رمز PIN آمن، حفظ
-> التفضيلات، والتنقل. **لا يحجب أي محتوى فعليًا بعد.** طبقة الفلترة
-> (VpnService + DNS) هي المرحلة الثانية، والتطبيق يوضّح ذلك للمستخدم داخل
-> الواجهة بدل الادعاء بحماية غير موجودة.
+> **الحالة: المرحلة الثانية (Phase 2).** يعمل الآن VPN محلي حقيقي على
+> Android يعترض طلبات DNS فقط، ويقرر لكل نطاق ALLOW أو BLOCK عبر محرك
+> قواعد محلي (SQLite)، مع قائمة حظر وقائمة سماح مخصصتين، وسجل حظر
+> وإحصاءات محلية. **لا يوجد أي خادم:** الطلبات المسموحة تذهب إلى خادم DNS
+> الخاص بشبكتك كما لو لم يكن SafeGuard موجودًا.
+>
+> ⚠️ **لم يُختبر على جهاز حقيقي بعد.** بيئة التطوير لم تكن تملك Android SDK
+> (المصدر محجوب بسياسة الشبكة). المنطق الأصلي مختبر بـ JUnit، وطبقة
+> Android مُتحقق من ترجمتها أمام إطار API 36، لكن خطة الاختبار اليدوي في
+> [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md) لم تُنفذ بعد.
+>
+> ⚠️ **لا توجد قوائم فئات مضمّنة في نسخة الإصدار.** لم ننسخ قوائم مواقع
+> البالغين أو المقامرة في الكود المصدري. نسخة الإصدار تحظر ما تضيفه أنت
+> فقط، إلى أن تُضاف قوائم موثوقة عبر `RemoteRuleSource` (المرحلة 3).
+> نسخة debug تحتوي نطاقات اختبار (`example.org` = جنسي، `example.net` =
+> مقامرة). التطبيق يعرض هذا للمستخدم بوضوح.
 
 ---
 
 ## ما يستطيعه Android وما لا يستطيعه
 
-| الوظيفة | ممكنة؟ | الطريقة / الحد |
+| الوظيفة | الحالة | الطريقة / الحد |
 |---|---|---|
-| حجب نطاقات (مواقع) لكل التطبيقات | ✅ | `VpnService` محلي يعترض استعلامات DNS فقط، على الجهاز (المرحلة 2) |
-| فرض البحث الآمن (Google/Bing/YouTube) | ✅ جزئيًا | إعادة توجيه DNS إلى نطاقات SafeSearch الرسمية (المرحلة 2) |
-| قراءة محتوى الصور/المنشورات داخل تطبيقات أخرى | ❌ | Android يعزل التطبيقات، ولا يوجد API لذلك |
-| الحجب إن كان المتصفح يستخدم DNS مشفّرًا خاصًا به (DoH) أو VPN آخر | ⚠️ | قد يتجاوز الفلترة. يمكن تخفيفه بحجب نطاقات DoH المعروفة، لكن لا يمكن ضمانه |
-| منع إزالة التطبيق أو مسح بياناته | ❌ بدون Device Owner | يتطلب Device Admin/Device Owner أو Family Link. خارج نطاق المرحلة 1 |
-| استخدام Accessibility Service لقراءة الشاشة | ⚠️ مقيّد | Google Play يقيّد استخدامه بشدة لغير أغراض الإتاحة. **لن نعتمد عليه** |
+| حجب نطاقات لكل التطبيقات | ✅ منفّذ | `VpnService` محلي يوجّه عنوان DNS افتراضيًا واحدًا فقط إلى الـtun؛ باقي الحركة لا تمر عبره |
+| النطاقات الفرعية | ✅ | مطابقة على مستوى الـlabels: `example.com` يطابق `www.example.com` ولا يطابق `safe-example.com` |
+| العمل دون إنترنت | ✅ | القواعد محلية؛ الحظر مستمر، والطلبات المسموحة ترجع `SERVFAIL` فورًا |
+| فرض البحث الآمن | ❌ ليس بعد | `SearchFilterService` واجهة فقط (المرحلة 3) |
+| DNS over HTTPS داخل المتصفح (Chrome «Secure DNS»، Firefox DoH) | ⚠️ يتجاوز الفلترة | المتصفح لا يستخدم DNS النظام. لا نحاول كسره |
+| DNS over TLS / «DNS الخاص» في Android بمزوّد محدد | ⚠️ يتجاوز الفلترة | نكتشفه ونعرض تحذيرًا واضحًا |
+| تطبيقات بخوادم DNS مثبتة في الكود (مثل `8.8.8.8`) | ⚠️ تتجاوز الفلترة | لا نوجّه عناوين أخرى عبر الـVPN، عمدًا (خصوصية وأداء) |
+| VPN آخر | ⚠️ | يعمل VPN واحد فقط على Android؛ نكتشف ذلك ونعرض: «يوجد VPN آخر نشط وقد يمنع SafeGuard من العمل.» ولا نحاول تعطيله |
+| DNS عبر TCP أو IPv6 إلى العنوان الافتراضي | ⚠️ | غير مدعوم؛ نادر عمليًا. الردود الأكبر من الـMTU تُقتطع مع علامة TC |
+| قراءة محتوى الصور/المنشورات داخل تطبيقات أخرى | ❌ | Android يعزل التطبيقات. لا نستخدم Accessibility Service |
+| منع إزالة التطبيق أو فصل VPN | ❌ | يتطلب Device Owner. المستخدم يتحكم دائمًا من إعدادات النظام |
+| البقاء في الخلفية | ⚠️ | النظام يُبقي خدمة VPN المتصلة حية دون Foreground Service، لكن بعض الشركات المصنّعة (إدارة بطارية عدوانية) قد توقفها؛ يظهر ذلك فورًا كـ«غير نشطة» |
+| العودة بعد إعادة التشغيل | ⚠️ | BootReceiver محاولة أفضل-جهد؛ الطريقة الموثوقة هي «VPN دائم التشغيل» في إعدادات Android |
 
 هذه الحدود معروضة للمستخدم في شاشة **الحالة ← حدود الحماية**.
 
----
 
 ## البنية المعمارية
 
-Clean Architecture خفيفة، مقسّمة حسب الميزة (feature-first). كل ميزة فيها
+التفاصيل الكاملة (المسار من Flutter إلى الحزمة، أولوية القواعد، دورة حياة
+الـVPN، نقاط التوسعة): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+```
+Flutter UI → ProtectionController → ProtectionEngine (Dart port)
+  → MethodChannel/EventChannel → ProtectionChannel.kt → ProtectionManager.kt
+  → SafeGuardVpnService (tun, Os.poll) → DnsPacketFilter → RuleEngine → SQLite
+  → BLOCK: NXDOMAIN + سجل محلي   |   ALLOW: DnsForwarder → DNS الشبكة نفسها
+```
+
+**Kotlin** (`android/app/src/main/kotlin/com/safeguard/app/`):
+
+```
+engine/            ← Kotlin خالص بلا android.* (مختبر على JVM)
+  domain/          DomainName: تطبيع، تحقق، IDN، مرشحات اللاحقة
+  dns/             Ipv4Udp, DnsMessage, DnsPacketFilter
+  rules/           Rule, RuleStore, RuleEngine (+LRU), BuiltInRules, HostsListParser
+  logging/ stats/  BlockLogger (async + dedupe), StatisticsService
+  status/          ProtectionStatus + انتقالات الحالة
+  search/          SearchFilterService (placeholder)
+  extensions/      واجهات مستقبلية فقط
+data/              SQLite: SafeGuardDatabase, SqliteRuleStore, SqliteBlockEventStore
+protection/        ProtectionManager (facade), ProtectionConfigStore
+vpn/               SafeGuardVpnService, DnsForwarder, NetworkMonitor, BootReceiver
+channel/           ProtectionChannel (API المنصة)
+```
+
+**Flutter** (`lib/`): Clean Architecture خفيفة، مقسّمة حسب الميزة (feature-first). كل ميزة فيها
 `domain` (نماذج وقواعد وواجهات) و`data` (تطبيقات التخزين) و`presentation`
 (Controllers + Widgets).
 
@@ -50,10 +94,13 @@ lib/
 │   ├── error/                    # AppFailure (sealed)، Result<T>، guard()، ErrorBoundary
 │   ├── storage/                  # KeyValueStore / SecureStore + تطبيقاتها
 │   ├── security/pbkdf2.dart      # PBKDF2-HMAC-SHA256 + مقارنة زمن ثابت
-│   ├── platform/secure_screen.dart  # Platform Channel ← MainActivity.kt
+│   ├── platform/secure_screen.dart     # FLAG_SECURE ← MainActivity.kt
+│   ├── platform/protection_channel.dart # قناة الحماية (typed) ← ProtectionChannel.kt
 │   └── utils/
 └── features/
-    ├── protection/   # ProtectionState، الفئات، ProtectionEngine (نقطة ربط المرحلة 2)
+    ├── protection/   # ProtectionState، EngineSnapshot، ProtectionEngine + NativeProtectionEngine
+    ├── rules/        # قائمة الحظر وقائمة السماح + تحقق النطاق
+    ├── activity/     # سجل الحظر
     ├── pin/          # PinPolicy، PinService، التجزئة، شاشات الإعداد/القفل/التحقق
     ├── settings/     # AppSettings + المستودع + الشاشة
     ├── home/  status/  onboarding/  splash/  blocking/
@@ -74,9 +121,13 @@ lib/
   (سجل محلي فقط، لا إرسال لأي جهة).
 - **الفشل الآمن (fail closed):** بيانات حماية تالفة ← حماية كاملة، لا صفر.
   عدّاد محاولات تالف ← يقترب من الإقفال، لا يُصفَّر.
-- **نقطة ربط المرحلة 2:** `ProtectionEngine` واجهة في الـdomain.
-  المرحلة 1 تستخدم `UnavailableProtectionEngine` التي تعلن
-  `EngineStatus.notInstalled`، والواجهة تعرض ذلك بصدق.
+- **المحرك خلف منفذ (port):** `ProtectionEngine` واجهة في الـdomain؛
+  على Android تُنفَّذ بـ `NativeProtectionEngine`، وفي الاختبارات بمحرك وهمي
+  له العقد نفسه. الحالة الحية تأتي من الجانب الأصلي عبر EventChannel، ولا
+  تُعرض «الحماية نشطة» إلا إذا كان VPN يعمل وفلتر DNS نشطًا والقواعد محمّلة.
+- **مصدر الحقيقة للإعدادات:** Flutter، مع نسخة أصلية
+  (`ProtectionConfigStore`) تُحدَّث عند كل تغيير لأن الـVPN يجب أن يعمل
+  دون Flutter (بعد إعادة التشغيل مثلًا).
 
 ---
 
@@ -101,15 +152,39 @@ lib/
 الإقفال المؤقت يعتمد على ساعة الجهاز؛ تغييرها يدويًا قد يختصره (سيُعالج
 لاحقًا بـ `elapsedRealtime` من الجانب الأصلي).
 
-**ما يتطلب رمز PIN:** إيقاف الحماية، تعطيل أي فئة، إيقاف قفل التطبيق،
-تغيير الرمز، حذف البيانات. **التشديد (التفعيل) لا يتطلبه أبدًا.**
+**ما يتطلب رمز PIN:** إيقاف الحماية، تعطيل أي فئة، فتح قائمة السماح
+(كل إدخال فيها يخفف الحماية)، إزالة نطاق من قائمة الحظر، مسح سجل الحظر،
+إيقاف قفل التطبيق، تغيير الرمز، حذف البيانات. **التشديد (التفعيل، إضافة
+نطاق محظور) لا يتطلبه أبدًا.**
+
+**الشبكة والخصوصية (المرحلة 2)**
+
+- VPN محلي فقط. لا خادم لـ SafeGuard. لا رفع للحزم، ولا جمع لحركة المرور.
+- الـVPN لا يرى إلا طلبات DNS الموجّهة إلى العنوان الافتراضي؛ كل الحركة
+  الأخرى لا تدخل الـtun أصلًا.
+- الطلب المسموح يُرسل إلى خادم DNS الخاص بالشبكة الحالية (الخادم نفسه الذي
+  كان سيُستخدم دون SafeGuard). **استثناء واحد:** إن لم تُعلن الشبكة أي خادم
+  DNS (نادر)، يُستخدم `1.1.1.1` ثم `9.9.9.9`.
+- السجل: الوقت + النطاق + الفئة فقط، محليًا، 30 يومًا كحد أقصى (10,000
+  حدث)، ويمكن مسحه.
+- التحقق من المدخلات في الطرفين: تطبيع النطاق، رفض المشوّه وعناوين IP،
+  حدود الطول، IDN إلى punycode. كل استعلامات SQLite بمعاملات مربوطة، و
+  حرفية `LIKE` مهرّبة. الحد الأقصى 2,000 قاعدة مخصصة.
+- محلل حزم DNS دفاعي: حدود لكل قراءة، حد لقفزات الضغط، رفض المؤشرات
+  الدائرية، واختبار fuzzing بـ 40,000 مدخل عشوائي.
+- قائمة انتظار الإرسال محدودة (256) مع إسقاط الأقدم عند الفيضان، بدل نمو
+  الذاكرة بلا حد.
 
 **Android**
 
 - `allowBackup="false"` + `dataExtractionRules` تستثني كل شيء (مفاتيح
   Keystore لا تنتقل بين الأجهزة أصلًا).
-- لا صلاحيات في المرحلة 1، ولا صلاحية `INTERNET` في نسخة release.
-  لا شيء يغادر الجهاز.
+- الصلاحيات: `INTERNET` (تمرير DNS المسموح إلى خادم الشبكة)،
+  `ACCESS_NETWORK_STATE` (تتبع تبدّل الشبكة وخوادم DNS)،
+  `RECEIVE_BOOT_COMPLETED` (محاولة التشغيل بعد الإقلاع). لا صلاحية
+  Accessibility، ولا موقع، ولا إشعارات، ولا Foreground Service.
+- موافقة VPN تأتي فقط من نافذة النظام الرسمية (`VpnService.prepare`)،
+  وتسبقها شاشة شرح بالنص المطلوب. لا تجاوز ولا إخفاء.
 - `usesCleartextTraffic="false"`، `minSdk 24`.
 - القفل التلقائي بعد 30 ثانية في الخلفية.
 
@@ -127,7 +202,7 @@ lib/
 | المسافات والزوايا والظل والحركة | `tokens/sg_tokens.dart` | شبكة 4pt، هامش 20، أقصى عرض 560، زوايا 8/12/16/24، ظل في الفاتح فقط، حركة 150–400ms بلا ارتداد |
 | الثيم | `theme/app_theme.dart` | يربط الـtokens بـ Material 3 (Switch، NavigationBar، Dialog، BottomSheet، SnackBar، Input) |
 | المكونات | `components/` | `PrimaryButton` `SecondaryButton` `SgTextButton` `SgCard` `SgGroupedCard` `SecuritySettingTile` `StatusIndicator` `SectionHeader` `PinKeypad` `PinDots` `EmptyState` `ErrorState` `LoadingState` `showSgConfirmDialog` `showSgBottomSheet` `ShieldMark` `SgPage` |
-| مكونات الميزة | `features/protection/presentation/protection_ui.dart` | `ProtectionStatusCard` `ProtectionToggle` `CategoryTile` |
+| مكونات الميزة | `features/protection/presentation/protection_ui.dart` | `ProtectionStatusCard` (نشطة / غير نشطة / متوقفة + شبكة الطبقات) `EngineWarnings` `CategoryTile` |
 
 **قرارات UX**
 
@@ -138,7 +213,11 @@ lib/
   البيانات، وحدوده، ثم إعداد PIN مباشرة.
 - **لوحة الأرقام LTR دائمًا** (1-2-3 من اليسار) حتى في RTL، كما في كل
   تطبيقات البنوك والاتصال العربية.
-- **لا أرقام وهمية:** الإحصاءات تُعرض "—" مع شرح، بدل أصفار مختلقة.
+- **لا أرقام وهمية:** الإحصاءات تُعرض "—" مع شرح حين لا يوجد محرك.
+- **ثلاث حالات واضحة للحماية:** نشطة (أخضر)، غير نشطة رغم رغبة المستخدم
+  (أحمر + سبب محدد + زر «تشغيل الحماية»)، متوقفة بقرار المستخدم (كهرماني).
+- **التحذيرات تظهر فقط عند وجودها:** VPN آخر، «DNS الخاص»، لا قوائم فئات،
+  لا اتصال.
 - **الحالة لا تعتمد على اللون وحده:** كل مؤشر يحمل نصًا.
 - **شاشة الحظر محايدة:** لا لوم، لا عرض للرابط المحجوب، زر واحد "العودة".
 
@@ -167,20 +246,48 @@ flutter build apk --release # يوقَّع بمفتاح debug مؤقتًا (ان
 
 ## الاختبارات
 
+**Flutter — 73 اختبارًا** (`flutter test`)
+
 | الملف | ما يغطيه |
 |---|---|
 | `test/core/pbkdf2_test.dart` | متجهات RFC 7914 §11 الرسمية، المقارنة الثابتة، تفرّد الملح |
-| `test/features/pin_test.dart` | قواعد الرمز، عدم تخزين النص، ملح مختلف لكل مرة، الإقفال والتصاعد، استمرار العدّاد، تغيير الرمز يتطلب الحالي، أخطاء التخزين، البيانات التالفة |
-| `test/features/protection_settings_test.dart` | حالة الحماية (JSON، التوافق المستقبلي، fail-closed)، الحفظ والتراجع عند الفشل، إعدادات التطبيق |
-| `test/app/redirect_test.dart` | سياسة التوجيه كاملة، بما فيها منع إعادة التوجيه لخارج التطبيق |
-| `test/app/app_flow_test.dart` | تدفقات حقيقية: الإعداد الأول، رفض الرمز الضعيف، بوابة PIN عند التعطيل وعدمها عند التفعيل، شاشة القفل، RTL |
-| `test/app/layout_test.dart` | كل الشاشات على 5 مقاسات (320×568 حتى تابلت وأفقي) × حجم خط 1.0 و1.3، بلا أي overflow |
+| `test/features/pin_test.dart` | قواعد الرمز، الإقفال والتصاعد، تغيير الرمز، البيانات التالفة |
+| `test/features/protection_settings_test.dart` | حالة الحماية، الحفظ والتراجع، مزامنة المحرك، الإعدادات |
+| `test/features/engine_integration_test.dart` | استئناف VPN، عدم التشغيل فوق VPN آخر أو دون موافقة، فشل مُصنّف، عقد القناة (أسماء الطرق والمعاملات وتحويل الأخطاء وتحليل البيانات الناقصة)، تحقق النطاق |
+| `test/app/redirect_test.dart` | سياسة التوجيه |
+| `test/app/app_flow_test.dart` | الإعداد الأول، شرح VPN ثم موافقة النظام، رفض الموافقة، VPN آخر، بوابة PIN للفئات وقائمة السماح، إضافة نطاق محظور مع التحقق |
+| `test/app/layout_test.dart` | كل الشاشات (منها القوائم والسجل) على 5 مقاسات × حجمي خط، بلا overflow |
+
+**Kotlin — 43 اختبار JUnit** (`cd android && ./gradlew test`)
+
+| الملف | ما يغطيه |
+|---|---|
+| `engine/DomainNameTest.kt` | التطبيع، IDN، رفض المشوّه وعناوين IP، مرشحات اللاحقة، عدم المطابقة الجزئية |
+| `engine/RuleEngineTest.kt` | الفئة مفعّلة/معطّلة، الحماية متوقفة، النطاقات الفرعية، الإيجابيات الكاذبة، قاعدة SAFE الأدق، المجهول = ALLOW، خطاف Strict Mode، قائمة السماح فوق كل شيء، قائمة الحظر المخصصة، القواعد المعطّلة، المصنّف، قوائم hosts |
+| `engine/DnsFilterTest.kt` | IPv4/UDP والـchecksums، NXDOMAIN بالمعرّف والسؤال نفسيهما، التمرير وSERVFAIL، إسقاط غير DNS/TCP/IPv6/المجزأ، حلقات الضغط، fuzzing |
+| `engine/LoggingStatusTest.kt` | ما يُسجَّل فقط، إزالة التكرار، التقليم، الإحصاءات اليومية/الأسبوعية/حسب الفئة، انتقالات حالة VPN |
+| `data/SqliteStoresTest.kt` | SQLite الحقيقي عبر Robolectric (API 24 و34): CRUD، البحث الحرفي، العدادات، التقليم |
+
+**ما تم التحقق منه فعليًا في بيئة التطوير، وما لم يتم:**
+
+- ✅ اختبارات Flutter الـ73 و`flutter analyze` نظيف.
+- ✅ اختبارات محرك Kotlin الـ43 تعمل وتنجح على JVM.
+- ✅ طبقة Android كاملة مُترجمة بنجاح أمام إطار Android API 36
+  (`android-all`) وFlutter embedding.
+- ✅ كل عبارات SQL نُفّذت على SQLite حقيقي (والاستعلام يستخدم الفهرس).
+- ❌ `SqliteStoresTest` (Robolectric) لم يُشغَّل: يعتمد على
+  `androidx.test` من Google Maven المحجوب في البيئة.
+- ❌ لم يُبنَ APK ولم يُختبر على جهاز. خطة الاختبار اليدوي:
+  [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md).
 
 ---
 
 ## خارطة الطريق
 
-- **المرحلة 2:** `VpnService` محلي لفلترة DNS + قوائم نطاقات لكل فئة +
-  SafeSearch + Platform Channel للمحرك + إحصاءات محلية حقيقية.
-- **لاحقًا:** إقفال مبني على `elapsedRealtime`، دعم Device Owner اختياري
-  لمنع الإزالة، وتوطين إنجليزي عبر ARB.
+- **المرحلة 3 (مقترحة):** مصدر قوائم فئات موثوق وموقّع (`RemoteRuleSource`)
+  مع تحديثات تفاضلية؛ فرض SafeSearch عبر DNS (CNAME إلى
+  `forcesafesearch.google.com` / `strict.bing.com` / `restrict.youtube.com`)؛
+  حجب نطاقات DoH المعروفة لتقليل التجاوز؛ دعم DNS عبر TCP؛ إقفال مبني على
+  `elapsedRealtime`.
+- **لاحقًا:** Strict Mode، تصنيف محلي بالذكاء الاصطناعي، حماية على مستوى
+  التطبيقات، لوحة عائلية بمزامنة مشفّرة طرفيًا، Device Owner اختياري.

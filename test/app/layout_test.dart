@@ -5,6 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:safeguard/app/router/app_router.dart';
 import 'package:safeguard/app/safeguard_app.dart';
 
+import 'package:safeguard/features/protection/domain/protection.dart';
+
+import '../support/fake_protection_engine.dart';
 import 'app_flow_test.dart' show testDependencies;
 
 /// Renders every screen at small, common, tablet and landscape sizes, with
@@ -26,6 +29,9 @@ void main() {
     '/blocked?category=gambling',
     '/change-pin',
     '/verify',
+    '/rules/blocked',
+    '/rules/allowed',
+    '/activity',
   ];
 
   for (final textScale in [1.0, 1.3]) {
@@ -39,7 +45,23 @@ void main() {
 
         final failures = <String>[];
         for (final screen in screens) {
-          final deps = testDependencies();
+          final engine = FakeProtectionEngine(permissionGranted: true);
+          engine.rules.add(
+            const DomainRule(
+              domain: 'a-rather-long-subdomain.example-casino-site.test',
+              action: RuleAction.block,
+              category: ProtectionCategory.gambling,
+            ),
+          );
+          engine.logs.addAll([
+            for (final c in ProtectionCategory.networkFiltered)
+              BlockEvent(
+                time: DateTime(2026, 9, 22, 20, 41),
+                domain: 'blocked-${c.id}.example.test',
+                category: c,
+              ),
+          ]);
+          final deps = testDependencies(engine: engine);
           await deps.initialize();
           if (screen != '/welcome' && screen != '/pin/create') {
             await deps.security.createPin('739154', '739154');

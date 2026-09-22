@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design_system/design_system.dart';
+import '../../features/activity/presentation/activity_screen.dart';
 import '../../features/blocking/presentation/blocked_content_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/pin/presentation/pin_screens.dart';
 import '../../features/protection/domain/protection.dart';
+import '../../features/rules/presentation/domain_rules_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/status/presentation/status_screen.dart';
@@ -46,6 +48,16 @@ GoRouter createRouter(AppDependencies deps) {
           child: PinGateScreen(reason: s.extra as String?),
         ),
       ),
+      GoRoute(
+        path: Routes.blocklist,
+        builder: (c, s) => const DomainRulesScreen(action: RuleAction.block),
+      ),
+      // PIN-gated by the caller (Settings) — every entry loosens protection.
+      GoRoute(
+        path: Routes.allowlist,
+        builder: (c, s) => const DomainRulesScreen(action: RuleAction.allow),
+      ),
+      GoRoute(path: Routes.activity, builder: (c, s) => const ActivityScreen()),
       GoRoute(
         path: Routes.changePin,
         builder: (c, s) => const PinSetupScreen(changing: true),

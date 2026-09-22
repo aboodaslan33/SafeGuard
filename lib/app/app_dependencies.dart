@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../core/error/failures.dart';
@@ -8,6 +9,7 @@ import '../features/pin/domain/pin_models.dart';
 import '../features/pin/domain/pin_service.dart';
 import '../features/pin/presentation/security_controller.dart';
 import '../features/protection/data/local_protection_repository.dart';
+import '../features/protection/data/native_protection_engine.dart';
 import '../features/protection/domain/protection.dart';
 import '../features/protection/presentation/protection_controller.dart';
 import '../features/settings/data/local_settings_repository.dart';
@@ -39,6 +41,10 @@ class AppDependencies extends ChangeNotifier {
     preferences: SharedPrefsStore(),
     secureStore: KeystoreSecureStore(),
     hasher: const Pbkdf2PinHasher(),
+    // The VPN / DNS engine exists only in the Android host.
+    engine: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? NativeProtectionEngine()
+        : const UnavailableProtectionEngine(),
   );
 
   final KeyValueStore _preferences;
@@ -67,9 +73,11 @@ class AppDependencies extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Erases every SafeGuard value on the device and returns to first run.
+  /// Erases every SafeGuard value on the device and returns to first run:
+  /// stops the VPN and deletes native rules, logs and config too.
   Future<Result<void>> eraseAllData() async {
     final result = await guard(() async {
+      if (protection.engine.isSupported) await protection.engine.eraseAll();
       await _secureStore.clear();
       await _preferences.clear();
     }, onError: (e, s) => StorageFailure(cause: e, stackTrace: s));

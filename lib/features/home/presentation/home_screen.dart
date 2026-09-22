@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../app/app_dependencies.dart';
-import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../protection/domain/protection.dart';
+import '../../protection/presentation/protection_controller.dart';
 import '../../protection/presentation/protection_ui.dart';
 
-/// Answers one question: "am I protected, and from what?" — and lets the
-/// user change exactly that. Everything else lives in Status or Settings.
+/// Answers one question: "am I protected right now, and from what?" — and
+/// lets the user change exactly that. Details live in Status and Settings.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -19,7 +18,9 @@ class HomeScreen extends StatelessWidget {
       listenable: protection,
       builder: (context, _) {
         final state = protection.state;
+        final health = protection.health;
         final c = context.colors;
+        final categoriesEditable = health != ProtectionHealth.paused;
         return SgPage(
           header: Padding(
             padding: const EdgeInsets.only(bottom: SgSpace.x6),
@@ -39,18 +40,19 @@ class HomeScreen extends StatelessWidget {
           ),
           children: [
             ProtectionStatusCard(
+              health: health,
               state: state,
+              snapshot: protection.snapshot,
               onToggle: (v) => ProtectionActions.setEnabled(context, v),
+              onRestart: () => ProtectionActions.restart(context),
             ),
-            if (protection.engineStatus != EngineStatus.running) ...[
-              const SizedBox(height: SgSpace.x3),
-              _EngineNotice(onTap: () => context.go(Routes.status)),
-            ],
+            EngineWarnings(snapshot: protection.snapshot),
             SectionHeader(
               title: 'الفئات المحجوبة',
               trailing: Text(
                 state.enabled
-                    ? '${state.activeCount} من ${ProtectionCategory.values.length}'
+                    ? '${state.activeNetworkCount} من '
+                          '${ProtectionCategory.networkFiltered.length}'
                     : 'متوقفة مؤقتًا',
                 style: context.text.labelSmall,
               ),
@@ -62,7 +64,8 @@ class HomeScreen extends StatelessWidget {
                     key: ValueKey('category-${category.id}'),
                     category: category,
                     active: state.isActive(category),
-                    enabled: state.enabled,
+                    enabled: categoriesEditable,
+                    comingSoon: !category.isNetworkFiltered,
                     onChanged: (v) =>
                         ProtectionActions.setCategory(context, category, v),
                   ),
@@ -79,41 +82,6 @@ class HomeScreen extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-/// Honest, low-key notice that the enforcement layer isn't active yet.
-class _EngineNotice extends StatelessWidget {
-  const _EngineNotice({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return SgCard(
-      onTap: onTap,
-      color: c.infoMuted,
-      borderColor: Colors.transparent,
-      radius: SgRadius.mdAll,
-      padding: const EdgeInsets.symmetric(
-        horizontal: SgSpace.x4,
-        vertical: SgSpace.x3,
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.info_outline_rounded, size: 20, color: c.info),
-          const SizedBox(width: SgSpace.x3),
-          Expanded(
-            child: Text(
-              'الفلترة الشبكية غير مفعّلة بعد في هذا الإصدار. '
-              'تفضيلاتك محفوظة وستُطبَّق فور تفعيلها.',
-              style: context.text.bodySmall!.copyWith(color: c.textPrimary),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

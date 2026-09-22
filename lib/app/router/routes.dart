@@ -12,6 +12,9 @@ abstract final class Routes {
   static const verify = '/verify';
   static const changePin = '/change-pin';
   static const blocked = '/blocked';
+  static const blocklist = '/rules/blocked';
+  static const allowlist = '/rules/allowed';
+  static const activity = '/activity';
 
   static const _firstRun = {welcome, createPin};
   static const _entry = {splash, welcome, createPin, lock};

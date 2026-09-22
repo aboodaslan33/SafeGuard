@@ -12,7 +12,7 @@ import '../domain/app_settings.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  static const appVersion = '1.0.0';
+  static const appVersion = '1.1.0';
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +22,7 @@ class SettingsScreen extends StatelessWidget {
       builder: (context, _) {
         final settings = deps.settings.settings;
         final protection = deps.protection.state;
+        final engine = deps.protection.engine;
         return SgPage(
           title: 'الإعدادات',
           children: [
@@ -32,14 +33,32 @@ class SettingsScreen extends StatelessWidget {
                   icon: Icons.category_outlined,
                   title: 'الفئات المحجوبة',
                   value:
-                      '${protection.activeCount} من '
-                      '${ProtectionCategory.values.length}',
+                      '${protection.activeNetworkCount} من '
+                      '${ProtectionCategory.networkFiltered.length}',
                   onTap: () => context.go(Routes.home),
                 ),
                 SecuritySettingTile(
                   icon: Icons.block_rounded,
+                  title: 'النطاقات المحظورة',
+                  subtitle: 'حظر نطاقات تختارها بنفسك',
+                  onTap: () => context.push(Routes.blocklist),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.verified_outlined,
+                  title: 'النطاقات المسموحة',
+                  subtitle: 'استثناءات محمية برمز PIN',
+                  onTap: () => _openAllowlist(context),
+                ),
+                if (engine.isSupported)
+                  SecuritySettingTile(
+                    icon: Icons.history_rounded,
+                    title: 'سجل الحظر',
+                    onTap: () => context.push(Routes.activity),
+                  ),
+                SecuritySettingTile(
+                  icon: Icons.shield_outlined,
                   title: 'صفحة الحظر',
-                  subtitle: 'ما يظهر عند حجب موقع',
+                  subtitle: 'معاينة ما يظهر عند الحظر',
                   onTap: () => context.push(
                     Uri(
                       path: Routes.blocked,
@@ -49,6 +68,13 @@ class SettingsScreen extends StatelessWidget {
                     ).toString(),
                   ),
                 ),
+                if (engine.isSupported)
+                  SecuritySettingTile(
+                    icon: Icons.restart_alt_rounded,
+                    title: 'VPN دائم التشغيل',
+                    subtitle: 'ليعمل SafeGuard تلقائيًا بعد إعادة تشغيل الجهاز',
+                    onTap: engine.openVpnSettings,
+                  ),
               ],
             ),
             const SectionHeader(title: 'الأمان'),
@@ -116,6 +142,11 @@ class SettingsScreen extends StatelessWidget {
     ThemePreference.light => 'فاتح',
     ThemePreference.system => 'حسب النظام',
   };
+
+  Future<void> _openAllowlist(BuildContext context) async {
+    if (!await requirePin(context, reason: 'لإدارة النطاقات المسموحة')) return;
+    if (context.mounted) await context.push(Routes.allowlist);
+  }
 
   Future<void> _setAppLock(BuildContext context, bool enabled) async {
     final deps = AppScope.of(context);

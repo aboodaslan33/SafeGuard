@@ -50,3 +50,21 @@ final class UnexpectedFailure extends AppFailure {
   const UnexpectedFailure({super.cause, super.stackTrace})
     : super('حدث خطأ غير متوقع.');
 }
+
+/// A failure reported by the native protection engine, keyed by the error
+/// code the platform channel returns.
+final class EngineFailure extends AppFailure {
+  EngineFailure(this.code, {super.cause}) : super(_messages[code] ?? _fallback);
+
+  final String code;
+
+  static const _fallback = 'تعذّر تنفيذ العملية في محرك الحماية.';
+  static const _messages = {
+    'PERMISSION_REQUIRED': 'يلزم السماح لـ SafeGuard بإنشاء اتصال VPN محلي.',
+    'PERMISSION_DENIED': 'لم تُمنح موافقة VPN، لذلك لا يمكن تشغيل الحماية.',
+    'INVALID_DOMAIN': 'هذا ليس اسم نطاق صالحًا.',
+    'INVALID_CATEGORY': 'اختر فئة للنطاق المحظور.',
+    'LIMIT_REACHED': 'وصلت إلى الحد الأقصى للنطاقات المخصصة.',
+    'UNSUPPORTED': 'هذا الجهاز لا يدعم تطبيقات VPN.',
+  };
+}

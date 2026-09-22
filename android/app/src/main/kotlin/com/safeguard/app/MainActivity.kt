@@ -1,33 +1,50 @@
 package com.safeguard.app
 
+import android.content.Intent
 import android.view.WindowManager
+import com.safeguard.app.channel.ProtectionChannel
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Host activity. Native capabilities are exposed to Flutter through one
- * method channel per concern; Phase 1 only needs window security.
- *
- * Phase 2 adds a separate channel for the VpnService-based DNS filter so
- * that UI code and enforcement code stay decoupled.
+ * Host activity. Each native concern has its own channel:
+ *  - `com.safeguard.app/device`: window security (FLAG_SECURE on PIN screens)
+ *  - `com.safeguard.app/protection` (+ `/status` events): VPN / DNS filter,
+ *    see [ProtectionChannel].
  */
 class MainActivity : FlutterActivity() {
 
+    private var protectionChannel: ProtectionChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "setSecureScreen" -> {
-                        val enabled = call.argument<Boolean>("enabled") ?: false
-                        setSecureScreen(enabled)
-                        result.success(null)
-                    }
-                    else -> result.notImplemented()
+        MethodChannel(messenger, DEVICE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setSecureScreen" -> {
+                    setSecureScreen(call.argument<Boolean>("enabled") ?: false)
+                    result.success(null)
                 }
+                else -> result.notImplemented()
             }
+        }
+
+        protectionChannel = ProtectionChannel(messenger, this)
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        protectionChannel?.dispose()
+        protectionChannel = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    @Deprecated("Needed for VpnService.prepare(), which only offers an Intent.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (protectionChannel?.onActivityResult(requestCode, resultCode) == true) return
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     /**

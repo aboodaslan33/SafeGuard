@@ -6,11 +6,18 @@ import 'package:safeguard/core/storage/stores.dart';
 import 'package:safeguard/features/pin/data/pin_data.dart';
 import 'package:safeguard/features/protection/domain/protection.dart';
 
-AppDependencies testDependencies({MemoryStore? prefs, MemoryStore? secure}) {
+import '../support/fake_protection_engine.dart';
+
+AppDependencies testDependencies({
+  MemoryStore? prefs,
+  MemoryStore? secure,
+  ProtectionEngine? engine,
+}) {
   return AppDependencies(
     preferences: prefs ?? MemoryStore(),
     secureStore: secure ?? MemoryStore(),
     hasher: const Pbkdf2PinHasher(iterations: 100, useIsolate: false),
+    engine: engine ?? FakeProtectionEngine(permissionGranted: true),
   );
 }
 
@@ -55,7 +62,7 @@ void main() {
     expect(find.text('أكّد الرمز'), findsOneWidget);
     await enterPin(tester, '739154');
 
-    expect(find.text('الحماية مفعّلة'), findsOneWidget);
+    expect(find.text('الحماية نشطة'), findsOneWidget);
     expect(deps.settings.settings.onboardingCompleted, isTrue);
     expect(deps.security.pinSet, isTrue);
   });
@@ -120,7 +127,7 @@ void main() {
     expect(find.text('للمتابعة إلى SafeGuard'), findsOneWidget);
 
     await enterPin(tester, '739154');
-    expect(find.text('الحماية مفعّلة'), findsOneWidget);
+    expect(find.text('الحماية نشطة'), findsOneWidget);
   });
 
   testWidgets('status and settings tabs render', (tester) async {
@@ -142,11 +149,145 @@ void main() {
     await tester.tap(find.text('الحالة'));
     await tester.pumpAndSettle();
     expect(find.text('طبقات الحماية'), findsOneWidget);
-    expect(find.text('غير متاحة بعد'), findsOneWidget);
+    expect(find.text('VPN محلي'), findsOneWidget);
+    expect(find.text('فلتر DNS'), findsOneWidget);
 
     await tester.tap(find.text('الإعدادات').last);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('تغيير رمز PIN'), 200);
     expect(find.text('تغيير رمز PIN'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'no VPN consent: inactive card → explanation → system consent → active',
+    (tester) async {
+      final engine = FakeProtectionEngine();
+      final deps = testDependencies(engine: engine);
+      await tester.pumpWidget(SafeGuardApp(dependencies: deps));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('إعداد رمز PIN'));
+      await tester.pumpAndSettle();
+      await enterPin(tester, '739154');
+      await enterPin(tester, '739154');
+
+      expect(find.text('الحماية غير نشطة'), findsOneWidget);
+      await tester.tap(find.text('تشغيل الحماية'));
+      await tester.pumpAndSettle();
+
+      // Our explanation comes before Android's dialog, never instead of it.
+      expect(find.textContaining('اتصال VPN محلي حتى يستطيع'), findsOneWidget);
+      expect(engine.permissionRequests, 0);
+      await tester.tap(find.text('تفعيل الحماية').last);
+      await tester.pumpAndSettle();
+
+      expect(engine.permissionRequests, 1);
+      expect(find.text('الحماية نشطة'), findsOneWidget);
+      expect(find.text('فلتر DNS'), findsOneWidget);
+    },
+  );
+
+  testWidgets('declined VPN consent leaves protection inactive', (
+    tester,
+  ) async {
+    final engine = FakeProtectionEngine(grantOnRequest: false);
+    final deps = testDependencies(engine: engine);
+    await tester.pumpWidget(SafeGuardApp(dependencies: deps));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('إعداد رمز PIN'));
+    await tester.pumpAndSettle();
+    await enterPin(tester, '739154');
+    await enterPin(tester, '739154');
+
+    await tester.tap(find.text('تشغيل الحماية'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('تفعيل الحماية').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('الحماية غير نشطة'), findsOneWidget);
+    expect(find.textContaining('لم تُمنح موافقة VPN'), findsOneWidget);
+  });
+
+  testWidgets('another active VPN is reported, never overridden', (
+    tester,
+  ) async {
+    final engine = FakeProtectionEngine(permissionGranted: true)
+      ..emit(
+        const EngineSnapshot(vpnState: VpnState.revoked, otherVpnActive: true),
+      );
+    final prefs = MemoryStore();
+    final secure = MemoryStore();
+    final seed = testDependencies(prefs: prefs, secure: secure, engine: engine);
+    await seed.initialize();
+    await seed.security.createPin('739154', '739154');
+    await seed.settings.completeOnboarding();
+    await seed.settings.setAppLock(false);
+
+    await tester.pumpWidget(
+      SafeGuardApp(
+        dependencies: testDependencies(
+          prefs: prefs,
+          secure: secure,
+          engine: engine,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('الحماية غير نشطة'), findsOneWidget);
+    expect(
+      find.textContaining('يوجد VPN آخر نشط وقد يمنع SafeGuard'),
+      findsWidgets,
+    );
+    expect(engine.current.vpnState, VpnState.revoked); // not auto-started
+  });
+
+  testWidgets('allowlist requires the PIN; blocklist add does not', (
+    tester,
+  ) async {
+    final engine = FakeProtectionEngine(permissionGranted: true);
+    final prefs = MemoryStore();
+    final secure = MemoryStore();
+    final seed = testDependencies(prefs: prefs, secure: secure, engine: engine);
+    await seed.initialize();
+    await seed.security.createPin('739154', '739154');
+    await seed.settings.completeOnboarding();
+    await seed.settings.setAppLock(false);
+    await tester.pumpWidget(
+      SafeGuardApp(
+        dependencies: testDependencies(
+          prefs: prefs,
+          secure: secure,
+          engine: engine,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الإعدادات').last);
+    await tester.pumpAndSettle();
+
+    // Blocklist: add freely.
+    await tester.tap(find.text('النطاقات المحظورة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('إضافة نطاق'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'not a domain');
+    await tester.tap(find.text('إضافة').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('أدخل اسم نطاق صالحًا'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'https://www.Casino.test/x');
+    await tester.tap(find.text('إضافة').last);
+    await tester.pumpAndSettle();
+    expect(find.text('casino.test'), findsOneWidget);
+    expect(engine.rules.single.action, RuleAction.block);
+    // pageBack() looks for the English "Back" tooltip; ours is Arabic.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    // Allowlist: PIN first.
+    await tester.tap(find.text('النطاقات المسموحة'));
+    await tester.pumpAndSettle();
+    expect(find.text('أدخل رمز PIN'), findsOneWidget);
+    await enterPin(tester, '739154');
+    expect(find.text('لا توجد استثناءات'), findsOneWidget);
   });
 }

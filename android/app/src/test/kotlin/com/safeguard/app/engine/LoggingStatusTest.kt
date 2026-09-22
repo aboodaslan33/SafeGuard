@@ -1,0 +1,131 @@
+package com.safeguard.app.engine
+
+import com.safeguard.app.engine.logging.BlockEvent
+import com.safeguard.app.engine.logging.BlockLogger
+import com.safeguard.app.engine.logging.InMemoryBlockEventStore
+import com.safeguard.app.engine.rules.Category
+import com.safeguard.app.engine.rules.Decision
+import com.safeguard.app.engine.rules.DecisionReason
+import com.safeguard.app.engine.rules.RuleAction
+import com.safeguard.app.engine.search.NoOpSearchFilterService
+import com.safeguard.app.engine.search.SearchQuery
+import com.safeguard.app.engine.stats.StatisticsService
+import com.safeguard.app.engine.status.ProtectionStatusHolder
+import com.safeguard.app.engine.status.VpnState
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+
+class LoggingStatusTest {
+    private val direct = java.util.concurrent.Executor { it.run() }
+    private fun blocked(domain: String, category: Category = Category.SEXUAL) =
+        Decision(RuleAction.BLOCK, category, DecisionReason.CATEGORY_BLOCKED, domain)
+
+    @Test
+    fun logsOnlyTimestampDomainCategory() {
+        val store = InMemoryBlockEventStore()
+        BlockLogger(store, direct, clock = { 1000L }).onBlocked(blocked("adult.test"))
+        assertEquals(listOf(BlockEvent(1000L, "adult.test", Category.SEXUAL)), store.recent(10))
+    }
+
+    @Test
+    fun repeatedLookupsWithinWindowCountOnce() {
+        var now = 0L
+        val store = InMemoryBlockEventStore()
+        val logger = BlockLogger(store, direct, clock = { now }, dedupeWindowMs = 30_000)
+        repeat(5) { logger.onBlocked(blocked("adult.test")) } // A, AAAA, retries
+        logger.onBlocked(blocked("casino.test", Category.GAMBLING))
+        now = 31_000
+        logger.onBlocked(blocked("adult.test"))
+        assertEquals(3, store.recent(10).size)
+    }
+
+    @Test
+    fun decisionsWithoutDomainAreIgnored() {
+        val store = InMemoryBlockEventStore()
+        BlockLogger(store, direct).onBlocked(Decision(RuleAction.BLOCK, Category.UNKNOWN, DecisionReason.UNKNOWN_BLOCKED_STRICT, null))
+        assertEquals(0, store.recent(10).size)
+    }
+
+    @Test
+    fun pruneRespectsRetentionAndRowCap() {
+        val store = InMemoryBlockEventStore()
+        (1..10).forEach { store.insert(BlockEvent(it * 100L, "d$it.test", Category.DRUGS)) }
+        store.prune(before = 300, maxRows = 5)
+        assertEquals(5, store.recent(100).size)
+        assertTrue(store.recent(100).all { it.timestamp >= 600 })
+        assertEquals(10, store.lifetimeTotal()) // lifetime counter survives pruning
+        store.clear()
+        assertEquals(0, store.lifetimeTotal())
+    }
+
+    @Test
+    fun statisticsTodayWeekTotalAndByCategory() {
+        val zone = ZoneOffset.UTC
+        val now = LocalDateTime.of(2026, 9, 22, 12, 0).toInstant(zone).toEpochMilli()
+        val hour = 3_600_000L
+        val store = InMemoryBlockEventStore()
+        store.insert(BlockEvent(now - 1 * hour, "a.test", Category.SEXUAL)) // today
+        store.insert(BlockEvent(now - 11 * hour, "b.test", Category.SEXUAL)) // today (01:00)
+        store.insert(BlockEvent(now - 13 * hour, "c.test", Category.GAMBLING)) // yesterday
+        store.insert(BlockEvent(now - 6 * 24 * hour, "d.test", Category.DRUGS)) // this week
+        store.insert(BlockEvent(now - 10 * 24 * hour, "e.test", Category.VIOLENCE)) // older
+        val stats = StatisticsService(store, { now }, { zone as ZoneId }).compute()
+        assertEquals(2, stats.today)
+        assertEquals(4, stats.last7Days)
+        assertEquals(5L, stats.total)
+        assertEquals(2, stats.byCategory[Category.SEXUAL])
+        assertEquals(1, stats.byCategory[Category.VIOLENCE])
+        assertNull(stats.byCategory[Category.GORE])
+    }
+
+    @Test
+    fun vpnStateTransitions() {
+        val holder = ProtectionStatusHolder()
+        val seen = mutableListOf<VpnState>()
+        holder.addListener { seen.add(it.vpnState) }
+
+        holder.starting()
+        holder.update { it.copy(rulesReady = true, ruleCount = 3) }
+        holder.running(now = 42)
+        assertTrue(holder.current.isActive)
+        assertEquals(42L, holder.current.startedAt)
+
+        holder.revoked()
+        assertFalse(holder.current.isActive)
+        assertFalse(holder.current.dnsFilterActive)
+
+        holder.failed("establish() returned null")
+        assertEquals("establish() returned null", holder.current.lastError)
+        holder.starting()
+        assertNull(holder.current.lastError)
+
+        holder.stopped()
+        holder.stopped() // no-op: listeners not called for identical state
+        assertEquals(
+            listOf(VpnState.STARTING, VpnState.STARTING, VpnState.RUNNING, VpnState.REVOKED, VpnState.ERROR, VpnState.STARTING, VpnState.STOPPED),
+            seen,
+        )
+        assertEquals("stopped", holder.current.toMap()["vpnState"])
+    }
+
+    @Test
+    fun activeRequiresVpnDnsAndRules() {
+        val holder = ProtectionStatusHolder()
+        holder.running(1)
+        assertFalse("rules not loaded yet", holder.current.isActive)
+        holder.update { it.copy(rulesReady = true) }
+        assertTrue(holder.current.isActive)
+    }
+
+    @Test
+    fun searchFilterPlaceholderIsInactive() {
+        assertFalse(NoOpSearchFilterService.isActive)
+        assertEquals(RuleAction.ALLOW, NoOpSearchFilterService.classify(SearchQuery("google", "anything")).action)
+    }
+}

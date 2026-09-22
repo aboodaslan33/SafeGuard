@@ -10,14 +10,16 @@ import 'package:safeguard/features/settings/data/local_settings_repository.dart'
 import 'package:safeguard/features/settings/domain/app_settings.dart';
 import 'package:safeguard/features/settings/presentation/settings_controller.dart';
 
-class _RecordingEngine implements ProtectionEngine {
-  final applied = <ProtectionState>[];
+import '../support/fake_protection_engine.dart';
+
+class _RecordingEngine extends FakeProtectionEngine {
+  final appliedStates = <ProtectionState>[];
 
   @override
-  Future<EngineStatus> status() async => EngineStatus.notInstalled;
-
-  @override
-  Future<void> apply(ProtectionState state) async => applied.add(state);
+  Future<void> apply(ProtectionState state) async {
+    appliedStates.add(state);
+    await super.apply(state);
+  }
 }
 
 void main() {
@@ -91,13 +93,16 @@ void main() {
       expect(reloaded.state.enabled, isFalse);
       expect(reloaded.state.isActive(ProtectionCategory.drugs), isFalse);
       expect(reloaded.state.updatedAt, DateTime(2026, 3, 1));
-      expect(engine.applied, hasLength(2));
+      // The latest policy reached the native side.
+      expect(engine.applied!.enabled, isFalse);
+      expect(engine.applied!.isActive(ProtectionCategory.drugs), isFalse);
     });
 
     test('no-op changes do not write', () async {
-      await controller.setEnabled(true);
+      final applies = engine.appliedStates.length;
+      await controller.setCategory(ProtectionCategory.drugs, true);
       expect(store.values, isEmpty);
-      expect(engine.applied, isEmpty);
+      expect(engine.appliedStates, hasLength(applies));
     });
 
     test('rolls back when saving fails', () async {

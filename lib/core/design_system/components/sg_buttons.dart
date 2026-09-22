@@ -155,7 +155,7 @@ class _SgButton extends StatelessWidget {
               constraints: const BoxConstraints(minHeight: 52),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: SgSpace.x5),
-                child: Center(child: child),
+                child: Center(heightFactor: 1, child: child),
               ),
             ),
           ),

@@ -1,10 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!--
-      Phase 1 requests no permissions at all. The release build has no
-      INTERNET permission: nothing can leave the device.
-      Phase 2 will add BIND_VPN_SERVICE (declared on the service, granted
-      through the system VPN consent dialog) for on-device DNS filtering.
+      Permissions, and why each is needed:
+      - INTERNET: forward *allowed* DNS queries to the network's own resolver.
+        Nothing else is sent anywhere; SafeGuard has no server.
+      - ACCESS_NETWORK_STATE: follow Wi-Fi / mobile data changes and read the
+        network's DNS servers and Private DNS mode.
+      - RECEIVE_BOOT_COMPLETED: best-effort restart after reboot if the user
+        left protection on.
+      The VPN itself needs no manifest permission: it is granted through the
+      system consent dialog (VpnService.prepare), and BIND_VPN_SERVICE below
+      only restricts who may bind to the service (the system).
     -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:label="SafeGuard"
         android:name="${applicationName}"
@@ -32,6 +42,26 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service
+            android:name=".vpn.SafeGuardVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+            <!-- Lets the system "Always-on VPN" setting start SafeGuard. -->
+            <meta-data
+                android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
+                android:value="true" />
+        </service>
+        <receiver
+            android:name=".vpn.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
