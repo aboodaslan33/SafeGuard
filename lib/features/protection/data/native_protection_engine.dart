@@ -76,6 +76,13 @@ class NativeProtectionEngine implements ProtectionEngine {
             time: DateTime.fromMillisecondsSinceEpoch(m['timestamp']! as int),
             domain: m['domain']! as String,
             category: ProtectionCategory.fromId('${m['category']}'),
+            source: EventSourceKind.fromId(m['source']),
+            confidence: m['confidence'] is num
+                ? (m['confidence']! as num).toDouble()
+                : 1.0,
+            ruleType: m['ruleType'] is String
+                ? m['ruleType']! as String
+                : 'domain',
           ),
     ];
   }
@@ -108,6 +115,84 @@ class NativeProtectionEngine implements ProtectionEngine {
 
   @override
   Future<void> eraseAll() => _channel.eraseAll();
+
+  @override
+  Future<SearchSettings> searchSettings() async =>
+      SearchSettings.fromMap(await _channel.getSearchSettings());
+
+  @override
+  Future<SearchSettings> setSearchSettings(SearchSettings settings) async =>
+      SearchSettings.fromMap(
+        await _channel.setSearchSettings(settings.toMap()),
+      );
+
+  @override
+  Future<SearchCheck> submitSearch(String query, SearchEngineId engine) async {
+    final m = await _channel.submitSearch(query, engine.name);
+    return SearchCheck(
+      action: m['action'] == 'block' ? RuleAction.block : RuleAction.allow,
+      category: ProtectionCategory.fromId('${m['category']}'),
+      confidence: m['confidence'] is num
+          ? (m['confidence']! as num).toDouble()
+          : 0,
+      ruleType: m['ruleType'] is String ? m['ruleType']! as String : 'keyword',
+      reason: m['reason'] is String ? m['reason']! as String : '',
+      opened: m['opened'] == true,
+    );
+  }
+
+  @override
+  Future<List<ProtectedApp>> protectedApps() async =>
+      (await _channel.getProtectedApps()).map(_app).nonNulls.toList();
+
+  @override
+  Future<List<InstalledApp>> launchableApps() async => [
+    for (final m in await _channel.getLaunchableApps())
+      if (m['packageName'] is String)
+        InstalledApp(
+          packageName: m['packageName']! as String,
+          label: m['label'] is String
+              ? m['label']! as String
+              : m['packageName']! as String,
+        ),
+  ];
+
+  @override
+  Future<ProtectedApp> addProtectedApp(String packageName) async =>
+      _app(await _channel.addProtectedApp(packageName)) ??
+      ProtectedApp(packageName: packageName, label: packageName);
+
+  @override
+  Future<bool> removeProtectedApp(String packageName) =>
+      _channel.removeProtectedApp(packageName);
+
+  @override
+  Future<AccessibilityStatus> accessibilityStatus() async =>
+      AccessibilityStatus.fromId(
+        (await _channel.getAccessibilityStatus())['state'],
+      );
+
+  @override
+  Future<AccessibilityStatus> setAccessibilityDisclosure({
+    required bool accepted,
+  }) async => AccessibilityStatus.fromId(
+    (await _channel.setAccessibilityDisclosure(accepted))['state'],
+  );
+
+  @override
+  Future<void> openAccessibilitySettings() =>
+      _channel.openAccessibilitySettings();
+
+  static ProtectedApp? _app(Map<Object?, Object?> m) {
+    final pkg = m['packageName'];
+    if (pkg is! String) return null;
+    final added = m['addedAt'];
+    return ProtectedApp(
+      packageName: pkg,
+      label: m['label'] is String ? m['label']! as String : pkg,
+      addedAt: added is int ? DateTime.fromMillisecondsSinceEpoch(added) : null,
+    );
+  }
 
   static DomainRule? _rule(Map<Object?, Object?> m) {
     final domain = m['domain'];

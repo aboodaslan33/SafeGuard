@@ -15,6 +15,8 @@ abstract final class Routes {
   static const blocklist = '/rules/blocked';
   static const allowlist = '/rules/allowed';
   static const activity = '/activity';
+  static const searchProtection = '/search-protection';
+  static const appProtection = '/app-protection';
 
   static const _firstRun = {welcome, createPin};
   static const _entry = {splash, welcome, createPin, lock};

@@ -203,18 +203,43 @@ class EngineSnapshot {
 
 /// One blocked lookup: when, which domain, which category. Nothing else is
 /// recorded.
+/// Where a protection event came from.
+enum EventSourceKind {
+  dns,
+  search,
+  app,
+
+  /// Reserved for Phase 4 on-device classification.
+  ai,
+  manual;
+
+  static EventSourceKind fromId(Object? id) =>
+      values.firstWhere((v) => v.name == id, orElse: () => dns);
+}
+
+/// One protection event. Contains only: time, source, category, action,
+/// confidence, rule type and a non-sensitive subject (DNS: the domain;
+/// search: a rule id + keyed short hash, never the query; app: the package).
 class BlockEvent {
   const BlockEvent({
     required this.time,
     required this.domain,
     required this.category,
+    this.source = EventSourceKind.dns,
+    this.confidence = 1.0,
+    this.ruleType = 'domain',
   });
 
   final DateTime time;
+
+  /// The event subject (see class doc). Named `domain` since Phase 2.
   final String domain;
 
-  /// Null for categories this app version doesn't know.
+  /// Null for categories this app version doesn't know (and app events).
   final ProtectionCategory? category;
+  final EventSourceKind source;
+  final double confidence;
+  final String ruleType;
 }
 
 class ProtectionStats {
@@ -257,6 +282,146 @@ class DomainRule {
   final DateTime? updatedAt;
 }
 
+enum YouTubeMode {
+  off,
+  moderate,
+  strict;
+
+  static YouTubeMode fromId(Object? id) =>
+      values.firstWhere((v) => v.name == id, orElse: () => strict);
+}
+
+/// Search Protection settings (native side is the source of truth).
+class SearchSettings {
+  const SearchSettings({
+    this.enabled = true,
+    this.google = true,
+    this.bing = true,
+    this.duckDuckGo = true,
+    this.youtube = YouTubeMode.strict,
+  });
+
+  final bool enabled;
+  final bool google;
+  final bool bing;
+  final bool duckDuckGo;
+  final YouTubeMode youtube;
+
+  SearchSettings copyWith({
+    bool? enabled,
+    bool? google,
+    bool? bing,
+    bool? duckDuckGo,
+    YouTubeMode? youtube,
+  }) => SearchSettings(
+    enabled: enabled ?? this.enabled,
+    google: google ?? this.google,
+    bing: bing ?? this.bing,
+    duckDuckGo: duckDuckGo ?? this.duckDuckGo,
+    youtube: youtube ?? this.youtube,
+  );
+
+  Map<String, Object> toMap() => {
+    'enabled': enabled,
+    'google': google,
+    'bing': bing,
+    'duckDuckGo': duckDuckGo,
+    'youtube': youtube.name,
+  };
+
+  factory SearchSettings.fromMap(Map<Object?, Object?> m) => SearchSettings(
+    enabled: m['enabled'] is bool ? m['enabled']! as bool : true,
+    google: m['google'] is bool ? m['google']! as bool : true,
+    bing: m['bing'] is bool ? m['bing']! as bool : true,
+    duckDuckGo: m['duckDuckGo'] is bool ? m['duckDuckGo']! as bool : true,
+    youtube: YouTubeMode.fromId(m['youtube']),
+  );
+
+  /// True if [next] loosens protection compared to this (needs the PIN).
+  bool isLoosenedBy(SearchSettings next) =>
+      (enabled && !next.enabled) ||
+      (google && !next.google) ||
+      (bing && !next.bing) ||
+      (duckDuckGo && !next.duckDuckGo) ||
+      next.youtube.index < youtube.index;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SearchSettings &&
+      other.enabled == enabled &&
+      other.google == google &&
+      other.bing == bing &&
+      other.duckDuckGo == duckDuckGo &&
+      other.youtube == youtube;
+
+  @override
+  int get hashCode => Object.hash(enabled, google, bing, duckDuckGo, youtube);
+}
+
+enum SearchEngineId { google, bing, duckduckgo, youtube }
+
+/// Outcome of a submitted search. Never contains the query.
+class SearchCheck {
+  const SearchCheck({
+    required this.action,
+    required this.category,
+    required this.confidence,
+    required this.ruleType,
+    required this.reason,
+    required this.opened,
+  });
+
+  final RuleAction action;
+  final ProtectionCategory? category;
+  final double confidence;
+  final String ruleType;
+  final String reason;
+
+  /// Results were opened in the browser (only when allowed).
+  final bool opened;
+
+  bool get blocked => action == RuleAction.block;
+}
+
+class InstalledApp {
+  const InstalledApp({required this.packageName, required this.label});
+
+  final String packageName;
+  final String label;
+}
+
+class ProtectedApp extends InstalledApp {
+  const ProtectedApp({
+    required super.packageName,
+    required super.label,
+    this.addedAt,
+  });
+
+  final DateTime? addedAt;
+}
+
+/// State of SafeGuard's App Protection accessibility service.
+enum AccessibilityStatus {
+  /// No native layer (tests, non-Android).
+  unsupported,
+
+  /// The device/profile doesn't allow it.
+  unavailable,
+
+  /// The user declined SafeGuard's disclosure.
+  permissionDenied,
+  disabled,
+  enabled;
+
+  static AccessibilityStatus fromId(Object? id) => switch (id) {
+    'enabled' => enabled,
+    'disabled' => disabled,
+    'permission_denied' => permissionDenied,
+    'unavailable' => unavailable,
+    _ => unavailable,
+  };
+}
+
 /// Port to the enforcement layer. On Android this is the native VpnService
 /// + DNS filter behind a platform channel ([NativeProtectionEngine]).
 abstract interface class ProtectionEngine {
@@ -293,6 +458,27 @@ abstract interface class ProtectionEngine {
 
   /// Stops the VPN and deletes native rules, logs and config.
   Future<void> eraseAll();
+
+  // ---- Phase 3: Search Protection ----
+  Future<SearchSettings> searchSettings();
+  Future<SearchSettings> setSearchSettings(SearchSettings settings);
+
+  /// Classifies a *submitted* query natively and opens results only if
+  /// allowed. The query is not stored or logged anywhere.
+  Future<SearchCheck> submitSearch(String query, SearchEngineId engine);
+
+  // ---- Phase 3: App Protection ----
+  Future<List<ProtectedApp>> protectedApps();
+  Future<List<InstalledApp>> launchableApps();
+  Future<ProtectedApp> addProtectedApp(String packageName);
+  Future<bool> removeProtectedApp(String packageName);
+  Future<AccessibilityStatus> accessibilityStatus();
+
+  /// Records the answer to SafeGuard's disclosure; returns the new status.
+  Future<AccessibilityStatus> setAccessibilityDisclosure({
+    required bool accepted,
+  });
+  Future<void> openAccessibilitySettings();
 }
 
 /// Engine for platforms without the native layer (tests, previews): reports
@@ -336,6 +522,38 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   Future<void> openVpnSettings() async {}
   @override
   Future<void> eraseAll() async {}
+  @override
+  Future<SearchSettings> searchSettings() async => const SearchSettings();
+  @override
+  Future<SearchSettings> setSearchSettings(SearchSettings s) async => s;
+  @override
+  Future<SearchCheck> submitSearch(String q, SearchEngineId e) async =>
+      const SearchCheck(
+        action: RuleAction.allow,
+        category: null,
+        confidence: 0,
+        ruleType: 'keyword',
+        reason: 'unsupported',
+        opened: false,
+      );
+  @override
+  Future<List<ProtectedApp>> protectedApps() async => const [];
+  @override
+  Future<List<InstalledApp>> launchableApps() async => const [];
+  @override
+  Future<ProtectedApp> addProtectedApp(String p) async =>
+      ProtectedApp(packageName: p, label: p);
+  @override
+  Future<bool> removeProtectedApp(String p) async => false;
+  @override
+  Future<AccessibilityStatus> accessibilityStatus() async =>
+      AccessibilityStatus.unsupported;
+  @override
+  Future<AccessibilityStatus> setAccessibilityDisclosure({
+    required bool accepted,
+  }) async => AccessibilityStatus.unsupported;
+  @override
+  Future<void> openAccessibilitySettings() async {}
 }
 
 abstract interface class ProtectionRepository {

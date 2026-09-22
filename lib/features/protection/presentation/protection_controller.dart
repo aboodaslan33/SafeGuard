@@ -55,6 +55,56 @@ class ProtectionController extends ChangeNotifier {
   ProtectionStats _stats = ProtectionStats.unavailable;
   ProtectionStats get stats => _stats;
 
+  SearchSettings _search = const SearchSettings();
+  SearchSettings get searchSettings => _search;
+
+  AccessibilityStatus _accessibility = AccessibilityStatus.unsupported;
+  AccessibilityStatus get accessibility => _accessibility;
+
+  /// Search Protection is the Phase 1 "فلترة البحث" preference.
+  bool get searchProtectionEnabled =>
+      _state.isActive(ProtectionCategory.unsafeSearch);
+
+  /// Applies SafeSearch settings. The master switch is stored as the
+  /// unsafeSearch category so there is a single source of truth.
+  Future<Result<void>> setSearchSettings(SearchSettings next) async {
+    if (next.enabled != searchProtectionEnabled) {
+      final saved = await _commit(
+        _state.withCategory(
+          ProtectionCategory.unsafeSearch,
+          next.enabled,
+          _clock(),
+        ),
+      );
+      if (!saved.isOk) return saved;
+    }
+    return _pushSearch(next);
+  }
+
+  Future<void> refreshAppProtection() async {
+    if (!_engine.isSupported) return;
+    try {
+      _accessibility = await _engine.accessibilityStatus();
+      notifyListeners();
+    } catch (e, s) {
+      AppLogger.error('a11y', e, s);
+    }
+  }
+
+  Future<Result<void>> _pushSearch(SearchSettings next) async {
+    if (!_engine.isSupported) {
+      _search = next;
+      notifyListeners();
+      return const Ok(null);
+    }
+    final result = await guard(() => _engine.setSearchSettings(next));
+    if (result case Ok(:final value)) {
+      _search = value;
+      notifyListeners();
+    }
+    return result;
+  }
+
   ProtectionHealth get health {
     if (!_engine.isSupported) return ProtectionHealth.unsupported;
     if (!_state.enabled) return ProtectionHealth.paused;
@@ -127,6 +177,7 @@ class ProtectionController extends ChangeNotifier {
   void resetInMemory() {
     _state = ProtectionState.initial();
     _stats = ProtectionStats.unavailable;
+    _search = const SearchSettings();
     notifyListeners();
   }
 
@@ -149,6 +200,13 @@ class ProtectionController extends ChangeNotifier {
   Future<void> _syncEngine({bool resume = false}) async {
     try {
       await _engine.apply(_state);
+      _search = await _engine.searchSettings();
+      if (_search.enabled != searchProtectionEnabled) {
+        _search = await _engine.setSearchSettings(
+          _search.copyWith(enabled: searchProtectionEnabled),
+        );
+      }
+      _accessibility = await _engine.accessibilityStatus();
       _snapshot = await _engine.status();
       final shouldResume =
           resume &&
@@ -186,6 +244,10 @@ class ProtectionController extends ChangeNotifier {
     // The native mirror is best effort here; it is re-synced on every load.
     if (_engine.isSupported) {
       await guard(() => _engine.apply(next));
+      final searchOn = next.isActive(ProtectionCategory.unsafeSearch);
+      if (searchOn != _search.enabled) {
+        await _pushSearch(_search.copyWith(enabled: searchOn));
+      }
     }
     return result;
   }

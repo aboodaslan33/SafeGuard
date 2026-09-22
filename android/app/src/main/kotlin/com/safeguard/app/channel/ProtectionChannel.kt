@@ -3,10 +3,14 @@ package com.safeguard.app.channel
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import com.safeguard.app.engine.apps.AppRuleException
 import com.safeguard.app.engine.logging.BlockEvent
+import com.safeguard.app.engine.safesearch.SafeSearchConfig
+import com.safeguard.app.engine.safesearch.YouTubeMode
 import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.Rule
 import com.safeguard.app.engine.rules.RuleAction
@@ -18,6 +22,7 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.net.URLEncoder
 import java.util.concurrent.Executors
 
 /**
@@ -38,6 +43,19 @@ import java.util.concurrent.Executors
  *   getBlockedLogs({limit}) → [event]; clearLogs()
  *   getStatistics() → stats
  *   openVpnSettings(); eraseAll()
+ *
+ * Phase 3:
+ *   getSearchSettings() / setSearchSettings({enabled, google, bing,
+ *     duckDuckGo, youtube}) → settings
+ *   submitSearch({query, engine}) → decision {action, category, confidence,
+ *     ruleType, reason, opened}; opens results only if allowed. The query
+ *     is never returned, stored or logged.
+ *   getProtectedApps() / getLaunchableApps() → [{packageName, label, addedAt?}]
+ *   addProtectedApp({packageName}) → app | error INVALID_PACKAGE,
+ *     PACKAGE_NOT_INSTALLED, DUPLICATE_PACKAGE, PACKAGE_NOT_ALLOWED, LIMIT_REACHED
+ *   removeProtectedApp({packageName}) → bool
+ *   getAccessibilityStatus() / setAccessibilityDisclosure({accepted}) → {state}
+ *   openAccessibilitySettings() → bool
  *
  * Event channel `com.safeguard.app/protection/status` streams status maps.
  *
@@ -97,14 +115,8 @@ class ProtectionChannel(
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "requestVpnPermission" -> requestPermission(result)
-            "openVpnSettings" -> {
-                try {
-                    activity.startActivity(Intent(Settings.ACTION_VPN_SETTINGS))
-                    result.success(true)
-                } catch (e: ActivityNotFoundException) {
-                    result.success(false)
-                }
-            }
+            "openVpnSettings" -> result.success(open(Intent(Settings.ACTION_VPN_SETTINGS)))
+            "openAccessibilitySettings" -> result.success(open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
             else -> io.execute { handle(call, result) }
         }
     }
@@ -164,6 +176,52 @@ class ProtectionChannel(
                     )
                 }
                 "eraseAll" -> { manager.eraseAll(); true }
+                "getSearchSettings" -> searchSettings()
+                "setSearchSettings" -> {
+                    manager.setSearchConfig(
+                        SafeSearchConfig(
+                            enabled = call.argument<Boolean>("enabled") ?: throw bad("enabled"),
+                            google = call.argument<Boolean>("google") ?: true,
+                            bing = call.argument<Boolean>("bing") ?: true,
+                            duckDuckGo = call.argument<Boolean>("duckDuckGo") ?: true,
+                            youtube = YouTubeMode.entries.firstOrNull { it.id == call.argument<String>("youtube") }
+                                ?: throw bad("youtube"),
+                        ),
+                    )
+                    searchSettings()
+                }
+                "submitSearch" -> {
+                    val query = call.argument<String>("query")?.trim().orEmpty()
+                    val engine = call.argument<String>("engine") ?: "google"
+                    if (query.isEmpty() || query.length > 512) throw bad("query")
+                    val url = searchUrl(engine, query) ?: throw bad("engine")
+                    val d = manager.submitSearch(query, engine)
+                    val opened = d.action == RuleAction.ALLOW && open(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    mapOf(
+                        "action" to d.action.name.lowercase(),
+                        "category" to d.category.id,
+                        "confidence" to d.confidence,
+                        "ruleType" to d.ruleType,
+                        "reason" to d.reason,
+                        "opened" to opened,
+                    )
+                }
+                "getProtectedApps" -> manager.protectedApps().map {
+                    mapOf("packageName" to it.packageName, "label" to manager.appLabel(it.packageName), "addedAt" to it.addedAt)
+                }
+                "getLaunchableApps" -> manager.launchableApps().map { (label, pkg) ->
+                    mapOf("packageName" to pkg, "label" to label)
+                }
+                "addProtectedApp" -> {
+                    val app = manager.addProtectedApp(call.argument<String>("packageName") ?: throw bad("packageName"))
+                    mapOf("packageName" to app.packageName, "label" to manager.appLabel(app.packageName), "addedAt" to app.addedAt)
+                }
+                "removeProtectedApp" -> manager.removeProtectedApp(call.argument<String>("packageName") ?: throw bad("packageName"))
+                "getAccessibilityStatus" -> mapOf("state" to manager.accessibilityState().id)
+                "setAccessibilityDisclosure" -> {
+                    manager.config.accessibilityDisclosureDeclined = call.argument<Boolean>("accepted") != true
+                    mapOf("state" to manager.accessibilityState().id)
+                }
                 else -> {
                     main.post { result.notImplemented() }
                     return
@@ -174,6 +232,8 @@ class ProtectionChannel(
             main.post { result.error(e.code, e.message, null) }
         } catch (e: RuleValidationException) {
             main.post { result.error(e.code, e.message, null) }
+        } catch (e: AppRuleException) {
+            main.post { result.error(e.error.code, e.error.code, null) }
         } catch (e: Exception) {
             main.post { result.error("INTERNAL", e.javaClass.simpleName, null) }
         }
@@ -201,6 +261,35 @@ class ProtectionChannel(
     }
 
     private fun status() = manager.status.current.toMap()
+
+    private fun searchSettings() = manager.config.rawSafeSearch.let {
+        mapOf(
+            "enabled" to it.enabled,
+            "google" to it.google,
+            "bing" to it.bing,
+            "duckDuckGo" to it.duckDuckGo,
+            "youtube" to it.youtube.id,
+        )
+    }
+
+    /** Results pages with each engine's own SafeSearch parameter as well. */
+    private fun searchUrl(engine: String, query: String): String? {
+        val q = URLEncoder.encode(query, "UTF-8")
+        return when (engine) {
+            "google" -> "https://www.google.com/search?safe=active&q=$q"
+            "bing" -> "https://www.bing.com/search?adlt=strict&q=$q"
+            "duckduckgo" -> "https://duckduckgo.com/?kp=1&q=$q"
+            "youtube" -> "https://www.youtube.com/results?search_query=$q"
+            else -> null
+        }
+    }
+
+    private fun open(intent: Intent): Boolean = try {
+        activity.startActivity(intent)
+        true
+    } catch (e: ActivityNotFoundException) {
+        false
+    }
 
     private fun domainArg(call: MethodCall): String {
         val d = call.argument<String>("domain") ?: throw bad("domain")
@@ -243,6 +332,10 @@ private fun Rule.toMap(): Map<String, Any> = mapOf(
 
 private fun BlockEvent.toMap(): Map<String, Any> = mapOf(
     "timestamp" to timestamp,
-    "domain" to domain,
+    "domain" to subject,
     "category" to category.id,
+    "source" to source.id,
+    "action" to action.name.lowercase(),
+    "confidence" to confidence,
+    "ruleType" to ruleType,
 )

@@ -34,7 +34,7 @@ class DnsForwarder(
 
     fun forward(request: DnsPacketFilter.ForwardRequest, write: (ByteArray) -> Unit) {
         executor.execute {
-            val answer = resolve(request.payload)
+            val answer = resolve(request.upstreamPayload)
             write(if (answer != null) request.wrap(answer) else request.failure())
         }
     }

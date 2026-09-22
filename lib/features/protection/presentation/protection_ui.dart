@@ -26,7 +26,7 @@ extension ProtectionCategoryUi on ProtectionCategory {
     ProtectionCategory.gambling => 'الكازينوهات ومواقع المراهنات',
     ProtectionCategory.drugs => 'الترويج للمخدرات وبيعها',
     ProtectionCategory.dangerous => 'إيذاء النفس والتحديات الخطرة',
-    ProtectionCategory.unsafeSearch => 'فرض البحث الآمن في محركات البحث',
+    ProtectionCategory.unsafeSearch => 'البحث الآمن في Google وBing وYouTube',
   };
 
   IconData get icon => switch (this) {

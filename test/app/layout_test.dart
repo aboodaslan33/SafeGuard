@@ -32,6 +32,8 @@ void main() {
     '/rules/blocked',
     '/rules/allowed',
     '/activity',
+    '/search-protection',
+    '/app-protection',
   ];
 
   for (final textScale in [1.0, 1.3]) {
@@ -61,6 +63,12 @@ void main() {
                 category: c,
               ),
           ]);
+          engine.protected.add(
+            const ProtectedApp(
+              packageName: 'com.example.a.very.long.package.name.for.layout',
+              label: 'تطبيق باسم طويل جدًا لاختبار التخطيط',
+            ),
+          );
           final deps = testDependencies(engine: engine);
           await deps.initialize();
           if (screen != '/welcome' && screen != '/pin/create') {

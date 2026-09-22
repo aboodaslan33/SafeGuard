@@ -137,17 +137,26 @@ class _EventRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            SgIconWell(icon: category?.icon ?? Icons.block_rounded),
+            SgIconWell(
+              icon: switch (event.source) {
+                EventSourceKind.app => Icons.apps_rounded,
+                EventSourceKind.search => Icons.manage_search_rounded,
+                _ => category?.icon ?? Icons.block_rounded,
+              },
+            ),
             const SizedBox(width: SgSpace.x3),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(switch (event.source) {
+                    EventSourceKind.app => 'تطبيق محمي',
+                    EventSourceKind.search =>
+                      'بحث · ${category?.title ?? 'فئة غير معروفة'}',
+                    _ => category?.title ?? 'فئة غير معروفة',
+                  }, style: context.text.titleMedium),
                   Text(
-                    category?.title ?? 'فئة غير معروفة',
-                    style: context.text.titleMedium,
-                  ),
-                  Text(
+                    // Search events carry a rule id + hash, never the query.
                     event.domain,
                     textDirection: TextDirection.ltr,
                     maxLines: 1,

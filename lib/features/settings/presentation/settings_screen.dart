@@ -12,7 +12,7 @@ import '../domain/app_settings.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  static const appVersion = '1.1.0';
+  static const appVersion = '1.2.0';
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +75,26 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: 'ليعمل SafeGuard تلقائيًا بعد إعادة تشغيل الجهاز',
                     onTap: engine.openVpnSettings,
                   ),
+              ],
+            ),
+            const SectionHeader(title: 'البحث والتطبيقات'),
+            SgGroupedCard(
+              children: [
+                SecuritySettingTile(
+                  icon: Icons.manage_search_rounded,
+                  title: 'حماية البحث',
+                  subtitle: 'البحث الآمن وفحص البحث',
+                  value: protection.isActive(ProtectionCategory.unsafeSearch)
+                      ? 'مفعّلة'
+                      : 'متوقفة',
+                  onTap: () => context.push(Routes.searchProtection),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.apps_rounded,
+                  title: 'حماية التطبيقات',
+                  subtitle: 'منع فتح تطبيقات تختارها',
+                  onTap: () => context.push(Routes.appProtection),
+                ),
               ],
             ),
             const SectionHeader(title: 'الأمان'),

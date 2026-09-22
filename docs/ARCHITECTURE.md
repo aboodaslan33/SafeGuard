@@ -1,4 +1,4 @@
-# SafeGuard — Architecture (Phase 2)
+# SafeGuard — Architecture (Phases 2–3)
 
 ## Layers
 
@@ -134,5 +134,47 @@ stored: no app identity, IPs, URLs, content, cookies or credentials.
 | `HostsListParser` | same | Import hosts-format lists (implemented, unused). |
 | `DomainClassifier` | `engine/rules/RuleEngine.kt` | AI/heuristic classification of unknown domains. |
 | `UnknownDomainPolicy.BLOCK` | same | Strict Mode. |
-| `SearchFilterService` | `engine/search/` | Search-query classification / SafeSearch. |
-| `ImageClassifier`, `AppProtectionPolicy`, `SettingsSync` | `engine/extensions/` | Image, per-app and family-dashboard features. |
+| `SearchClassifier` / `CombinedSearchClassifier` | `engine/search/` | Phase 4 AI query classification (Phase 3 ships the rule-based one). |
+| `ImageClassifier`, `SettingsSync` | `engine/extensions/` | Image and family-dashboard features. |
+
+## Phase 3 additions
+
+```
+SafeGuard search box (Flutter, on submit)
+    → submitSearch (channel) → ProtectionManager.submitSearch
+    → RuleBasedSearchFilterService
+        SearchNormalizer → SearchClassifier (RuleBased | Combined w/ Phase 4 AI)
+        → SearchPolicy (categories shared with DNS, threshold 0.6)
+        → SearchEventRecorder (BLOCK only: rule id + keyed hash)
+    → ALLOW: open results URL with the engine's safe parameter
+      BLOCK: Flutter shows the block screen
+
+DNS path (VPN): RuleEngine → [BLOCK: NXDOMAIN]
+                           → SafeSearchRewriter.targetFor(name)?
+                               A/AAAA/CNAME/ANY: ask upstream for the target,
+                                 DnsRecords.synthesizeCname(name → target + records)
+                               other types (HTTPS/SVCB…): NODATA
+                           → otherwise forward unchanged
+
+AppGuardService (Accessibility, window-state events only, no window content)
+    → ProtectionManager.onForegroundApp(pkg) → AppProtection.decide
+    → BLOCK_APP: event (source APP) + GLOBAL_ACTION_HOME + AppBlockedActivity
+```
+
+| Component | File | Notes |
+|---|---|---|
+| `SearchNormalizer` | `engine/search/SearchNormalizer.kt` | NFKC/NFD, Arabic unification, digits, variants |
+| `SearchClassifier`, `RuleBasedSearchClassifier`, `CombinedSearchClassifier` | `engine/search/SearchClassifier.kt` | **Phase 4 plug-in point** |
+| `BuiltInSearchLexicon` | `engine/search/SearchLexicon.kt` | Small, generic, id-addressed rules + safe contexts |
+| `SearchPolicy`, `RuleBasedSearchFilterService` | `engine/search/SearchFilterService.kt` | Thresholds per category |
+| `QueryHasher`, `SearchEventRecorder` | `engine/privacy/` | HMAC-SHA256, per-install key, 32-bit |
+| `SafeSearchRewriter`, `SafeSearchConfig` | `engine/safesearch/` | Official endpoints only |
+| `DnsRecords` | `engine/dns/DnsRecords.kt` | Decompressing RR parser, uncompressed writer |
+| `AppProtection`, `AccessibilityStateResolver` | `engine/apps/` | Validation, exemptions, decisions |
+| `AppGuardService`, `AppBlockedActivity` | `apps/` | Android-only |
+| `SqliteProtectedAppStore` | `data/` | In-memory cache (service runs on main thread) |
+| DB v2 | `data/SafeGuardDatabase.kt` | Event columns: source, action, confidence, rule_type; `protected_apps` |
+
+Events: `BlockEvent(timestamp, subject, category, source, action,
+confidence, ruleType)` (`ProtectionEvent` alias). Subjects are never user
+text for SEARCH.

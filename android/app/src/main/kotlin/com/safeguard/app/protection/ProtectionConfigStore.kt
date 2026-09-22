@@ -1,9 +1,14 @@
 package com.safeguard.app.protection
 
 import android.content.Context
+import android.util.Base64
 import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.ProtectionPolicy
 import com.safeguard.app.engine.rules.UnknownDomainPolicy
+import com.safeguard.app.engine.safesearch.SafeSearchConfig
+import com.safeguard.app.engine.safesearch.YouTubeMode
+import com.safeguard.app.engine.search.SearchPolicyConfig
+import java.security.SecureRandom
 
 /**
  * Native copy of the protection settings.
@@ -44,9 +49,70 @@ class ProtectionConfigStore(context: Context) {
         return update(categories = set)
     }
 
+    // ---- Search Protection (Phase 3) ------------------------------------
+
+    @Volatile
+    private var cachedSafeSearch: SafeSearchConfig = readSafeSearch()
+
+    /** Master switch for SafeSearch enforcement + query classification. */
+    val searchProtectionEnabled: Boolean get() = cachedSafeSearch.enabled
+
+    /** Effective SafeSearch config (off when protection or search protection is off). */
+    val safeSearch: SafeSearchConfig
+        get() = if (cached.enabled) cachedSafeSearch else SafeSearchConfig.OFF
+
+    val rawSafeSearch: SafeSearchConfig get() = cachedSafeSearch
+
+    /** Search policy: shares the DNS categories; off when protection is off. */
+    val searchPolicy: SearchPolicyConfig
+        get() = if (cached.enabled && cachedSafeSearch.enabled) {
+            SearchPolicyConfig(true, cached.blockedCategories)
+        } else {
+            SearchPolicyConfig.DISABLED
+        }
+
+    @Synchronized
+    fun updateSearch(config: SafeSearchConfig): SafeSearchConfig {
+        prefs.edit()
+            .putBoolean(KEY_SEARCH, config.enabled)
+            .putBoolean(KEY_SS_GOOGLE, config.google)
+            .putBoolean(KEY_SS_BING, config.bing)
+            .putBoolean(KEY_SS_DDG, config.duckDuckGo)
+            .putString(KEY_SS_YOUTUBE, config.youtube.id)
+            .apply()
+        cachedSafeSearch = config
+        return config
+    }
+
+    var accessibilityDisclosureDeclined: Boolean
+        get() = prefs.getBoolean(KEY_A11Y_DECLINED, false)
+        set(value) = prefs.edit().putBoolean(KEY_A11Y_DECLINED, value).apply()
+
+    /**
+     * Per-install random key for search-event hashes. Generated on first
+     * use, never leaves the device, deleted by [clear].
+     */
+    @Synchronized
+    fun hashKey(): ByteArray {
+        prefs.getString(KEY_HASH, null)?.let { return Base64.decode(it, Base64.NO_WRAP) }
+        val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        prefs.edit().putString(KEY_HASH, Base64.encodeToString(key, Base64.NO_WRAP)).apply()
+        return key
+    }
+
+    private fun readSafeSearch() = SafeSearchConfig(
+        // Search protection follows the Phase 1 "فلترة البحث" preference; on by default.
+        enabled = prefs.getBoolean(KEY_SEARCH, true),
+        google = prefs.getBoolean(KEY_SS_GOOGLE, true),
+        bing = prefs.getBoolean(KEY_SS_BING, true),
+        duckDuckGo = prefs.getBoolean(KEY_SS_DDG, true),
+        youtube = YouTubeMode.fromId(prefs.getString(KEY_SS_YOUTUBE, null)),
+    )
+
     fun clear() {
         prefs.edit().clear().apply()
         cached = read()
+        cachedSafeSearch = readSafeSearch()
     }
 
     private fun read(): ProtectionPolicy {
@@ -66,5 +132,12 @@ class ProtectionConfigStore(context: Context) {
         const val NAME = "safeguard_protection"
         const val KEY_ENABLED = "enabled"
         const val KEY_CATEGORIES = "blocked_categories"
+        const val KEY_SEARCH = "search_protection"
+        const val KEY_SS_GOOGLE = "safesearch_google"
+        const val KEY_SS_BING = "safesearch_bing"
+        const val KEY_SS_DDG = "safesearch_ddg"
+        const val KEY_SS_YOUTUBE = "safesearch_youtube"
+        const val KEY_A11Y_DECLINED = "a11y_disclosure_declined"
+        const val KEY_HASH = "event_hash_key"
     }
 }

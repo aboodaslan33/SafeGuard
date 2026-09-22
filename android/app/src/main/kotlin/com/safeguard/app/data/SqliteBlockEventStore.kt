@@ -2,7 +2,9 @@ package com.safeguard.app.data
 
 import com.safeguard.app.engine.logging.BlockEvent
 import com.safeguard.app.engine.logging.BlockEventStore
+import com.safeguard.app.engine.logging.EventSource
 import com.safeguard.app.engine.rules.Category
+import com.safeguard.app.engine.rules.RuleAction
 
 class SqliteBlockEventStore(private val db: SafeGuardDatabase) : BlockEventStore {
 
@@ -11,8 +13,17 @@ class SqliteBlockEventStore(private val db: SafeGuardDatabase) : BlockEventStore
         w.beginTransaction()
         try {
             w.execSQL(
-                "INSERT INTO block_events(ts, domain, category) VALUES (?, ?, ?)",
-                arrayOf<Any>(event.timestamp, event.domain, event.category.id),
+                "INSERT INTO block_events(ts, domain, category, source, action, confidence, rule_type) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                arrayOf<Any>(
+                    event.timestamp,
+                    event.subject,
+                    event.category.id,
+                    event.source.id,
+                    event.action.name.lowercase(),
+                    event.confidence,
+                    event.ruleType,
+                ),
             )
             // UPSERT syntax needs SQLite 3.24 (Android 11+); minSdk is 24.
             w.execSQL("INSERT OR IGNORE INTO counters(name, value) VALUES (?, 0)", arrayOf<Any>(TOTAL))
@@ -25,12 +36,20 @@ class SqliteBlockEventStore(private val db: SafeGuardDatabase) : BlockEventStore
 
     override fun recent(limit: Int): List<BlockEvent> =
         db.readableDatabase.rawQuery(
-            "SELECT ts, domain, category FROM block_events ORDER BY ts DESC LIMIT ?",
+            "SELECT ts, domain, category, source, action, confidence, rule_type FROM block_events ORDER BY ts DESC LIMIT ?",
             arrayOf(limit.coerceIn(1, 1000).toString()),
         ).use { c ->
             val out = ArrayList<BlockEvent>(c.count)
             while (c.moveToNext()) {
-                out += BlockEvent(c.getLong(0), c.getString(1), Category.fromId(c.getString(2)) ?: Category.UNKNOWN)
+                out += BlockEvent(
+                    timestamp = c.getLong(0),
+                    subject = c.getString(1),
+                    category = Category.fromId(c.getString(2)) ?: Category.UNKNOWN,
+                    source = EventSource.fromId(c.getString(3)),
+                    action = if (c.getString(4) == "allow") RuleAction.ALLOW else RuleAction.BLOCK,
+                    confidence = c.getDouble(5),
+                    ruleType = c.getString(6),
+                )
             }
             out
         }

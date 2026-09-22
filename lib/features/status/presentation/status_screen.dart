@@ -104,12 +104,39 @@ class _StatusScreenState extends State<StatusScreen> {
                       ? 'محمّلة'
                       : 'غير محمّلة',
                 ),
-                const _LayerRow(
+                _LayerRow(
                   icon: Icons.manage_search_rounded,
-                  title: 'فلترة البحث',
+                  title: 'حماية البحث',
                   subtitle: 'البحث الآمن في Google وBing وYouTube',
-                  status: SgStatus.unavailable,
-                  label: 'قريبًا',
+                  status: !protection.searchProtectionEnabled
+                      ? SgStatus.paused
+                      : snap.isActive
+                      ? SgStatus.active
+                      : SgStatus.unavailable,
+                  label: !protection.searchProtectionEnabled
+                      ? 'متوقفة'
+                      : snap.isActive
+                      ? 'مفعّلة'
+                      : 'بانتظار VPN',
+                ),
+                _LayerRow(
+                  icon: Icons.apps_rounded,
+                  title: 'حماية التطبيقات',
+                  subtitle: 'عبر خدمة تسهيل الاستخدام',
+                  status: switch (protection.accessibility) {
+                    AccessibilityStatus.enabled => SgStatus.active,
+                    AccessibilityStatus.disabled ||
+                    AccessibilityStatus.permissionDenied => SgStatus.paused,
+                    AccessibilityStatus.unavailable => SgStatus.error,
+                    AccessibilityStatus.unsupported => SgStatus.unavailable,
+                  },
+                  label: switch (protection.accessibility) {
+                    AccessibilityStatus.enabled => 'مفعّلة',
+                    AccessibilityStatus.disabled => 'غير مفعّلة',
+                    AccessibilityStatus.permissionDenied => 'مرفوضة',
+                    AccessibilityStatus.unavailable ||
+                    AccessibilityStatus.unsupported => 'غير متاحة',
+                  },
                 ),
                 _LayerRow(
                   icon: Icons.lock_outline_rounded,
@@ -406,6 +433,9 @@ class _Limitations extends StatelessWidget {
         'SafeGuard.',
     'يعمل تطبيق VPN واحد فقط في الوقت نفسه. تشغيل VPN آخر يوقف SafeGuard.',
     'يستطيع مالك الجهاز فصل VPN أو إزالة التطبيق أو مسح بياناته من إعدادات Android.',
+    'فحص البحث يشمل ما تبحث عنه عبر SafeGuard فقط؛ لا يقرأ SafeGuard ما تكتبه في التطبيقات الأخرى.',
+    'حماية التطبيقات تمنع فتح التطبيق كاملًا، ولا تستطيع فلترة المحتوى داخله.',
+    'SafeGuard طبقات حماية متعددة، ولا يضمن حجب 100% من المحتوى.',
   ];
 
   @override

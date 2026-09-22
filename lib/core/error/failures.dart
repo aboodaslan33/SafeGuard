@@ -66,5 +66,11 @@ final class EngineFailure extends AppFailure {
     'INVALID_CATEGORY': 'اختر فئة للنطاق المحظور.',
     'LIMIT_REACHED': 'وصلت إلى الحد الأقصى للنطاقات المخصصة.',
     'UNSUPPORTED': 'هذا الجهاز لا يدعم تطبيقات VPN.',
+    'INVALID_PACKAGE': 'اسم الحزمة غير صالح.',
+    'PACKAGE_NOT_INSTALLED': 'التطبيق غير مثبت على هذا الجهاز.',
+    'DUPLICATE_PACKAGE': 'هذا التطبيق محمي بالفعل.',
+    'PACKAGE_NOT_ALLOWED':
+        'لا يمكن حماية هذا التطبيق: يحتاجه النظام أو الاتصال أو الإعدادات.',
+    'INVALID_ARGUMENT': 'المدخلات غير صالحة.',
   };
 }

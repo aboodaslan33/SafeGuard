@@ -4,17 +4,55 @@ import com.safeguard.app.engine.dns.BlockListener
 import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.Decision
 import com.safeguard.app.engine.rules.LruCache
+import com.safeguard.app.engine.rules.RuleAction
 import java.util.concurrent.Executor
 
+/** Where a protection event originated. [id] is stored; never rename. */
+enum class EventSource(val id: String) {
+    DNS("dns"),
+    SEARCH("search"),
+    APP("app"),
+
+    /** Reserved for Phase 4 on-device classification. */
+    AI("ai"),
+
+    /** User-initiated (e.g. manual block test). */
+    MANUAL("manual");
+
+    companion object {
+        fun fromId(id: String?) = entries.firstOrNull { it.id == id } ?: DNS
+    }
+}
+
 /**
- * One blocked lookup. This is the *entire* record: time, domain, category.
- * No app identity, no IP addresses, no URLs, no content.
+ * One protection event. This is the *entire* record:
+ *
+ * - [subject]: for DNS the blocked domain; for SEARCH a rule id plus a keyed
+ *   short hash (never the query); for APP the protected package name.
+ * - no IP addresses, URLs, page content, messages, passwords or tokens.
  */
 data class BlockEvent(
     val timestamp: Long,
-    val domain: String,
+    val subject: String,
     val category: Category,
-)
+    val source: EventSource = EventSource.DNS,
+    val action: RuleAction = RuleAction.BLOCK,
+    /** 0..1; 1.0 for exact rules (domains, protected apps). */
+    val confidence: Double = 1.0,
+    /** "domain", "keyword", "protected_app", later "ai". */
+    val ruleType: String = RULE_TYPE_DOMAIN,
+) {
+    /** Phase 2 name of [subject]. */
+    val domain: String get() = subject
+
+    companion object {
+        const val RULE_TYPE_DOMAIN = "domain"
+        const val RULE_TYPE_KEYWORD = "keyword"
+        const val RULE_TYPE_PROTECTED_APP = "protected_app"
+    }
+}
+
+typealias ProtectionEvent = BlockEvent
 
 interface BlockEventStore {
     fun insert(event: BlockEvent)
@@ -81,15 +119,26 @@ class BlockLogger(
     private val lastLogged = LruCache<String, Long>(512)
     private var insertsSincePrune = 0
 
+    /** Current time on the logger's clock (for non-DNS event sources). */
+    fun now(): Long = clock()
+
     override fun onBlocked(decision: Decision) {
         val domain = decision.domain ?: return
-        val now = clock()
+        record(BlockEvent(clock(), domain, decision.category))
+    }
+
+    /**
+     * Records any event (DNS, SEARCH, APP…). Callers are responsible for
+     * [BlockEvent.subject] being non-sensitive; see `SearchEventRecorder`.
+     */
+    fun record(event: BlockEvent) {
+        val now = event.timestamp
+        val key = event.source.id + ":" + event.subject
         synchronized(this) {
-            val previous = lastLogged.get(domain)
+            val previous = lastLogged.get(key)
             if (previous != null && now - previous < dedupeWindowMs) return
-            lastLogged.put(domain, now)
+            lastLogged.put(key, now)
         }
-        val event = BlockEvent(now, domain, decision.category)
         executor.execute {
             store.insert(event)
             if (++insertsSincePrune >= 200) {

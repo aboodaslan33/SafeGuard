@@ -128,6 +128,119 @@ class FakeProtectionEngine implements ProtectionEngine {
   Future<void> eraseAll() async {
     rules.clear();
     logs.clear();
+    protected.clear();
     await stop();
   }
+
+  // ---- Phase 3 ----
+  SearchSettings search = const SearchSettings();
+  AccessibilityStatus a11y = AccessibilityStatus.disabled;
+  final protected = <ProtectedApp>[];
+  final installed = <InstalledApp>[
+    const InstalledApp(packageName: 'com.example.social', label: 'Social'),
+    const InstalledApp(packageName: 'com.example.game', label: 'Game'),
+  ];
+  final submittedEngines = <SearchEngineId>[];
+
+  /// Keywords the fake treats as blocked, mirroring the native rule layer.
+  static const _blockedWords = {
+    'porn': ProtectionCategory.sexual,
+    'casino': ProtectionCategory.gambling,
+    'قمار': ProtectionCategory.gambling,
+  };
+
+  @override
+  Future<SearchSettings> searchSettings() async => search;
+
+  @override
+  Future<SearchSettings> setSearchSettings(SearchSettings s) async =>
+      search = s;
+
+  @override
+  Future<SearchCheck> submitSearch(String query, SearchEngineId engine) async {
+    if (query.trim().isEmpty) throw EngineFailure('INVALID_ARGUMENT');
+    submittedEngines.add(engine);
+    final lower = query.toLowerCase();
+    ProtectionCategory? hit;
+    for (final e in _blockedWords.entries) {
+      if (lower.split(RegExp(r'\s+')).contains(e.key)) hit = e.value;
+    }
+    final on = search.enabled && (applied?.enabled ?? true);
+    final blocked = on && hit != null && (applied?.isActive(hit) ?? true);
+    if (blocked) {
+      // Privacy-safe log: rule id + hash, never the query.
+      logs.insert(
+        0,
+        BlockEvent(
+          time: DateTime(2026),
+          domain: 'kw01#0000abcd',
+          category: hit,
+          source: EventSourceKind.search,
+          confidence: 1,
+          ruleType: 'keyword',
+        ),
+      );
+    }
+    return SearchCheck(
+      action: blocked ? RuleAction.block : RuleAction.allow,
+      category: hit,
+      confidence: hit == null ? 0 : 1,
+      ruleType: 'keyword',
+      reason: blocked ? 'category_blocked' : 'unknown',
+      opened: !blocked,
+    );
+  }
+
+  @override
+  Future<List<ProtectedApp>> protectedApps() async => List.of(protected);
+
+  @override
+  Future<List<InstalledApp>> launchableApps() async => installed;
+
+  @override
+  Future<ProtectedApp> addProtectedApp(String packageName) async {
+    if (!RegExp(r'^[a-zA-Z][\w]*(\.[a-zA-Z][\w]*)+$').hasMatch(packageName)) {
+      throw EngineFailure('INVALID_PACKAGE');
+    }
+    if (packageName == 'com.safeguard.app' ||
+        packageName == 'com.android.settings') {
+      throw EngineFailure('PACKAGE_NOT_ALLOWED');
+    }
+    if (protected.any((a) => a.packageName == packageName)) {
+      throw EngineFailure('DUPLICATE_PACKAGE');
+    }
+    final app = installed.where((a) => a.packageName == packageName);
+    if (app.isEmpty) throw EngineFailure('PACKAGE_NOT_INSTALLED');
+    final p = ProtectedApp(packageName: packageName, label: app.first.label);
+    protected.add(p);
+    return p;
+  }
+
+  @override
+  Future<bool> removeProtectedApp(String packageName) async {
+    final before = protected.length;
+    protected.removeWhere((a) => a.packageName == packageName);
+    return protected.length != before;
+  }
+
+  @override
+  Future<AccessibilityStatus> accessibilityStatus() async => a11y;
+
+  @override
+  Future<AccessibilityStatus> setAccessibilityDisclosure({
+    required bool accepted,
+  }) async {
+    if (a11y != AccessibilityStatus.enabled) {
+      a11y = accepted
+          ? AccessibilityStatus.disabled
+          : AccessibilityStatus.permissionDenied;
+    }
+    return a11y;
+  }
+
+  int accessibilitySettingsOpened = 0;
+
+  @override
+  Future<void> openAccessibilitySettings() async =>
+      accessibilitySettingsOpened++;
 }

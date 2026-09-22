@@ -74,6 +74,38 @@ class ProtectionChannel {
   Future<void> openVpnSettings() => _call<bool>('openVpnSettings');
   Future<void> eraseAll() => _call<bool>('eraseAll');
 
+  // ---- Phase 3 ----
+  Future<Map<Object?, Object?>> getSearchSettings() =>
+      _map('getSearchSettings');
+
+  Future<Map<Object?, Object?>> setSearchSettings(Map<String, Object> s) =>
+      _map('setSearchSettings', s);
+
+  Future<Map<Object?, Object?>> submitSearch(String query, String engine) =>
+      _map('submitSearch', {'query': query, 'engine': engine});
+
+  Future<List<Map<Object?, Object?>>> getProtectedApps() =>
+      _list('getProtectedApps');
+
+  Future<List<Map<Object?, Object?>>> getLaunchableApps() =>
+      _list('getLaunchableApps');
+
+  Future<Map<Object?, Object?>> addProtectedApp(String packageName) =>
+      _map('addProtectedApp', {'packageName': packageName});
+
+  Future<bool> removeProtectedApp(String packageName) async =>
+      await _call<bool>('removeProtectedApp', {'packageName': packageName}) ??
+      false;
+
+  Future<Map<Object?, Object?>> getAccessibilityStatus() =>
+      _map('getAccessibilityStatus');
+
+  Future<Map<Object?, Object?>> setAccessibilityDisclosure(bool accepted) =>
+      _map('setAccessibilityDisclosure', {'accepted': accepted});
+
+  Future<void> openAccessibilitySettings() =>
+      _call<bool>('openAccessibilitySettings');
+
   Future<T?> _call<T>(String method, [Object? args]) async {
     try {
       return await _methods.invokeMethod<T>(method, args);

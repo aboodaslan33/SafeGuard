@@ -71,24 +71,31 @@ class SecuritySettingTile extends StatelessWidget {
     Widget? trailing;
     if (isSwitch) {
       trailing = Switch(value: switchValue!, onChanged: onSwitchChanged);
-    } else if (onTap != null && showChevron) {
+    } else if (value != null || (onTap != null && showChevron)) {
+      // The value is shown even for non-tappable rows (e.g. "الإصدار").
       trailing = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (value != null)
-            Text(
-              value!,
-              style: context.text.bodyMedium!.copyWith(color: c.textTertiary),
+            Flexible(
+              child: Text(
+                value!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.bodyMedium!.copyWith(color: c.textTertiary),
+              ),
             ),
-          const SizedBox(width: SgSpace.x1),
-          // chevron_left points "forward" in RTL.
-          Icon(
-            Directionality.of(context) == TextDirection.rtl
-                ? Icons.chevron_left_rounded
-                : Icons.chevron_right_rounded,
-            color: c.textTertiary,
-            size: 22,
-          ),
+          if (onTap != null && showChevron) ...[
+            const SizedBox(width: SgSpace.x1),
+            // chevron_left points "forward" in RTL.
+            Icon(
+              Directionality.of(context) == TextDirection.rtl
+                  ? Icons.chevron_left_rounded
+                  : Icons.chevron_right_rounded,
+              color: c.textTertiary,
+              size: 22,
+            ),
+          ],
         ],
       );
     }
@@ -130,7 +137,7 @@ class SecuritySettingTile extends StatelessWidget {
               ),
               if (trailing != null) ...[
                 const SizedBox(width: SgSpace.x2),
-                trailing,
+                isSwitch ? trailing : Flexible(child: trailing),
               ],
             ],
           ),

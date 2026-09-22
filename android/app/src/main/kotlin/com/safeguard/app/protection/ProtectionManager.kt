@@ -1,12 +1,34 @@
 package com.safeguard.app.protection
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.provider.Settings
+import android.telecom.TelecomManager
+import android.view.accessibility.AccessibilityManager
 import android.content.pm.ApplicationInfo
 import android.app.PendingIntent
 import android.net.VpnService
 import android.util.Log
 import com.safeguard.app.MainActivity
+import com.safeguard.app.apps.AppGuardService
+import com.safeguard.app.data.SqliteProtectedAppStore
+import com.safeguard.app.engine.apps.AccessibilityState
+import com.safeguard.app.engine.apps.AccessibilityStateResolver
+import com.safeguard.app.engine.apps.AppAction
+import com.safeguard.app.engine.apps.AppDecision
+import com.safeguard.app.engine.apps.AppProtection
+import com.safeguard.app.engine.logging.BlockEvent
+import com.safeguard.app.engine.logging.EventSource
+import com.safeguard.app.engine.privacy.QueryHasher
+import com.safeguard.app.engine.privacy.SearchEventRecorder
+import com.safeguard.app.engine.safesearch.SafeSearchConfig
+import com.safeguard.app.engine.search.RuleBasedSearchClassifier
+import com.safeguard.app.engine.search.RuleBasedSearchFilterService
+import com.safeguard.app.engine.search.SearchDecision
+import com.safeguard.app.engine.search.SearchNormalizer
+import com.safeguard.app.engine.search.SearchQuery
 import com.safeguard.app.data.SafeGuardDatabase
 import com.safeguard.app.data.SqliteBlockEventStore
 import com.safeguard.app.data.SqliteRuleStore
@@ -19,7 +41,6 @@ import com.safeguard.app.engine.rules.Rule
 import com.safeguard.app.engine.rules.RuleAction
 import com.safeguard.app.engine.rules.RuleEngine
 import com.safeguard.app.engine.rules.RuleSource
-import com.safeguard.app.engine.search.NoOpSearchFilterService
 import com.safeguard.app.engine.search.SearchFilterService
 import com.safeguard.app.engine.stats.BlockStatistics
 import com.safeguard.app.engine.stats.StatisticsService
@@ -49,8 +70,22 @@ class ProtectionManager private constructor(private val context: Context) {
     private val statistics = StatisticsService(events)
     val status = ProtectionStatusHolder()
 
-    /** Phase 3 seam; inactive placeholder today. */
-    val searchFilter: SearchFilterService = NoOpSearchFilterService
+    /**
+     * Search query classification (rule layer). Phase 4 swaps the
+     * classifier for `CombinedSearchClassifier(listOf(rules, aiModel))`.
+     */
+    val searchFilter: SearchFilterService = RuleBasedSearchFilterService(
+        classifier = RuleBasedSearchClassifier(),
+        config = { config.searchPolicy },
+        listener = SearchEventRecorder(logger, QueryHasher(config.hashKey())),
+    )
+
+    private val protectedApps = SqliteProtectedAppStore(database)
+    val appProtection = AppProtection(
+        store = protectedApps,
+        isInstalled = { pkg -> context.packageManager.getLaunchIntentForPackage(pkg) != null },
+        neverProtect = ::deviceExemptPackages,
+    )
 
     private val isDebuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -146,6 +181,88 @@ class ProtectionManager private constructor(private val context: Context) {
 
     fun checkDomain(input: String): Decision = engine.evaluate(input, config.policy)
 
+    // ---- Search Protection ---------------------------------------------
+
+    fun setSearchConfig(next: SafeSearchConfig) {
+        config.updateSearch(next)
+    }
+
+    /** Classifies a *submitted* query; never stores the text. */
+    fun submitSearch(text: String, engineId: String): SearchDecision =
+        searchFilter.classify(SearchQuery(engineId, text.take(SearchNormalizer.MAX_INPUT)))
+
+    // ---- App Protection ------------------------------------------------
+
+    fun protectedApps() = appProtection.list()
+
+    fun addProtectedApp(pkg: String) = appProtection.add(pkg)
+
+    fun removeProtectedApp(pkg: String) = appProtection.remove(pkg)
+
+    /** Called by the accessibility service on a foreground window change. */
+    fun onForegroundApp(pkg: String?): AppDecision {
+        val decision = appProtection.decide(pkg, config.enabled)
+        if (decision.action == AppAction.BLOCK_APP) {
+            logger.record(
+                BlockEvent(
+                    timestamp = logger.now(),
+                    subject = decision.packageName,
+                    category = Category.UNKNOWN,
+                    source = EventSource.APP,
+                    ruleType = BlockEvent.RULE_TYPE_PROTECTED_APP,
+                ),
+            )
+        }
+        return decision
+    }
+
+    /** Launchable apps the user may protect (label + package). */
+    fun launchableApps(): List<Pair<String, String>> {
+        val pm = context.packageManager
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        @Suppress("DEPRECATION")
+        return pm.queryIntentActivities(intent, 0)
+            .map { it.activityInfo.packageName to it.loadLabel(pm).toString() }
+            .distinctBy { it.first }
+            .filterNot { appProtection.isNeverProtectable(it.first) }
+            .sortedBy { it.second.lowercase() }
+            .map { it.second to it.first }
+    }
+
+    fun appLabel(pkg: String): String = try {
+        val pm = context.packageManager
+        @Suppress("DEPRECATION")
+        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+    } catch (e: PackageManager.NameNotFoundException) {
+        pkg
+    }
+
+    fun accessibilityState(): AccessibilityState {
+        val am = context.getSystemService(AccessibilityManager::class.java)
+        val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        return AccessibilityStateResolver.resolve(
+            frameworkAvailable = am != null,
+            enabledServices = enabled,
+            ourComponent = ComponentName(context, AppGuardService::class.java).flattenToString(),
+            disclosureDeclined = config.accessibilityDisclosureDeclined,
+        )
+    }
+
+    /** Launchers, the default dialer: blocking them would lock the owner out. */
+    private fun deviceExemptPackages(): Set<String> {
+        val pm = context.packageManager
+        val out = HashSet<String>()
+        @Suppress("DEPRECATION")
+        pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+            .forEach { out += it.activityInfo.packageName }
+        try {
+            context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage?.let { out += it }
+        } catch (e: SecurityException) {
+            // Not available on this device.
+        }
+        return out
+    }
+
     // ---- Logs & statistics ---------------------------------------------
 
     fun recentBlocks(limit: Int) = events.recent(limit)
@@ -162,6 +279,7 @@ class ProtectionManager private constructor(private val context: Context) {
         stop()
         events.clear()
         rules.deleteSource(RuleSource.USER)
+        protectedApps.clear()
         config.clear()
         onRulesChanged()
     }

@@ -3,6 +3,8 @@ package com.safeguard.app.engine.dns
 import com.safeguard.app.engine.rules.Decision
 import com.safeguard.app.engine.rules.ProtectionPolicy
 import com.safeguard.app.engine.rules.RuleEngine
+import com.safeguard.app.engine.safesearch.SafeSearchConfig
+import com.safeguard.app.engine.safesearch.SafeSearchRewriter
 
 /** Receives every BLOCK decision (for logging/statistics). */
 fun interface BlockListener {
@@ -18,6 +20,8 @@ class DnsPacketFilter(
     private val policy: () -> ProtectionPolicy,
     private val listener: BlockListener,
     private val dnsPort: Int = 53,
+    /** SafeSearch enforcement; OFF unless Search Protection is on. */
+    private val safeSearch: () -> SafeSearchConfig = { SafeSearchConfig.OFF },
 ) {
     sealed interface Outcome {
         /** Write this packet back to the tun interface. */
@@ -34,11 +38,23 @@ class DnsPacketFilter(
         val datagram: UdpDatagram,
         val query: DnsQuery,
         val decision: Decision,
+        /** What to send upstream (differs from [payload] for SafeSearch). */
+        val upstreamPayload: ByteArray = datagram.payload,
+        /** SafeSearch rewrite target, if any. */
+        val safeSearchTarget: String? = null,
     ) {
         val payload: ByteArray get() = datagram.payload
 
-        /** Wraps an upstream answer into a packet for the requesting app. */
-        fun wrap(response: ByteArray): ByteArray = Ipv4Udp.reply(datagram, response)
+        /**
+         * Wraps an upstream answer into a packet for the requesting app. For
+         * SafeSearch the answer is rebuilt as `name CNAME target` + records;
+         * if that fails the app gets SERVFAIL, never the unfiltered name.
+         */
+        fun wrap(response: ByteArray): ByteArray {
+            val target = safeSearchTarget ?: return Ipv4Udp.reply(datagram, response)
+            val rebuilt = DnsRecords.synthesizeCname(payload, query, target, response) ?: return failure()
+            return Ipv4Udp.reply(datagram, rebuilt)
+        }
 
         /** SERVFAIL for when no upstream answered (offline, airplane mode). */
         fun failure(): ByteArray =
@@ -56,6 +72,23 @@ class DnsPacketFilter(
             val answer = DnsMessage.errorResponse(datagram.payload, query, DnsMessage.RCODE_NXDOMAIN)
             return Outcome.Reply(Ipv4Udp.reply(datagram, answer), decision)
         }
+        val policy = policy()
+        val target = if (policy.enabled) SafeSearchRewriter.targetFor(query.name, safeSearch()) else null
+        if (target != null) {
+            return when (query.type) {
+                DnsRecords.TYPE_A, DnsRecords.TYPE_AAAA, DnsRecords.TYPE_CNAME, TYPE_ANY -> {
+                    val upstream = DnsMessage.buildQuery(query.id, target, query.type)
+                    Outcome.Forward(ForwardRequest(datagram, query, decision, upstream, target))
+                }
+                // HTTPS/SVCB records could carry address hints for the
+                // unrestricted endpoint: answer "no records" instead.
+                else -> Outcome.Reply(Ipv4Udp.reply(datagram, DnsRecords.noData(datagram.payload, query)), decision)
+            }
+        }
         return Outcome.Forward(ForwardRequest(datagram, query, decision))
+    }
+
+    private companion object {
+        const val TYPE_ANY = 255
     }
 }

@@ -51,11 +51,25 @@ class SafeGuardDatabase(context: Context) :
 
         db.execSQL("CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)")
         db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        migrateToV2(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // v1 is the first schema. Future migrations go here, one step per
-        // version, never by dropping user rules.
+        // One step per version; never drop user rules or logs.
+        if (oldVersion < 2) migrateToV2(db)
+    }
+
+    /**
+     * v2 (Phase 3): events carry source/action/confidence/rule type
+     * (`domain` now holds the event subject), and protected apps.
+     * Existing v1 rows are DNS blocks with confidence 1.
+     */
+    private fun migrateToV2(db: SQLiteDatabase) {
+        db.execSQL("ALTER TABLE block_events ADD COLUMN source TEXT NOT NULL DEFAULT 'dns'")
+        db.execSQL("ALTER TABLE block_events ADD COLUMN action TEXT NOT NULL DEFAULT 'block'")
+        db.execSQL("ALTER TABLE block_events ADD COLUMN confidence REAL NOT NULL DEFAULT 1.0")
+        db.execSQL("ALTER TABLE block_events ADD COLUMN rule_type TEXT NOT NULL DEFAULT 'domain'")
+        db.execSQL("CREATE TABLE protected_apps (package TEXT PRIMARY KEY, added_at INTEGER NOT NULL)")
     }
 
     fun getMeta(key: String): String? =
@@ -69,6 +83,6 @@ class SafeGuardDatabase(context: Context) :
 
     companion object {
         const val NAME = "safeguard.db"
-        const val VERSION = 1
+        const val VERSION = 2
     }
 }

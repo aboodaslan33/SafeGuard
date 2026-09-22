@@ -3,12 +3,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design_system/design_system.dart';
 import '../../features/activity/presentation/activity_screen.dart';
+import '../../features/apps/presentation/app_protection_screen.dart';
 import '../../features/blocking/presentation/blocked_content_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/pin/presentation/pin_screens.dart';
 import '../../features/protection/domain/protection.dart';
 import '../../features/rules/presentation/domain_rules_screen.dart';
+import '../../features/search/presentation/search_protection_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/status/presentation/status_screen.dart';
@@ -58,6 +60,14 @@ GoRouter createRouter(AppDependencies deps) {
         builder: (c, s) => const DomainRulesScreen(action: RuleAction.allow),
       ),
       GoRoute(path: Routes.activity, builder: (c, s) => const ActivityScreen()),
+      GoRoute(
+        path: Routes.searchProtection,
+        builder: (c, s) => const SearchProtectionScreen(),
+      ),
+      GoRoute(
+        path: Routes.appProtection,
+        builder: (c, s) => const AppProtectionScreen(),
+      ),
       GoRoute(
         path: Routes.changePin,
         builder: (c, s) => const PinSetupScreen(changing: true),

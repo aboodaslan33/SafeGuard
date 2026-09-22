@@ -149,7 +149,12 @@ class SafeGuardVpnService : VpnService() {
                 }
             }
         }
-        val filter = DnsPacketFilter(manager.engine, { manager.config.policy }, manager.logger)
+        val filter = DnsPacketFilter(
+            manager.engine,
+            { manager.config.policy },
+            manager.logger,
+            safeSearch = { manager.config.safeSearch },
+        )
         val buffer = ByteArray(MTU)
         val pipe = interruptPipe ?: return
         val pollTun = StructPollfd().apply { this.fd = fd.fileDescriptor; events = OsConstants.POLLIN.toShort() }

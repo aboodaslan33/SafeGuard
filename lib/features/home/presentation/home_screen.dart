@@ -65,7 +65,6 @@ class HomeScreen extends StatelessWidget {
                     category: category,
                     active: state.isActive(category),
                     enabled: categoriesEditable,
-                    comingSoon: !category.isNetworkFiltered,
                     onChanged: (v) =>
                         ProtectionActions.setCategory(context, category, v),
                   ),

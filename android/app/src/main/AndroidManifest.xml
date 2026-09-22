@@ -15,6 +15,26 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!--
+      Package visibility (Android 11+): launcher apps only, so the user can
+      pick apps to protect and SafeGuard can check they're installed. No
+      QUERY_ALL_PACKAGES.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <application
         android:label="SafeGuard"
         android:name="${applicationName}"
@@ -54,6 +74,30 @@
                 android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
                 android:value="true" />
         </service>
+        <!--
+          App Protection (optional, off until the user enables it in Android's
+          accessibility settings after SafeGuard's disclosure). Receives only
+          foreground-window changes; cannot read window content.
+        -->
+        <service
+            android:name=".apps.AppGuardService"
+            android:exported="false"
+            android:label="@string/app_guard_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+        <activity
+            android:name=".apps.AppBlockedActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.safeguard.app.blocked"
+            android:theme="@style/NormalTheme" />
         <receiver
             android:name=".vpn.BootReceiver"
             android:exported="true">
