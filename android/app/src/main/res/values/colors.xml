@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors SgColors.dark.background / accent in Dart. -->
+    <color name="sg_background">#FF0D1012</color>
+    <color name="sg_accent">#FF5BB89F</color>
+    <color name="sg_icon_background">#FF0D1012</color>
+</resources>

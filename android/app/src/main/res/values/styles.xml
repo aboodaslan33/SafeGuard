@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      SafeGuard is dark-first, so the launch window is dark in both system
+      modes; a white flash before a dark UI reads as a glitch.
+    -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:statusBarColor">@color/sg_background</item>
+        <item name="android:navigationBarColor">@color/sg_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/sg_background</item>
+    </style>
+</resources>

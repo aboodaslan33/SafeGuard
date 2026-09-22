@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground: shield centred in the 66dp safe zone. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_shield_mark"
+    android:insetLeft="33dp"
+    android:insetRight="33dp"
+    android:insetTop="30dp"
+    android:insetBottom="30dp" />

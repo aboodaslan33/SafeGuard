@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SafeGuard split-tone shield. Geometry mirrors lib/.../shield_mark.dart. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp"
+    android:height="63dp"
+    android:viewportWidth="56"
+    android:viewportHeight="63">
+    <path
+        android:fillColor="#1F5BB89F"
+        android:pathData="M28,2.1 C36.6,6.4 45.6,8.8 53.9,9.3 L53.9,30.6 C53.9,47.1 42.6,57.4 28,62.9 C13.4,57.4 2.1,47.1 2.1,30.6 L2.1,9.3 C10.4,8.8 19.4,6.4 28,2.1 Z" />
+    <path
+        android:fillColor="#FF5BB89F"
+        android:pathData="M28,2.1 C19.4,6.4 10.4,8.8 2.1,9.3 L2.1,30.6 C2.1,47.1 13.4,57.4 28,62.9 Z" />
+    <path
+        android:strokeColor="#FF5BB89F"
+        android:strokeWidth="4.2"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M28,2.1 C36.6,6.4 45.6,8.8 53.9,9.3 L53.9,30.6 C53.9,47.1 42.6,57.4 28,62.9 C13.4,57.4 2.1,47.1 2.1,30.6 L2.1,9.3 C10.4,8.8 19.4,6.4 28,2.1 Z" />
+</vector>
