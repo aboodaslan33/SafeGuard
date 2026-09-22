@@ -89,16 +89,41 @@ class ProtectionStatusHolder(initial: ProtectionStatus = ProtectionStatus()) {
         it.copy(vpnState = VpnState.RUNNING, dnsFilterActive = true, startedAt = now, lastError = null)
     }
 
-    fun stopping() = update { it.copy(vpnState = VpnState.STOPPING) }
-
-    fun stopped() = update { it.copy(vpnState = VpnState.STOPPED, dnsFilterActive = false, startedAt = null) }
-
-    fun revoked() = update { it.copy(vpnState = VpnState.REVOKED, dnsFilterActive = false, startedAt = null) }
-
-    fun permissionRequired() =
-        update { it.copy(vpnState = VpnState.PERMISSION_REQUIRED, dnsFilterActive = false, startedAt = null) }
-
-    fun failed(message: String) = update {
-        it.copy(vpnState = VpnState.ERROR, dnsFilterActive = false, startedAt = null, lastError = message)
+    /**
+     * Only a live (starting/running) VPN can be "stopping". The service calls
+     * shutdown() again from onDestroy after revoke/stop/errors; that second
+     * call must not overwrite the final state.
+     */
+    fun stopping() = update {
+        if (it.vpnState == VpnState.RUNNING || it.vpnState == VpnState.STARTING) {
+            it.copy(vpnState = VpnState.STOPPING)
+        } else {
+            it
+        }
     }
+
+    fun stopped() = update { it.down(VpnState.STOPPED) }
+
+    fun revoked() = update { it.down(VpnState.REVOKED) }
+
+    fun permissionRequired() = update { it.down(VpnState.PERMISSION_REQUIRED) }
+
+    /** Network facts reported by the running VPN's network monitor. */
+    fun upstreamChanged(available: Boolean, privateDnsStrict: Boolean) = update {
+        it.copy(upstreamAvailable = available, privateDnsStrict = privateDnsStrict)
+    }
+
+    /** Facts that can be re-checked at any time (e.g. another VPN). */
+    fun environmentChanged(otherVpnActive: Boolean) = update { it.copy(otherVpnActive = otherVpnActive) }
+
+    fun failed(message: String) = update { it.down(VpnState.ERROR).copy(lastError = message) }
+
+    /** A VPN that is no longer running has no filter and no upstream facts. */
+    private fun ProtectionStatus.down(state: VpnState) = copy(
+        vpnState = state,
+        dnsFilterActive = false,
+        startedAt = null,
+        upstreamAvailable = false,
+        privateDnsStrict = false,
+    )
 }

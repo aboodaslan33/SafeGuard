@@ -83,16 +83,19 @@ class ProtectionManager private constructor(private val context: Context) {
         SafeGuardVpnService.stop(context)
     }
 
-    /** Re-checks conditions outside our control (other VPN, Private DNS, network). */
-    fun refreshEnvironment(upstream: UpstreamNetwork? = null) {
+    /** Re-checks conditions outside our control (another VPN). Safe to call anytime. */
+    fun refreshEnvironment() {
         val running = status.current.vpnState == VpnState.RUNNING
-        status.update {
-            it.copy(
-                otherVpnActive = NetworkMonitor.otherVpnActive(context, running),
-                privateDnsStrict = upstream?.privateDnsStrict ?: (if (running) it.privateDnsStrict else false),
-                upstreamAvailable = if (running) upstream != null else it.upstreamAvailable,
-            )
-        }
+        status.environmentChanged(NetworkMonitor.otherVpnActive(context, running))
+    }
+
+    /** Called by the VPN service whenever its physical network changes. */
+    fun onUpstreamChanged(upstream: UpstreamNetwork?) {
+        status.upstreamChanged(
+            available = upstream != null,
+            privateDnsStrict = upstream?.privateDnsStrict ?: false,
+        )
+        refreshEnvironment()
     }
 
     // ---- Configuration -------------------------------------------------

@@ -258,7 +258,7 @@ flutter build apk --release # يوقَّع بمفتاح debug مؤقتًا (ان
 | `test/app/app_flow_test.dart` | الإعداد الأول، شرح VPN ثم موافقة النظام، رفض الموافقة، VPN آخر، بوابة PIN للفئات وقائمة السماح، إضافة نطاق محظور مع التحقق |
 | `test/app/layout_test.dart` | كل الشاشات (منها القوائم والسجل) على 5 مقاسات × حجمي خط، بلا overflow |
 
-**Kotlin — 43 اختبار JUnit** (`cd android && ./gradlew test`)
+**Kotlin — 45 اختبار JUnit** (`cd android && ./gradlew test`)
 
 | الملف | ما يغطيه |
 |---|---|
@@ -271,14 +271,16 @@ flutter build apk --release # يوقَّع بمفتاح debug مؤقتًا (ان
 **ما تم التحقق منه فعليًا في بيئة التطوير، وما لم يتم:**
 
 - ✅ اختبارات Flutter الـ73 و`flutter analyze` نظيف.
-- ✅ اختبارات محرك Kotlin الـ43 تعمل وتنجح على JVM.
+- ✅ اختبارات محرك Kotlin الـ45 تعمل وتنجح على JVM.
 - ✅ طبقة Android كاملة مُترجمة بنجاح أمام إطار Android API 36
   (`android-all`) وFlutter embedding.
 - ✅ كل عبارات SQL نُفّذت على SQLite حقيقي (والاستعلام يستخدم الفهرس).
 - ❌ `SqliteStoresTest` (Robolectric) لم يُشغَّل: يعتمد على
   `androidx.test` من Google Maven المحجوب في البيئة.
 - ❌ لم يُبنَ APK ولم يُختبر على جهاز. خطة الاختبار اليدوي:
-  [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md).
+  [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md)، وتقرير محاولة التحقق
+  على جهاز حقيقي (لم تُنفَّذ، مع الأسباب و3 أخطاء أُصلحت):
+  [`docs/PHASE_2_REAL_DEVICE_TEST.md`](docs/PHASE_2_REAL_DEVICE_TEST.md).
 
 ---
 

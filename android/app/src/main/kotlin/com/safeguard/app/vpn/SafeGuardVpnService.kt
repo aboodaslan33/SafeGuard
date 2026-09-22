@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.system.ErrnoException
 import android.system.Os
@@ -38,6 +40,9 @@ class SafeGuardVpnService : VpnService() {
     @Volatile private var tun: ParcelFileDescriptor? = null
     @Volatile private var worker: Thread? = null
     @Volatile private var interruptPipe: Array<FileDescriptor>? = null
+
+    /** Set by shutdown(); distinguishes a requested stop from a crash. */
+    @Volatile private var stopRequested = false
     private var forwarder: DnsForwarder? = null
     private var monitor: NetworkMonitor? = null
 
@@ -72,6 +77,7 @@ class SafeGuardVpnService : VpnService() {
             stopSelf()
             return
         }
+        stopRequested = false
         manager.status.starting()
         try {
             val monitor = NetworkMonitor(this) { net -> onNetworkChanged(net) }.also { it.start() }
@@ -111,7 +117,7 @@ class SafeGuardVpnService : VpnService() {
             interruptPipe = Os.pipe()
             worker = Thread({ runLoop(fd, forwarder) }, "sg-vpn-loop").apply { start() }
             manager.status.running(System.currentTimeMillis())
-            manager.refreshEnvironment(upstream = monitor.current)
+            manager.onUpstreamChanged(monitor.current)
         } catch (e: Exception) {
             Log.e(TAG, "failed to start VPN", e)
             manager.status.failed(e.javaClass.simpleName + ": " + (e.message ?: ""))
@@ -127,7 +133,7 @@ class SafeGuardVpnService : VpnService() {
         if (tun != null) {
             setUnderlyingNetworks(net?.let { arrayOf(it.network) })
         }
-        manager.refreshEnvironment(upstream = net)
+        if (tun != null) manager.onUpstreamChanged(net)
     }
 
     private fun runLoop(fd: ParcelFileDescriptor, forwarder: DnsForwarder) {
@@ -149,6 +155,7 @@ class SafeGuardVpnService : VpnService() {
         val pollTun = StructPollfd().apply { this.fd = fd.fileDescriptor; events = OsConstants.POLLIN.toShort() }
         val pollStop = StructPollfd().apply { this.fd = pipe[0]; events = OsConstants.POLLIN.toShort() }
 
+        var failure: String? = null
         try {
             while (!Thread.currentThread().isInterrupted) {
                 // Blocks without spinning (no battery drain while idle) until
@@ -157,7 +164,14 @@ class SafeGuardVpnService : VpnService() {
                 pollStop.revents = 0
                 Os.poll(arrayOf(pollTun, pollStop), -1)
                 if (pollStop.revents.toInt() != 0) break
-                if (pollTun.revents.toInt() and OsConstants.POLLIN == 0) continue
+                val events = pollTun.revents.toInt()
+                if (events and (OsConstants.POLLERR or OsConstants.POLLHUP or OsConstants.POLLNVAL) != 0) {
+                    // The interface is gone. Without this check poll() would
+                    // return immediately forever: a 100% CPU spin.
+                    failure = "VPN interface closed"
+                    break
+                }
+                if (events and OsConstants.POLLIN == 0) continue
                 val length = input.read(buffer)
                 if (length <= 0) continue
                 when (val outcome = filter.process(buffer, length)) {
@@ -167,17 +181,30 @@ class SafeGuardVpnService : VpnService() {
                 }
             }
         } catch (e: ErrnoException) {
-            if (e.errno != OsConstants.EINTR) Log.w(TAG, "poll failed", e)
+            Log.w(TAG, "poll failed", e)
+            failure = "poll: ${e.errno}"
         } catch (e: IOException) {
             Log.w(TAG, "tun read failed", e)
+            failure = "tun read: ${e.javaClass.simpleName}"
         } catch (e: RuntimeException) {
             Log.e(TAG, "filter loop crashed", e)
-            manager.status.failed("filter loop: ${e.javaClass.simpleName}")
+            failure = "filter loop: ${e.javaClass.simpleName}"
+        }
+        if (!stopRequested) {
+            // The loop died on its own. Leaving the tun up would route every
+            // DNS query into a dead interface (the device loses name
+            // resolution while the UI says "active"). Report and tear down.
+            manager.status.failed(failure ?: "filter loop stopped")
+            Handler(Looper.getMainLooper()).post {
+                shutdown()
+                stopSelf()
+            }
         }
     }
 
     @Synchronized
     private fun shutdown() {
+        stopRequested = true
         manager.status.stopping()
         interruptPipe?.let { pipe ->
             try {
@@ -219,7 +246,7 @@ class SafeGuardVpnService : VpnService() {
     override fun onRevoke() {
         shutdown()
         manager.status.revoked()
-        manager.refreshEnvironment(upstream = null)
+        manager.refreshEnvironment()
         super.onRevoke() // stops the service
     }
 

@@ -128,4 +128,51 @@ class LoggingStatusTest {
         assertFalse(NoOpSearchFilterService.isActive)
         assertEquals(RuleAction.ALLOW, NoOpSearchFilterService.classify(SearchQuery("google", "anything")).action)
     }
+
+    // Regression (B1): onDestroy runs shutdown() a second time after revoke,
+    // stop, errors and missing consent. That must not overwrite the final
+    // state with STOPPING (UI stuck on "starting", no restart button).
+    @Test
+    fun stoppingOnlyAppliesToALiveVpn() {
+        val holder = ProtectionStatusHolder()
+        holder.running(1)
+        holder.revoked()
+        holder.stopping()
+        assertEquals(VpnState.REVOKED, holder.current.vpnState)
+
+        holder.failed("establish failed")
+        holder.stopping()
+        assertEquals(VpnState.ERROR, holder.current.vpnState)
+        assertEquals("establish failed", holder.current.lastError)
+
+        holder.permissionRequired()
+        holder.stopping()
+        assertEquals(VpnState.PERMISSION_REQUIRED, holder.current.vpnState)
+
+        holder.stopped()
+        holder.stopping()
+        assertEquals(VpnState.STOPPED, holder.current.vpnState)
+
+        holder.starting()
+        holder.stopping()
+        assertEquals(VpnState.STOPPING, holder.current.vpnState)
+    }
+
+    // Regression (B3): a status refresh from Flutter must not reset the
+    // network facts reported by the VPN (false "no network" warning).
+    @Test
+    fun environmentRefreshKeepsUpstreamFacts() {
+        val holder = ProtectionStatusHolder()
+        holder.running(1)
+        holder.upstreamChanged(available = true, privateDnsStrict = true)
+        holder.environmentChanged(otherVpnActive = false)
+        assertTrue(holder.current.upstreamAvailable)
+        assertTrue(holder.current.privateDnsStrict)
+
+        holder.upstreamChanged(available = false, privateDnsStrict = false) // airplane mode
+        assertFalse(holder.current.upstreamAvailable)
+
+        holder.revoked()
+        assertFalse("stale network facts cleared when the VPN stops", holder.current.upstreamAvailable)
+    }
 }

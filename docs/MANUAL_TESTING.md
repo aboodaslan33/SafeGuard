@@ -10,13 +10,15 @@ result and an empty "Actual" column to fill in.
 
 What *was* verified without a device:
 
-- Kotlin engine: 43 JUnit tests (DNS parsing incl. fuzzing, IPv4/UDP
+- Kotlin engine: 45 JUnit tests (DNS parsing incl. fuzzing, IPv4/UDP
   checksums, rule precedence, subdomains, false positives, malformed input,
   logging, statistics, status transitions) — all pass on the JVM.
 - The full Android layer (VpnService, SQLite stores, channel, boot receiver,
   MainActivity) type-checks against the Android API 36 framework jar.
 - Every SQL statement was executed against real SQLite.
 - Flutter: 73 widget/unit tests incl. the platform-channel contract.
+
+Latest attempt and results: [`PHASE_2_REAL_DEVICE_TEST.md`](PHASE_2_REAL_DEVICE_TEST.md).
 
 ## Setup
 
