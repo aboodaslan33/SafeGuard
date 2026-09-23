@@ -139,6 +139,27 @@ class _StatusScreenState extends State<StatusScreen> {
                   },
                 ),
                 _LayerRow(
+                  icon: Icons.auto_awesome_outlined,
+                  title: 'الحماية الذكية',
+                  subtitle: protection.aiSettings.imageModelAvailable
+                      ? 'تصنيف النص والصور على الجهاز'
+                      : 'تصنيف النص على الجهاز · لا نموذج صور',
+                  status: !supported
+                      ? SgStatus.unavailable
+                      : !protection.aiSettings.enabled || !state.enabled
+                      ? SgStatus.paused
+                      : protection.aiSettings.textModelAvailable
+                      ? SgStatus.active
+                      : SgStatus.error,
+                  label: !supported
+                      ? 'غير متاحة'
+                      : !protection.aiSettings.enabled || !state.enabled
+                      ? 'متوقفة'
+                      : protection.aiSettings.textModelAvailable
+                      ? 'مفعّلة'
+                      : 'النموذج غير متاح',
+                ),
+                _LayerRow(
                   icon: Icons.lock_outline_rounded,
                   title: 'قفل التطبيق',
                   subtitle: 'رمز PIN عند فتح SafeGuard',
@@ -435,6 +456,8 @@ class _Limitations extends StatelessWidget {
     'يستطيع مالك الجهاز فصل VPN أو إزالة التطبيق أو مسح بياناته من إعدادات Android.',
     'فحص البحث يشمل ما تبحث عنه عبر SafeGuard فقط؛ لا يقرأ SafeGuard ما تكتبه في التطبيقات الأخرى.',
     'حماية التطبيقات تمنع فتح التطبيق كاملًا، ولا تستطيع فلترة المحتوى داخله.',
+    'الحماية الذكية تعمل على الجهاز وعند الطلب فقط (بحث SafeGuard والصور التي '
+        'تختار فحصها). نموذج النص صغير ومحدود الدقة، ولا يوجد نموذج صور في هذا الإصدار.',
     'SafeGuard طبقات حماية متعددة، ولا يضمن حجب 100% من المحتوى.',
   ];
 

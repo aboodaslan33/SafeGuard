@@ -1,6 +1,8 @@
 package com.safeguard.app.data
 
+import com.safeguard.app.engine.ai.FalsePositiveReport
 import com.safeguard.app.engine.logging.BlockEvent
+import com.safeguard.app.engine.logging.EventSource
 import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.ProtectionPolicy
 import com.safeguard.app.engine.rules.Rule
@@ -110,5 +112,26 @@ class SqliteStoresTest {
         events.clear()
         assertEquals(0, events.recent(100).size)
         assertEquals(0L, events.lifetimeTotal())
+    }
+
+    @Test
+    fun aiCountersAndFeedbackStayApartFromBlockTotals() {
+        val ai = SqliteAiStatsStore(db)
+        events.insert(BlockEvent(1, "d.test", Category.SEXUAL))
+        ai.record(listOf(Category.SEXUAL, Category.VIOLENCE), Category.SEXUAL)
+        ai.record(listOf(Category.GAMBLING), null)
+        ai.addReport(FalsePositiveReport.of(5, EventSource.AI, Category.SEXUAL, 0.9149))
+
+        val s = ai.read()
+        assertEquals(2L, s.detections)
+        assertEquals(1L, s.blocks)
+        assertEquals(1L, s.falsePositiveReports)
+        assertEquals(mapOf(Category.SEXUAL to 1L, Category.VIOLENCE to 1L, Category.GAMBLING to 1L), s.detectionsByCategory)
+        assertEquals(0.91, ai.reports(10).single().confidence, 1e-9)
+
+        ai.clear()
+        assertEquals(0L, ai.read().detections)
+        assertTrue(ai.reports(10).isEmpty())
+        assertEquals(1L, events.lifetimeTotal()) // DNS/search totals untouched
     }
 }

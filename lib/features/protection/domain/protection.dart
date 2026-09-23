@@ -1,5 +1,9 @@
 import 'dart:convert';
 
+import '../../ai/domain/ai_models.dart';
+
+export '../../ai/domain/ai_models.dart';
+
 /// Content categories SafeGuard can filter. [id] is the stable storage key
 /// and must never change once shipped.
 enum ProtectionCategory {
@@ -209,7 +213,7 @@ enum EventSourceKind {
   search,
   app,
 
-  /// Reserved for Phase 4 on-device classification.
+  /// On-device AI classification (Phase 4).
   ai,
   manual;
 
@@ -479,6 +483,23 @@ abstract interface class ProtectionEngine {
     required bool accepted,
   });
   Future<void> openAccessibilitySettings();
+
+  // ---- Phase 4: AI Protection (on-device) ----
+  Future<AiSettings> aiSettings();
+  Future<AiSettings> setAiSettings(AiSettings settings);
+  Future<AiStatistics> aiStatistics();
+
+  /// "Report incorrect block": stores source, category, rounded confidence
+  /// and time only.
+  Future<void> reportFalsePositive({
+    required EventSourceKind source,
+    required ProtectionCategory category,
+    required double confidence,
+  });
+
+  /// Lets the user pick one image in the system picker and classifies it
+  /// in memory. Nothing is stored.
+  Future<ImageCheck> checkImage();
 }
 
 /// Engine for platforms without the native layer (tests, previews): reports
@@ -554,6 +575,23 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   }) async => AccessibilityStatus.unsupported;
   @override
   Future<void> openAccessibilitySettings() async {}
+  @override
+  Future<AiSettings> aiSettings() async => const AiSettings();
+  @override
+  Future<AiSettings> setAiSettings(AiSettings s) async => s;
+  @override
+  Future<AiStatistics> aiStatistics() async => const AiStatistics();
+  @override
+  Future<void> reportFalsePositive({
+    required EventSourceKind source,
+    required ProtectionCategory category,
+    required double confidence,
+  }) async {}
+  @override
+  Future<ImageCheck> checkImage() async => const ImageCheck(
+    status: ImageCheckStatus.unavailable,
+    error: 'unsupported',
+  );
 }
 
 abstract interface class ProtectionRepository {

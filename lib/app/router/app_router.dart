@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design_system/design_system.dart';
 import '../../features/activity/presentation/activity_screen.dart';
+import '../../features/ai/presentation/ai_protection_screen.dart';
 import '../../features/apps/presentation/app_protection_screen.dart';
 import '../../features/blocking/presentation/blocked_content_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -65,6 +66,10 @@ GoRouter createRouter(AppDependencies deps) {
         builder: (c, s) => const SearchProtectionScreen(),
       ),
       GoRoute(
+        path: Routes.aiProtection,
+        builder: (c, s) => const AiProtectionScreen(),
+      ),
+      GoRoute(
         path: Routes.appProtection,
         builder: (c, s) => const AppProtectionScreen(),
       ),
@@ -80,6 +85,13 @@ GoRouter createRouter(AppDependencies deps) {
             category: ProtectionCategory.fromId(
               s.uri.queryParameters['category'] ?? '',
             ),
+            source: switch (s.uri.queryParameters['source']) {
+              'ai' => EventSourceKind.ai,
+              'search' => EventSourceKind.search,
+              _ => null,
+            },
+            confidence:
+                double.tryParse(s.uri.queryParameters['confidence'] ?? '') ?? 0,
           ),
         ),
       ),

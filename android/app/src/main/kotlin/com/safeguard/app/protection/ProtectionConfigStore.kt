@@ -2,6 +2,9 @@ package com.safeguard.app.protection
 
 import android.content.Context
 import android.util.Base64
+import com.safeguard.app.engine.ai.AiSettings
+import com.safeguard.app.engine.ai.DetectionMode
+import com.safeguard.app.engine.ai.ThresholdProfiles
 import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.ProtectionPolicy
 import com.safeguard.app.engine.rules.UnknownDomainPolicy
@@ -84,6 +87,42 @@ class ProtectionConfigStore(context: Context) {
         return config
     }
 
+    // ---- AI Protection (Phase 4) -----------------------------------------
+
+    @Volatile
+    private var cachedAi: AiSettings = readAi()
+
+    /** As the user set it. */
+    val rawAi: AiSettings get() = cachedAi
+
+    @Synchronized
+    fun updateAi(next: AiSettings): AiSettings {
+        val clean = next.copy(
+            customThresholds = next.customThresholds
+                .filterKeys { it.isFilterable }
+                .mapValues { ThresholdProfiles.clampCustom(it.value) },
+        )
+        val editor = prefs.edit()
+            .putBoolean(KEY_AI_ENABLED, clean.enabled)
+            .putString(KEY_AI_MODE, clean.mode.id)
+        for (c in Category.filterable) {
+            val v = clean.customThresholds[c]
+            if (v == null) editor.remove(KEY_AI_THRESHOLD + c.id) else editor.putFloat(KEY_AI_THRESHOLD + c.id, v.toFloat())
+        }
+        editor.apply()
+        cachedAi = clean
+        return clean
+    }
+
+    private fun readAi() = AiSettings(
+        // On-device only and on-demand, so on by default like the categories.
+        enabled = prefs.getBoolean(KEY_AI_ENABLED, true),
+        mode = DetectionMode.fromId(prefs.getString(KEY_AI_MODE, null)),
+        customThresholds = Category.filterable
+            .filter { prefs.contains(KEY_AI_THRESHOLD + it.id) }
+            .associateWith { ThresholdProfiles.clampCustom(prefs.getFloat(KEY_AI_THRESHOLD + it.id, 0.9f).toDouble()) },
+    )
+
     var accessibilityDisclosureDeclined: Boolean
         get() = prefs.getBoolean(KEY_A11Y_DECLINED, false)
         set(value) = prefs.edit().putBoolean(KEY_A11Y_DECLINED, value).apply()
@@ -113,6 +152,7 @@ class ProtectionConfigStore(context: Context) {
         prefs.edit().clear().apply()
         cached = read()
         cachedSafeSearch = readSafeSearch()
+        cachedAi = readAi()
     }
 
     private fun read(): ProtectionPolicy {
@@ -139,5 +179,8 @@ class ProtectionConfigStore(context: Context) {
         const val KEY_SS_YOUTUBE = "safesearch_youtube"
         const val KEY_A11Y_DECLINED = "a11y_disclosure_declined"
         const val KEY_HASH = "event_hash_key"
+        const val KEY_AI_ENABLED = "ai_enabled"
+        const val KEY_AI_MODE = "ai_mode"
+        const val KEY_AI_THRESHOLD = "ai_threshold_"
     }
 }

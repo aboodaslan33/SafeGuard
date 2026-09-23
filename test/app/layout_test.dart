@@ -34,6 +34,8 @@ void main() {
     '/activity',
     '/search-protection',
     '/app-protection',
+    '/ai-protection',
+    '/blocked?category=violence&source=ai&confidence=0.95',
   ];
 
   for (final textScale in [1.0, 1.3]) {
@@ -68,6 +70,23 @@ void main() {
               packageName: 'com.example.a.very.long.package.name.for.layout',
               label: 'تطبيق باسم طويل جدًا لاختبار التخطيط',
             ),
+          );
+          // Longest AI screen: custom mode (extra tile) + per-category stats.
+          engine.ai = const AiSettings(
+            mode: DetectionMode.custom,
+            textModelAvailable: true,
+            textModelId: 'sg-text-1',
+          );
+          engine.aiStats = AiStatistics(
+            detections: 12345,
+            blocks: 678,
+            falsePositiveReports: 9,
+            detectionsByCategory: {
+              for (final c in ProtectionCategory.networkFiltered) c: 1234,
+            },
+            blocksByCategory: {
+              for (final c in ProtectionCategory.networkFiltered) c: 567,
+            },
           );
           final deps = testDependencies(engine: engine);
           await deps.initialize();

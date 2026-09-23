@@ -142,6 +142,12 @@ class FakeProtectionEngine implements ProtectionEngine {
   ];
   final submittedEngines = <SearchEngineId>[];
 
+  /// Phrases the fake "model" scores (category, score), after the rules.
+  static const _aiWords = {
+    'brawl': (ProtectionCategory.violence, 0.95),
+    'risque': (ProtectionCategory.sexual, 0.80),
+  };
+
   /// Keywords the fake treats as blocked, mirroring the native rule layer.
   static const _blockedWords = {
     'porn': ProtectionCategory.sexual,
@@ -167,6 +173,41 @@ class FakeProtectionEngine implements ProtectionEngine {
     }
     final on = search.enabled && (applied?.enabled ?? true);
     final blocked = on && hit != null && (applied?.isActive(hit) ?? true);
+    // AI layer (after the rules), mirroring AiSearchFilterService.
+    if (on && !blocked && ai.enabled) {
+      for (final e in _aiWords.entries) {
+        final category = e.value.$1;
+        if (!lower.contains(e.key) || !(applied?.isActive(category) ?? true)) {
+          continue;
+        }
+        if (e.value.$2 >= ai.threshold(category)) {
+          logs.insert(
+            0,
+            BlockEvent(
+              time: DateTime(2026),
+              domain: 'sg-text-1#0000abcd',
+              category: category,
+              source: EventSourceKind.ai,
+              confidence: e.value.$2,
+              ruleType: 'ai_text',
+            ),
+          );
+          aiStats = AiStatistics(
+            detections: aiStats.detections + 1,
+            blocks: aiStats.blocks + 1,
+            falsePositiveReports: aiStats.falsePositiveReports,
+          );
+          return SearchCheck(
+            action: RuleAction.block,
+            category: category,
+            confidence: e.value.$2,
+            ruleType: 'ai_text',
+            reason: 'ai_threshold',
+            opened: false,
+          );
+        }
+      }
+    }
     if (blocked) {
       // Privacy-safe log: rule id + hash, never the query.
       logs.insert(
@@ -243,4 +284,46 @@ class FakeProtectionEngine implements ProtectionEngine {
   @override
   Future<void> openAccessibilitySettings() async =>
       accessibilitySettingsOpened++;
+
+  // ---- Phase 4 ----
+  AiSettings ai = const AiSettings(
+    textModelAvailable: true,
+    textModelId: 'sg-text-1',
+  );
+  AiStatistics aiStats = const AiStatistics();
+  final reports = <(EventSourceKind, ProtectionCategory, double)>[];
+  ImageCheck imageResult = const ImageCheck(
+    status: ImageCheckStatus.unavailable,
+    error: 'no_model',
+  );
+  int imageChecks = 0;
+
+  @override
+  Future<AiSettings> aiSettings() async => ai;
+
+  @override
+  Future<AiSettings> setAiSettings(AiSettings s) async => ai = s;
+
+  @override
+  Future<AiStatistics> aiStatistics() async => aiStats;
+
+  @override
+  Future<void> reportFalsePositive({
+    required EventSourceKind source,
+    required ProtectionCategory category,
+    required double confidence,
+  }) async {
+    reports.add((source, category, confidence));
+    aiStats = AiStatistics(
+      detections: aiStats.detections,
+      blocks: aiStats.blocks,
+      falsePositiveReports: aiStats.falsePositiveReports + 1,
+    );
+  }
+
+  @override
+  Future<ImageCheck> checkImage() async {
+    imageChecks++;
+    return imageResult;
+  }
 }

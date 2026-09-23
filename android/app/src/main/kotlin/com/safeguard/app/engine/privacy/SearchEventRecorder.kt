@@ -13,9 +13,10 @@ import com.safeguard.app.engine.search.SearchQuery
  * Turns search decisions into privacy-safe events.
  *
  * Only BLOCK decisions are recorded. The stored subject is
- * `<rule id>#<keyed short hash>`, e.g. `ga07#3fa1c09e`: enough to see that
- * the same rule fired again, not enough to recover the query. The query
- * text, the search engine and the locale are never stored.
+ * `<rule id>#<keyed short hash>`, e.g. `ga07#3fa1c09e` (or
+ * `sg-text-1#3fa1c09e` when the on-device model decided, with source AI):
+ * enough to see that the same rule fired again, not enough to recover the
+ * query. The query text, the search engine and the locale are never stored.
  */
 class SearchEventRecorder(
     private val logger: BlockLogger,
@@ -29,7 +30,7 @@ class SearchEventRecorder(
                 timestamp = logger.now(),
                 subject = "${decision.ruleId ?: "rule"}#$hash",
                 category = decision.category,
-                source = EventSource.SEARCH,
+                source = if (decision.ruleType.startsWith("ai_")) EventSource.AI else EventSource.SEARCH,
                 action = RuleAction.BLOCK,
                 confidence = decision.confidence.coerceIn(0.0, 1.0),
                 ruleType = decision.ruleType,

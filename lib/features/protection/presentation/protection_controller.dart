@@ -61,6 +61,55 @@ class ProtectionController extends ChangeNotifier {
   AccessibilityStatus _accessibility = AccessibilityStatus.unsupported;
   AccessibilityStatus get accessibility => _accessibility;
 
+  AiSettings _ai = const AiSettings();
+  AiSettings get aiSettings => _ai;
+
+  AiStatistics _aiStats = const AiStatistics();
+  AiStatistics get aiStatistics => _aiStats;
+
+  /// Applies AI settings natively. PIN checks for loosening happen in the UI.
+  Future<Result<void>> setAiSettings(AiSettings next) async {
+    if (!_engine.isSupported) {
+      _ai = next;
+      notifyListeners();
+      return const Ok(null);
+    }
+    final result = await guard(() => _engine.setAiSettings(next));
+    if (result case Ok(:final value)) {
+      _ai = value;
+      notifyListeners();
+    }
+    return result;
+  }
+
+  Future<void> refreshAi() async {
+    if (!_engine.isSupported) return;
+    try {
+      _ai = await _engine.aiSettings();
+      _aiStats = await _engine.aiStatistics();
+      notifyListeners();
+    } catch (e, s) {
+      AppLogger.error('ai', e, s);
+    }
+  }
+
+  /// "Report incorrect block": category, confidence, source and time only.
+  Future<Result<void>> reportFalsePositive({
+    required EventSourceKind source,
+    required ProtectionCategory category,
+    required double confidence,
+  }) async {
+    final result = await guard(
+      () => _engine.reportFalsePositive(
+        source: source,
+        category: category,
+        confidence: confidence,
+      ),
+    );
+    unawaited(refreshAi());
+    return result;
+  }
+
   /// Search Protection is the Phase 1 "فلترة البحث" preference.
   bool get searchProtectionEnabled =>
       _state.isActive(ProtectionCategory.unsafeSearch);
@@ -178,6 +227,8 @@ class ProtectionController extends ChangeNotifier {
     _state = ProtectionState.initial();
     _stats = ProtectionStats.unavailable;
     _search = const SearchSettings();
+    _ai = const AiSettings();
+    _aiStats = const AiStatistics();
     notifyListeners();
   }
 
@@ -207,6 +258,8 @@ class ProtectionController extends ChangeNotifier {
         );
       }
       _accessibility = await _engine.accessibilityStatus();
+      _ai = await _engine.aiSettings();
+      _aiStats = await _engine.aiStatistics();
       _snapshot = await _engine.status();
       final shouldResume =
           resume &&

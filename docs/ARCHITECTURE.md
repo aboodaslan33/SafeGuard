@@ -1,4 +1,4 @@
-# SafeGuard — Architecture (Phases 2–3)
+# SafeGuard — Architecture (Phases 2–4)
 
 ## Layers
 
@@ -132,10 +132,12 @@ stored: no app identity, IPs, URLs, content, cookies or credentials.
 |---|---|---|
 | `RemoteRuleSource` | `engine/rules/RuleSources.kt` | Signed, versioned category-list downloads. |
 | `HostsListParser` | same | Import hosts-format lists (implemented, unused). |
-| `DomainClassifier` | `engine/rules/RuleEngine.kt` | AI/heuristic classification of unknown domains. |
+| `DomainClassifier` | `engine/rules/RuleEngine.kt` | Heuristic classification of unknown domains. Deliberately **not** wired to AI (every DNS lookup; false positives break sites). |
 | `UnknownDomainPolicy.BLOCK` | same | Strict Mode. |
-| `SearchClassifier` / `CombinedSearchClassifier` | `engine/search/` | Phase 4 AI query classification (Phase 3 ships the rule-based one). |
-| `ImageClassifier`, `SettingsSync` | `engine/extensions/` | Image and family-dashboard features. |
+| `ImageModelRuntime` | `engine/ai/image/` | An on-device image model (none shipped). |
+| `CloudTransport` | `engine/ai/ClassifierGuards.kt` | Optional, consented, encrypted cloud classification (none shipped). |
+| `VideoSampler` | `engine/ai/video/` | Interval-sampled video frames (not wired). |
+| `SettingsSync` | `engine/extensions/` | Family dashboard. |
 
 ## Phase 3 additions
 
@@ -178,3 +180,35 @@ AppGuardService (Accessibility, window-state events only, no window content)
 Events: `BlockEvent(timestamp, subject, category, source, action,
 confidence, ruleType)` (`ProtectionEvent` alias). Subjects are never user
 text for SEARCH.
+
+## Phase 4 additions (AI)
+
+Full design, measurements and limits: [`PHASE_4_AI.md`](PHASE_4_AI.md).
+
+```
+AiSearchFilterService (replaces RuleBasedSearchFilterService in ProtectionManager)
+  rules (Phase 3 lexicon + SearchPolicy) ── BLOCK ─→ done
+  └→ GuardedContentClassifier (score cache, rate limit)
+       └→ AdapterContentClassifier → LocalTextClassifierAdapter (sg-text-1, asset, SHA-256 pinned)
+  └→ ProtectionDecisionEngine (rule signal + AI result + AiSettings + categories)
+       → BLOCK (event source AI) | UNKNOWN (allowed) | ALLOW
+
+checkImage (channel, system picker) → ProtectionManager.checkImage
+  → LocalImageClassifierAdapter: ImageHeaderParser → sample plan → BitmapImageDecoder
+    → ImagePreprocessor → ImageModelRuntime (none shipped → NO_MODEL)
+  → ProtectionDecisionEngine → AiStatsRecorder / BlockLogger
+```
+
+| Component | File |
+|---|---|
+| `ContentClassifier`, `ClassifierAdapter`, `AdapterContentClassifier` | `engine/ai/ContentClassifier.kt` |
+| `ProtectionDecisionEngine`, `AiSettings`, `ThresholdProfiles`, `ConflictPolicy` | `engine/ai/ProtectionDecisionEngine.kt` |
+| `GuardedContentClassifier`, `InferenceBudget`, `CloudClassifierAdapter` | `engine/ai/ClassifierGuards.kt` |
+| `TextFeatures`, `TextModel`, `LocalTextClassifierAdapter` | `engine/ai/text/` |
+| `ImageHeaderParser`, `ImagePreprocessor`, `LocalImageClassifierAdapter` | `engine/ai/image/ImagePipeline.kt` |
+| `BuiltInModels`, `ModelLoader` | `engine/ai/model/ModelRegistry.kt` |
+| `VideoSampler` (not wired) | `engine/ai/video/` |
+| `AiStatsStore`, `FalsePositiveReport` | `engine/ai/AiStats.kt`; SQLite: `data/SqliteAiStatsStore.kt` |
+| `BitmapImageDecoder` (Android) | `ai/BitmapImageDecoder.kt` |
+| DB v3 | `ai_feedback` table; AI counters in `counters` (`ai_*`) |
+| Trainer + seed set (build-time, test sources) | `src/test/.../ai/TextModelTrainer.kt`, `src/test/resources/ai/text_seed_v1.tsv` |

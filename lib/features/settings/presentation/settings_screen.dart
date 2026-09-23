@@ -12,7 +12,7 @@ import '../domain/app_settings.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  static const appVersion = '1.2.0';
+  static const appVersion = '1.3.0';
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +88,12 @@ class SettingsScreen extends StatelessWidget {
                       ? 'مفعّلة'
                       : 'متوقفة',
                   onTap: () => context.push(Routes.searchProtection),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.auto_awesome_outlined,
+                  title: 'الحماية الذكية',
+                  subtitle: 'تصنيف المحتوى بالذكاء الاصطناعي على الجهاز',
+                  onTap: () => context.push(Routes.aiProtection),
                 ),
                 SecuritySettingTile(
                   icon: Icons.apps_rounded,

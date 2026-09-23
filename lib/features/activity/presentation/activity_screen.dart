@@ -127,7 +127,15 @@ class _EventRow extends StatelessWidget {
       onTap: () => context.push(
         Uri(
           path: Routes.blocked,
-          queryParameters: {'category': ?category?.id},
+          queryParameters: {
+            'category': ?category?.id,
+            // Search/AI blocks can be reported as incorrect from there.
+            if (event.source == EventSourceKind.search ||
+                event.source == EventSourceKind.ai) ...{
+              'source': event.source.name,
+              'confidence': event.confidence.toStringAsFixed(2),
+            },
+          },
         ).toString(),
       ),
       child: Padding(
@@ -141,6 +149,7 @@ class _EventRow extends StatelessWidget {
               icon: switch (event.source) {
                 EventSourceKind.app => Icons.apps_rounded,
                 EventSourceKind.search => Icons.manage_search_rounded,
+                EventSourceKind.ai => Icons.auto_awesome_outlined,
                 _ => category?.icon ?? Icons.block_rounded,
               },
             ),
@@ -153,10 +162,13 @@ class _EventRow extends StatelessWidget {
                     EventSourceKind.app => 'تطبيق محمي',
                     EventSourceKind.search =>
                       'بحث · ${category?.title ?? 'فئة غير معروفة'}',
+                    EventSourceKind.ai =>
+                      'ذكاء اصطناعي · ${category?.title ?? 'فئة غير معروفة'}',
                     _ => category?.title ?? 'فئة غير معروفة',
                   }, style: context.text.titleMedium),
                   Text(
-                    // Search events carry a rule id + hash, never the query.
+                    // Search/AI events carry a rule or model id + hash,
+                    // never the query or image.
                     event.domain,
                     textDirection: TextDirection.ltr,
                     maxLines: 1,

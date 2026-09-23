@@ -7,7 +7,15 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import com.safeguard.app.engine.ai.AiSettings
+import com.safeguard.app.engine.ai.AiStatistics
+import com.safeguard.app.engine.ai.ContentKind
+import com.safeguard.app.engine.ai.DetectionMode
+import com.safeguard.app.engine.ai.ThresholdProfiles
+import com.safeguard.app.engine.ai.image.ImageLimits
+import com.safeguard.app.engine.ai.model.BuiltInModels
 import com.safeguard.app.engine.apps.AppRuleException
+import com.safeguard.app.engine.logging.EventSource
 import com.safeguard.app.engine.logging.BlockEvent
 import com.safeguard.app.engine.safesearch.SafeSearchConfig
 import com.safeguard.app.engine.safesearch.YouTubeMode
@@ -57,6 +65,18 @@ import java.util.concurrent.Executors
  *   getAccessibilityStatus() / setAccessibilityDisclosure({accepted}) → {state}
  *   openAccessibilitySettings() → bool
  *
+ * Phase 4 (AI, on-device):
+ *   getAiSettings() / setAiSettings({enabled, mode, custom{category: v}})
+ *     → {enabled, mode, custom, profiles{normal, strict}, models{text, image}}
+ *   getAiStatistics() → {detections, blocks, falsePositiveReports,
+ *     detectionsByCategory, blocksByCategory, reportsByCategory}
+ *   reportFalsePositive({source, category, confidence}) → true
+ *     (stores only those fields + time; never content)
+ *   checkImage() → opens the system picker (no storage permission); the
+ *     chosen image is read into memory, classified, and dropped →
+ *     {status, error?, action, category, confidence, reason, scores, modelId}
+ *     or {status: "cancelled"}
+ *
  * Event channel `com.safeguard.app/protection/status` streams status maps.
  *
  * Work runs on a background thread; results are delivered on the main
@@ -74,6 +94,7 @@ class ProtectionChannel(
     private val events = EventChannel(messenger, EVENT_CHANNEL)
     private var sink: EventChannel.EventSink? = null
     private var pendingPermission: MethodChannel.Result? = null
+    private var pendingImage: MethodChannel.Result? = null
     private val statusListener: (ProtectionStatus) -> Unit = { s -> main.post { sink?.success(s.toMap()) } }
 
     init {
@@ -89,7 +110,18 @@ class ProtectionChannel(
     }
 
     /** Forwarded from MainActivity.onActivityResult. */
-    fun onActivityResult(requestCode: Int, resultCode: Int): Boolean {
+    fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
+        if (requestCode == REQUEST_IMAGE) {
+            val result = pendingImage ?: return true
+            pendingImage = null
+            val uri = data?.data
+            if (resultCode != Activity.RESULT_OK || uri == null) {
+                result.success(mapOf("status" to "cancelled"))
+            } else {
+                io.execute { checkImage(uri, result) }
+            }
+            return true
+        }
         if (requestCode != REQUEST_VPN) return false
         val granted = resultCode == Activity.RESULT_OK
         pendingPermission?.success(granted)
@@ -117,6 +149,7 @@ class ProtectionChannel(
             "requestVpnPermission" -> requestPermission(result)
             "openVpnSettings" -> result.success(open(Intent(Settings.ACTION_VPN_SETTINGS)))
             "openAccessibilitySettings" -> result.success(open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+            "checkImage" -> pickImage(result)
             else -> io.execute { handle(call, result) }
         }
     }
@@ -222,6 +255,29 @@ class ProtectionChannel(
                     manager.config.accessibilityDisclosureDeclined = call.argument<Boolean>("accepted") != true
                     mapOf("state" to manager.accessibilityState().id)
                 }
+                "getAiSettings" -> aiSettings()
+                "setAiSettings" -> {
+                    val custom = (call.argument<Map<String, Any?>>("custom") ?: emptyMap())
+                        .mapNotNull { (k, v) ->
+                            val c = Category.fromId(k)?.takeIf { it.isFilterable } ?: return@mapNotNull null
+                            (v as? Number)?.toDouble()?.let { c to it }
+                        }.toMap()
+                    manager.setAiSettings(
+                        AiSettings(
+                            enabled = call.argument<Boolean>("enabled") ?: throw bad("enabled"),
+                            mode = DetectionMode.entries.firstOrNull { it.id == call.argument<String>("mode") } ?: throw bad("mode"),
+                            customThresholds = custom,
+                        ),
+                    )
+                    aiSettings()
+                }
+                "getAiStatistics" -> manager.aiStatistics().toMap()
+                "reportFalsePositive" -> {
+                    val source = EventSource.entries.firstOrNull { it.id == call.argument<String>("source") } ?: throw bad("source")
+                    val confidence = call.argument<Number>("confidence")?.toDouble() ?: 0.0
+                    manager.reportFalsePositive(source, category(call.argument("category")), confidence)
+                    true
+                }
                 else -> {
                     main.post { result.notImplemented() }
                     return
@@ -261,6 +317,88 @@ class ProtectionChannel(
     }
 
     private fun status() = manager.status.current.toMap()
+
+    private fun pickImage(result: MethodChannel.Result) {
+        if (pendingImage != null) {
+            result.error("BUSY", "Image picker already open", null)
+            return
+        }
+        pendingImage = result
+        // Storage Access Framework: the user picks one file; SafeGuard gets
+        // read access to that file only, no storage permission.
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("image/*")
+        try {
+            activity.startActivityForResult(intent, REQUEST_IMAGE)
+        } catch (e: ActivityNotFoundException) {
+            pendingImage = null
+            result.error("UNSUPPORTED", "No document picker", null)
+        }
+    }
+
+    /** Reads at most the size limit into memory, classifies, and forgets the bytes. */
+    private fun checkImage(uri: Uri, result: MethodChannel.Result) {
+        val value: Map<String, Any?> = try {
+            val limit = ImageLimits().maxBytes
+            val mime = activity.contentResolver.getType(uri)
+            val bytes = activity.contentResolver.openInputStream(uri)?.use { input ->
+                val buffer = java.io.ByteArrayOutputStream()
+                val chunk = ByteArray(64 * 1024)
+                var total = 0
+                while (true) {
+                    val n = input.read(chunk)
+                    if (n < 0) break
+                    total += n
+                    if (total > limit) return@use null
+                    buffer.write(chunk, 0, n)
+                }
+                buffer.toByteArray()
+            }
+            if (bytes == null) {
+                mapOf("status" to "rejected", "error" to "file_too_large")
+            } else {
+                val (r, d) = manager.checkImage(bytes, mime)
+                bytes.fill(0)
+                mapOf(
+                    "status" to r.status.name.lowercase(),
+                    "error" to r.error?.id,
+                    "action" to d.action.name.lowercase(),
+                    "category" to d.category.id,
+                    "confidence" to d.confidence,
+                    "reason" to d.reason,
+                    "scores" to r.scores.mapKeys { it.key.id },
+                    "modelId" to r.modelId,
+                )
+            }
+        } catch (e: SecurityException) {
+            mapOf("status" to "rejected", "error" to "unreadable")
+        } catch (e: java.io.IOException) {
+            mapOf("status" to "rejected", "error" to "unreadable")
+        } catch (e: Exception) {
+            mapOf("status" to "unavailable", "error" to "internal")
+        }
+        main.post { result.success(value) }
+    }
+
+    private fun aiSettings(): Map<String, Any?> = manager.config.rawAi.let { s ->
+        mapOf(
+            "enabled" to s.enabled,
+            "mode" to s.mode.id,
+            "custom" to s.customThresholds.mapKeys { it.key.id },
+            "profiles" to mapOf(
+                "normal" to ThresholdProfiles.NORMAL.mapKeys { it.key.id },
+                "strict" to ThresholdProfiles.STRICT.mapKeys { it.key.id },
+            ),
+            "customRange" to listOf(ThresholdProfiles.MIN_CUSTOM, ThresholdProfiles.MAX_CUSTOM),
+            "models" to mapOf(
+                "text" to BuiltInModels.TEXT_V1.let {
+                    mapOf("id" to it.id, "version" to it.version, "available" to manager.isAiAvailable(ContentKind.TEXT))
+                },
+                "image" to mapOf("id" to null, "version" to null, "available" to manager.isAiAvailable(ContentKind.IMAGE)),
+            ),
+        )
+    }
 
     private fun searchSettings() = manager.config.rawSafeSearch.let {
         mapOf(
@@ -317,8 +455,18 @@ class ProtectionChannel(
         const val METHOD_CHANNEL = "com.safeguard.app/protection"
         const val EVENT_CHANNEL = "com.safeguard.app/protection/status"
         const val REQUEST_VPN = 0x5647
+        const val REQUEST_IMAGE = 0x5648
     }
 }
+
+private fun AiStatistics.toMap(): Map<String, Any> = mapOf(
+    "detections" to detections,
+    "blocks" to blocks,
+    "falsePositiveReports" to falsePositiveReports,
+    "detectionsByCategory" to detectionsByCategory.mapKeys { it.key.id },
+    "blocksByCategory" to blocksByCategory.mapKeys { it.key.id },
+    "reportsByCategory" to reportsByCategory.mapKeys { it.key.id },
+)
 
 private fun Rule.toMap(): Map<String, Any> = mapOf(
     "domain" to domain,

@@ -5,7 +5,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
 /**
- * Local SQLite database: rules, block events and counters.
+ * Local SQLite database: rules, block events, counters, protected apps
+ * and AI feedback.
  *
  * Stored in the app's private data directory; excluded from backup via
  * data_extraction_rules.xml. All queries use bound arguments.
@@ -52,11 +53,13 @@ class SafeGuardDatabase(context: Context) :
         db.execSQL("CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)")
         db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         migrateToV2(db)
+        migrateToV3(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // One step per version; never drop user rules or logs.
         if (oldVersion < 2) migrateToV2(db)
+        if (oldVersion < 3) migrateToV3(db)
     }
 
     /**
@@ -72,6 +75,26 @@ class SafeGuardDatabase(context: Context) :
         db.execSQL("CREATE TABLE protected_apps (package TEXT PRIMARY KEY, added_at INTEGER NOT NULL)")
     }
 
+    /**
+     * v3 (Phase 4): "report incorrect block" feedback. Only timestamp,
+     * source, category, rounded confidence and verdict — never content.
+     * AI counters live in `counters` (names prefixed `ai_`).
+     */
+    private fun migrateToV3(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE ai_feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts INTEGER NOT NULL,
+                source TEXT NOT NULL,
+                category TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                verdict TEXT NOT NULL
+            )
+            """.trimIndent(),
+        )
+    }
+
     fun getMeta(key: String): String? =
         readableDatabase.rawQuery("SELECT value FROM meta WHERE key = ?", arrayOf(key)).use {
             if (it.moveToFirst()) it.getString(0) else null
@@ -83,6 +106,6 @@ class SafeGuardDatabase(context: Context) :
 
     companion object {
         const val NAME = "safeguard.db"
-        const val VERSION = 2
+        const val VERSION = 3
     }
 }

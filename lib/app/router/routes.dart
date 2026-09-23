@@ -17,6 +17,7 @@ abstract final class Routes {
   static const activity = '/activity';
   static const searchProtection = '/search-protection';
   static const appProtection = '/app-protection';
+  static const aiProtection = '/ai-protection';
 
   static const _firstRun = {welcome, createPin};
   static const _entry = {splash, welcome, createPin, lock};

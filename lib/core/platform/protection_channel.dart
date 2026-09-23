@@ -106,6 +106,26 @@ class ProtectionChannel {
   Future<void> openAccessibilitySettings() =>
       _call<bool>('openAccessibilitySettings');
 
+  // ---- Phase 4 ----
+  Future<Map<Object?, Object?>> getAiSettings() => _map('getAiSettings');
+
+  Future<Map<Object?, Object?>> setAiSettings(Map<String, Object> s) =>
+      _map('setAiSettings', s);
+
+  Future<Map<Object?, Object?>> getAiStatistics() => _map('getAiStatistics');
+
+  Future<void> reportFalsePositive({
+    required String source,
+    required String category,
+    required double confidence,
+  }) => _call<bool>('reportFalsePositive', {
+    'source': source,
+    'category': category,
+    'confidence': confidence,
+  });
+
+  Future<Map<Object?, Object?>> checkImage() => _map('checkImage');
+
   Future<T?> _call<T>(String method, [Object? args]) async {
     try {
       return await _methods.invokeMethod<T>(method, args);

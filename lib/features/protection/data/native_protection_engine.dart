@@ -210,4 +210,31 @@ class NativeProtectionEngine implements ProtectionEngine {
           : null,
     );
   }
+
+  @override
+  Future<AiSettings> aiSettings() async =>
+      AiSettings.fromMap(await _channel.getAiSettings());
+
+  @override
+  Future<AiSettings> setAiSettings(AiSettings settings) async =>
+      AiSettings.fromMap(await _channel.setAiSettings(settings.toMap()));
+
+  @override
+  Future<AiStatistics> aiStatistics() async =>
+      AiStatistics.fromMap(await _channel.getAiStatistics());
+
+  @override
+  Future<void> reportFalsePositive({
+    required EventSourceKind source,
+    required ProtectionCategory category,
+    required double confidence,
+  }) => _channel.reportFalsePositive(
+    source: source.name,
+    category: category.id,
+    confidence: confidence,
+  );
+
+  @override
+  Future<ImageCheck> checkImage() async =>
+      ImageCheck.fromMap(await _channel.checkImage());
 }

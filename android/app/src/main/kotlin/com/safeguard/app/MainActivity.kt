@@ -40,9 +40,9 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
-    @Deprecated("Needed for VpnService.prepare(), which only offers an Intent.")
+    @Deprecated("Needed for VpnService.prepare() and the image picker, which only offer an Intent.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (protectionChannel?.onActivityResult(requestCode, resultCode) == true) return
+        if (protectionChannel?.onActivityResult(requestCode, resultCode, data) == true) return
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
     }

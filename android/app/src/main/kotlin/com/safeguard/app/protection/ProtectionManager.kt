@@ -12,6 +12,26 @@ import android.app.PendingIntent
 import android.net.VpnService
 import android.util.Log
 import com.safeguard.app.MainActivity
+import com.safeguard.app.ai.BitmapImageDecoder
+import com.safeguard.app.data.SqliteAiStatsStore
+import com.safeguard.app.engine.ai.AdapterContentClassifier
+import com.safeguard.app.engine.ai.AiSearchFilterService
+import com.safeguard.app.engine.ai.AiSettings
+import com.safeguard.app.engine.ai.AiStatsRecorder
+import com.safeguard.app.engine.ai.ClassificationResult
+import com.safeguard.app.engine.ai.ContentKind
+import com.safeguard.app.engine.ai.DecisionPolicy
+import com.safeguard.app.engine.ai.FalsePositiveReport
+import com.safeguard.app.engine.ai.GuardedContentClassifier
+import com.safeguard.app.engine.ai.ProtectionDecision
+import com.safeguard.app.engine.ai.ProtectionDecisionEngine
+import com.safeguard.app.engine.ai.RuleSignal
+import com.safeguard.app.engine.ai.image.ImageRejectedException
+import com.safeguard.app.engine.ai.image.LocalImageClassifierAdapter
+import com.safeguard.app.engine.ai.model.BuiltInModels
+import com.safeguard.app.engine.ai.model.ModelLoader
+import com.safeguard.app.engine.ai.text.LocalTextClassifierAdapter
+import com.safeguard.app.engine.ai.text.TextModel
 import com.safeguard.app.apps.AppGuardService
 import com.safeguard.app.data.SqliteProtectedAppStore
 import com.safeguard.app.engine.apps.AccessibilityState
@@ -25,7 +45,6 @@ import com.safeguard.app.engine.privacy.QueryHasher
 import com.safeguard.app.engine.privacy.SearchEventRecorder
 import com.safeguard.app.engine.safesearch.SafeSearchConfig
 import com.safeguard.app.engine.search.RuleBasedSearchClassifier
-import com.safeguard.app.engine.search.RuleBasedSearchFilterService
 import com.safeguard.app.engine.search.SearchDecision
 import com.safeguard.app.engine.search.SearchNormalizer
 import com.safeguard.app.engine.search.SearchQuery
@@ -70,14 +89,41 @@ class ProtectionManager private constructor(private val context: Context) {
     private val statistics = StatisticsService(events)
     val status = ProtectionStatusHolder()
 
+    private val hasher = QueryHasher(config.hashKey())
+
+    // ---- AI (Phase 4): on-device only, on demand only -------------------
+
+    private val aiStats = SqliteAiStatsStore(database)
+    private val aiStatsRecorder = AiStatsRecorder(aiStats)
+
     /**
-     * Search query classification (rule layer). Phase 4 swaps the
-     * classifier for `CombinedSearchClassifier(listOf(rules, aiModel))`.
+     * Local adapters only. The text model loads lazily from APK assets after
+     * its size and SHA-256 are verified; no image model ships in this
+     * version (the image adapter validates input and reports NO_MODEL). No
+     * cloud adapter is registered.
      */
-    val searchFilter: SearchFilterService = RuleBasedSearchFilterService(
-        classifier = RuleBasedSearchClassifier(),
+    private val imageAdapter = LocalImageClassifierAdapter("local-image", BitmapImageDecoder(), { null })
+
+    val contentClassifier = GuardedContentClassifier(
+        AdapterContentClassifier(
+            listOf(
+                LocalTextClassifierAdapter(BuiltInModels.TEXT_V1.id, {
+                    TextModel.parse(ModelLoader { path -> context.assets.open(path) }.load(BuiltInModels.TEXT_V1))
+                }),
+                imageAdapter,
+            ),
+        ),
+        key = config.hashKey(),
+    )
+
+    /** Search filtering: rule layer first, then the on-device text model. */
+    val searchFilter: SearchFilterService = AiSearchFilterService(
+        rules = RuleBasedSearchClassifier(),
         config = { config.searchPolicy },
-        listener = SearchEventRecorder(logger, QueryHasher(config.hashKey())),
+        ai = contentClassifier,
+        aiSettings = { config.rawAi },
+        listener = SearchEventRecorder(logger, hasher),
+        aiListener = aiStatsRecorder,
     )
 
     private val protectedApps = SqliteProtectedAppStore(database)
@@ -191,6 +237,55 @@ class ProtectionManager private constructor(private val context: Context) {
     fun submitSearch(text: String, engineId: String): SearchDecision =
         searchFilter.classify(SearchQuery(engineId, text.take(SearchNormalizer.MAX_INPUT)))
 
+    // ---- AI Protection ---------------------------------------------------
+
+    fun setAiSettings(next: AiSettings): AiSettings = config.updateAi(next)
+
+    fun isAiAvailable(kind: ContentKind) = contentClassifier.isAvailable(kind)
+
+    /**
+     * Classifies an image the user picked, in memory. Nothing is stored:
+     * a BLOCK becomes an event whose subject is the model id plus a keyed
+     * short hash of the image digest.
+     */
+    fun checkImage(bytes: ByteArray, declaredMime: String?): Pair<ClassificationResult, ProtectionDecision> {
+        // Validate even when no model is installed, so the user learns
+        // whether the file itself is acceptable.
+        val result = try {
+            imageAdapter.validate(bytes, declaredMime)
+            contentClassifier.classifyImage(bytes, declaredMime)
+        } catch (e: ImageRejectedException) {
+            ClassificationResult.rejected(e.error)
+        }
+        val decision = ProtectionDecisionEngine.decide(
+            rule = RuleSignal.None,
+            ai = result,
+            policy = DecisionPolicy(config.enabled, config.policy.blockedCategories, config.rawAi),
+            source = EventSource.AI,
+        )
+        aiStatsRecorder.onAiDecision(ContentKind.IMAGE, decision)
+        if (decision.blocks) {
+            val digest = ModelLoader.sha256Hex(bytes)
+            logger.record(
+                BlockEvent(
+                    timestamp = logger.now(),
+                    subject = "${decision.modelId ?: "image"}#${hasher.shortHash(digest)}",
+                    category = decision.category,
+                    source = EventSource.AI,
+                    confidence = decision.confidence,
+                    ruleType = AiSearchFilterService.RULE_TYPE_AI_IMAGE,
+                ),
+            )
+        }
+        return result to decision
+    }
+
+    fun reportFalsePositive(source: EventSource, category: Category, confidence: Double) {
+        aiStats.addReport(FalsePositiveReport.of(System.currentTimeMillis(), source, category, confidence))
+    }
+
+    fun aiStatistics() = aiStats.read()
+
     // ---- App Protection ------------------------------------------------
 
     fun protectedApps() = appProtection.list()
@@ -271,6 +366,8 @@ class ProtectionManager private constructor(private val context: Context) {
 
     fun clearLogs() {
         events.clear()
+        aiStats.clear()
+        contentClassifier.clear()
         logger.reset()
     }
 
@@ -278,6 +375,8 @@ class ProtectionManager private constructor(private val context: Context) {
     fun eraseAll() {
         stop()
         events.clear()
+        aiStats.clear()
+        contentClassifier.clear()
         rules.deleteSource(RuleSource.USER)
         protectedApps.clear()
         config.clear()

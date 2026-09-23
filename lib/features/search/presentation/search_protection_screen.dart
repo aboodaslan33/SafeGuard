@@ -232,7 +232,11 @@ class _SafeSearchBoxState extends State<_SafeSearchBox> {
         await context.push(
           Uri(
             path: Routes.blocked,
-            queryParameters: {'category': ?check.category?.id},
+            queryParameters: {
+              'category': ?check.category?.id,
+              'source': check.ruleType.startsWith('ai_') ? 'ai' : 'search',
+              'confidence': check.confidence.toStringAsFixed(2),
+            },
           ).toString(),
         );
         if (mounted) await AppScope.of(context).protection.refreshStats();
@@ -295,8 +299,9 @@ class _SafeSearchBoxState extends State<_SafeSearchBox> {
           ),
           const SizedBox(height: SgSpace.x3),
           Text(
-            'يُفحص البحث عند الإرسال فقط، على جهازك. لا يُحفظ نص البحث ولا يُسجَّل؛ '
-            'عند الحظر يُسجَّل رقم القاعدة والفئة فقط.',
+            'يُفحص البحث عند الإرسال فقط، على جهازك: القواعد أولًا ثم الحماية '
+            'الذكية. لا يُحفظ نص البحث ولا يُسجَّل؛ عند الحظر يُسجَّل رقم '
+            'القاعدة أو النموذج والفئة فقط.',
             style: context.text.bodySmall,
           ),
         ],
