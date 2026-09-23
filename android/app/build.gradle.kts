@@ -119,5 +119,5 @@ dependencies {
     // Pure-Kotlin engine tests (DNS parsing, rules, logging, statistics).
     testImplementation("junit:junit:4.13.2")
     // Real SQLite schema/query tests on the JVM (data/SqliteStoresTest).
-    testImplementation("org.robolectric:robolectric:4.16")
+    testImplementation("org.robolectric:robolectric:4.17")
 }
