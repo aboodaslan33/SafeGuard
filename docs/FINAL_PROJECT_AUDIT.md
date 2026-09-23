@@ -21,9 +21,10 @@ security, and it can be bypassed (see Known limitations).
 | `flutter analyze` (dev container) | VERIFIED: no issues |
 | `dart format --set-exit-if-changed` | VERIFIED: clean |
 | `flutter test` (dev container) | VERIFIED: **196 passed, 0 failed** |
-| Kotlin engine tests on the JVM (dev container harness) | VERIFIED: **268 passed, 0 failed** |
+| Kotlin engine tests on the JVM (dev container harness) | VERIFIED: **269 passed, 0 failed** |
 | Android layer compile check against android-all 16 (harness) | VERIFIED: compiles (with a local `R` stub) |
-| GitHub Actions CI, run 35891603507 on `f325ac6` | Flutter job (format, analyze, tests) **passed on GitHub**; secret scanning (gitleaks) **passed**; Android job **failed before any test ran** (`./gradlew` is gitignored). Fixed in the workflow; re-run result below |
+| GitHub Actions CI, run 35894524054 on `7793a8a` | VERIFIED: **all 3 jobs green**. Flutter: format, analyze, **196 tests passed**. Android: `testProdDebugUnitTest` (JVM engine + Robolectric SQLite incl. `MigrationTest`), `lintProdDebug` (0 errors), debug APKs dev + prod, **unsigned release APK prod with R8** (`app-prod-release.apk`, 67.5 MB, all ABIs). Secret scanning (gitleaks): clean |
+| Earlier CI runs (same day) | Failed and fixed, see §3a: missing Gradle wrapper, a test using a JVM-only API, 15 lint errors |
 | Real device (owner): Infinix X6528, Android 13, **debug build of Phase 5** | VERIFIED there only: app runs, SafeSearch enforced, custom-blocklist domain blocked (DEVICE_TEST_LOG D1–D3) |
 | Real device, any Phase 6–8 build | **NOT VERIFIED:** not run |
 | Signed release AAB on a device | **NOT VERIFIED** |
@@ -55,7 +56,7 @@ security, and it can be bypassed (see Known limitations).
 | DB errors fail closed to bundled lists | VERIFIED (`Phase7Test`) |
 | Signed update verification (signature, schema, downgrade, expiry, checksum, parse, tamper-at-rest) | VERIFIED (`UpdateStoreTest`) |
 | VPN revoke / recovery race fixes | NOT VERIFIED (Android-only code paths; review + compile) |
-| Release R8 build doesn't break reflection-free code | PENDING (CI run) |
+| Release R8 build | VERIFIED **builds** (CI unsigned release APK). NOT VERIFIED that it **runs** correctly on a device |
 | DNS parser robustness against fuzzed input | NOT VERIFIED (no fuzzing) |
 
 **Issues found and fixed across Phases 6–8:**
@@ -76,6 +77,29 @@ security, and it can be bypassed (see Known limitations).
 - Malformed truncated DNS reply.
 - Lost concurrent telemetry/crash writes.
 - Lost user lists after a DB rebuild.
+- Statistics crash on Android 7.x (`java.time`).
+- Android 16 back gesture on the protected-app screen.
+
+### 3a. Found by CI in Phase 8 (fixed)
+
+The first real Android build (CI) found issues that the dev container, which has no
+Android SDK, could not:
+- **Statistics crashed on Android 7.0/7.1** (`java.time` needs API 26;
+  `minSdk` is 24). Replaced with `java.util.Calendar`; a new test covers
+  local midnight in a non-UTC time zone (lint `NewApi`, 14 errors).
+- **Back gesture on Android 16+** (predictive back) didn't call
+  `onBackPressed`, so the "protected app" screen closed instead of going
+  home. It now registers an `OnBackInvokedCallback` (lint
+  `GestureBackNavigation`). NOT VERIFIED on a device.
+- `AiBenchmarkTest` used `java.lang.management` (not in `android.jar`); it
+  now reaches it reflectively.
+- CI didn't generate the gitignored Gradle wrapper.
+
+Remaining lint **warnings** (32; not errors): `UseKtx` style suggestions,
+newer Gradle / Robolectric versions available, `UnusedAttribute`
+(`isAccessibilityTool` is ignored below API 31, as intended), an unused
+color, and `StaticFieldLeak` on `ProtectionManager`. The last one is a
+false positive: the singleton holds `applicationContext`.
 
 ## 4. Privacy
 
@@ -122,7 +146,7 @@ security, and it can be bypassed (see Known limitations).
   - storage full;
   - a real DB corruption restore;
   - the alert notification appearing.
-- `MigrationTest` (v1 → v4 keeps user rules and log): PENDING (CI run)
+- VERIFIED on CI (Robolectric): `MigrationTest` (v1 → v4 keeps user rules and log) and the SQLite store tests, as part of `testProdDebugUnitTest`.
 
 ## 7. Testing
 
@@ -135,7 +159,7 @@ security, and it can be bypassed (see Known limitations).
 | AI | VERIFIED (JVM, eval set) | NOT VERIFIED |
 | Modes, allow/block lists, statistics, logs, privacy controls, reset | VERIFIED (widget + engine) | NOT VERIFIED |
 | Reboot, network switching | — | NOT VERIFIED |
-| Release build | PENDING (CI unsigned release build) | NOT VERIFIED |
+| Release build | VERIFIED: unsigned release APK builds with R8 on CI; signed AAB not built | NOT VERIFIED |
 | English / Arabic UI | VERIFIED (i18n_test: no Arabic leaks on any screen in English, LTR) | NOT VERIFIED |
 | Layout (5 sizes incl. 320 px, 1.3× text) | VERIFIED | — |
 
@@ -177,8 +201,9 @@ EXECUTED.
 
 ## 10. Known risks
 
-1. **First release build** may expose R8, flavour or `resValues` issues.
-   CI result pending.
+1. **First release build on a device.** R8 and the flavours now build on
+   CI, but no release build has run on a phone. R8 can still strip
+   something used only at runtime.
 2. **OEM background killing** (Infinix/XOS, some Samsung / Xiaomi
    settings) may stop the VPN. Untested.
 3. **Play review** of the VpnService and Accessibility declarations; the

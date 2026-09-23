@@ -17,8 +17,8 @@ especially the real-device ones, are open.
 - [ ] **App protection tested:** logic unit-tested only; NOT EXECUTED on a device (M11–M12).
 - [ ] **AI tested:** unit-tested and benchmarked on the JVM; NOT EXECUTED on a device (M13–M14).
 - [ ] **PIN tested:** unit and widget tested (lockout, clock change, restart with a fake monotonic clock); NOT EXECUTED on a device (M4–M5).
-- [ ] **Database tested:** JVM failure-path and backup tests pass. The Robolectric SQLite + migration tests run only in CI (`testProdDebugUnitTest`); see FINAL_PROJECT_AUDIT.md for whether that CI run happened.
-- [ ] **Release build tested:** `flutter build appbundle --release` has **not** been run: the development environment has no Android SDK. R8 + flavours + signing config are untested.
+- [ ] **Database tested:** JVM failure-path and backup tests pass; the Robolectric SQLite + v1→v4 migration tests pass on CI. Not tested on a device (a real upgrade from an installed older version).
+- [ ] **Release build tested:** an unsigned `flutter build apk --release --flavor prod` (R8) **builds on CI**. A signed AAB has not been built (no upload key yet), and no release build has been run on a device.
 - [x] **No debug secrets:** none in the source (Phase 6 audit); signing keys are read from a gitignored `key.properties`.
 - [x] **No test endpoints:** the app has no network endpoints at all; `Phase6Test.noCleartextEndpointsOrWebViews`.
 - [x] **Privacy documentation ready:** privacy text in docs/STORE_LISTING.md, in-app Privacy screen. **Still needed:** host it at a public URL for Play.
@@ -30,7 +30,7 @@ especially the real-device ones, are open.
 ## Phase 8 operations
 
 - [x] CI/CD workflows written (`.github/workflows/ci.yml`, `release.yml`, Dependabot, gitleaks).
-- [ ] CI green on GitHub (see FINAL_PROJECT_AUDIT.md).
+- [x] CI green on GitHub: run 35894524054 on `7793a8a` (Flutter 196 tests, Kotlin + Robolectric tests, lint, debug builds, unsigned release APK with R8, gitleaks).
 - [x] CHANGELOG.md with migration, security and rollback notes.
 - [x] SECURITY.md, docs/PRIVACY.md, docs/SECURITY_RESPONSE.md, docs/DATABASE_MIGRATIONS.md.
 - [ ] Release secrets configured in a protected `release` environment.

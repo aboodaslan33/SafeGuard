@@ -43,6 +43,10 @@ carrying the previous code (see docs/RELEASE.md).
 
 ### Fixed
 - Concurrent telemetry and crash writes could lose an update.
+- Statistics used `java.time` (API 26+) and would crash on Android 7.0/7.1;
+  now uses `java.util.Calendar` (found by lint on the first CI build).
+- The "protected app" screen handles the Android 16 predictive back
+  gesture (goes home instead of just closing).
 
 ### Migration notes
 - New SharedPreferences keys: `alerts_enabled` (native, default true);

@@ -30,9 +30,11 @@ SafeGuard تطبيق Flutter + Kotlin يهدف إلى حجب المحتوى غي
 > - البحث الآمن
 > - حجب موقع من القائمة
 >
-> انظر [`docs/DEVICE_TEST_LOG.md`](docs/DEVICE_TEST_LOG.md). لم يُبنَ إصدار
-> release بـ R8 بعد، ولم تُختبر حالات المراحل 5–8 على الجهاز. بيئة التطوير بلا Android SDK. المنطق مختبر آليًا
-> (Flutter 196، Kotlin 268) وطبقة Android مُتحقق من ترجمتها فقط. انظر
+> انظر [`docs/DEVICE_TEST_LOG.md`](docs/DEVICE_TEST_LOG.md). على GitHub Actions
+> نجحت كل المهام: الاختبارات (Flutter 196 وKotlin/Robolectric)، وlint، وبناء
+> debug، وبناء release غير موقّع بـ R8. لكن لم يُشغَّل أي إصدار release على جهاز،
+> ولم تُختبر حالات المراحل 5–8 على الجهاز. المنطق مختبر آليًا (Flutter 196،
+> Kotlin 269). انظر
 > [`docs/PHASE_2_REAL_DEVICE_TEST.md`](docs/PHASE_2_REAL_DEVICE_TEST.md) و
 > [`docs/PHASE_3_TESTING.md`](docs/PHASE_3_TESTING.md) و
 > [`docs/PHASE_4_AI.md`](docs/PHASE_4_AI.md) و
@@ -450,7 +452,7 @@ flutter build apk --release # R8؛ يوقَّع من android/key.properties إن
 | المجموعة | العدد | الحالة |
 |---|---|---|
 | Flutter (`flutter test`) | 196 | ✅ (منها 20 للمرحلة 3 و21 للمرحلة 4 و28 للمرحلة 5 و15 للمرحلة 6 و22 للمرحلة 7 و17 للمرحلة 8) |
-| Kotlin JUnit (المحرك) | 268 | ✅ (منها 45 للمرحلة 3 و83 للمرحلة 4 و44 للمرحلة 5 و8 للقوائم المضمّنة و11 للمرحلة 6 و3 للمرحلة 7 و29 للمرحلة 8)، شُغّلت عبر أداة JVM لأن `./gradlew test` يحتاج Android SDK |
+| Kotlin JUnit (المحرك) | 269 | ✅ (منها 45 للمرحلة 3 و83 للمرحلة 4 و44 للمرحلة 5 و8 للقوائم المضمّنة و11 للمرحلة 6 و3 للمرحلة 7 و30 للمرحلة 8)، شُغّلت محليًا عبر أداة JVM، وعلى CI مع اختبارات Robolectric عبر `testProdDebugUnitTest` |
 | `flutter analyze` | — | ✅ لا مشاكل |
 | ترجمة طبقة Android أمام API 36 | — | ✅ |
 | Robolectric SQLite | — | ❌ لم يُشغَّل (Google Maven محجوب) |
