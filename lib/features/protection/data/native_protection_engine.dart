@@ -227,6 +227,22 @@ class NativeProtectionEngine implements ProtectionEngine {
   Future<void> openPrivateDnsSettings() => _channel.openPrivateDnsSettings();
 
   @override
+  Future<ShieldStatus> shieldStatus() async =>
+      ShieldStatus.fromMap(await _channel.getShieldState());
+
+  @override
+  Future<ShieldStatus> setShieldEnabled(bool enabled) async =>
+      ShieldStatus.fromMap(await _channel.setShieldEnabled(enabled));
+
+  @override
+  Future<ShieldStatus> setShieldAppEnabled(String appKey, bool enabled) async =>
+      ShieldStatus.fromMap(await _channel.setShieldAppEnabled(appKey, enabled));
+
+  @override
+  Future<ShieldStatus> setShieldDisclosure({required bool accepted}) async =>
+      ShieldStatus.fromMap(await _channel.setShieldDisclosure(accepted));
+
+  @override
   Future<AlertsState> alertsState() async =>
       AlertsState.fromMap(await _channel.getAlertsState());
 

@@ -138,6 +138,7 @@ void main() {
         Routes.feedback,
         Routes.feedbackFor('false_positive', category: 'gambling'),
         Routes.analytics,
+        Routes.contentShield,
         Routes.setup,
       ];
       for (final route in routes) {

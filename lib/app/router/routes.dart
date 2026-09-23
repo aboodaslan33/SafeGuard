@@ -34,6 +34,9 @@ abstract final class Routes {
   static const feedback = '/feedback';
   static const analytics = '/privacy/analytics';
 
+  // Final AI phase
+  static const contentShield = '/ai-shield';
+
   static String feedbackFor(String type, {String? category, String? source}) =>
       Uri(
         path: feedback,

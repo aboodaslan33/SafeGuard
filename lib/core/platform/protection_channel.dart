@@ -128,6 +128,17 @@ class ProtectionChannel {
   Future<void> openPrivateDnsSettings() =>
       _call<bool>('openPrivateDnsSettings');
 
+  Future<Map<Object?, Object?>> getShieldState() => _map('getShieldState');
+
+  Future<Map<Object?, Object?>> setShieldEnabled(bool enabled) =>
+      _map('setShieldEnabled', {'enabled': enabled});
+
+  Future<Map<Object?, Object?>> setShieldAppEnabled(String app, bool enabled) =>
+      _map('setShieldAppEnabled', {'app': app, 'enabled': enabled});
+
+  Future<Map<Object?, Object?>> setShieldDisclosure(bool accepted) =>
+      _map('setShieldDisclosure', {'accepted': accepted});
+
   Future<Map<Object?, Object?>> getAlertsState() => _map('getAlertsState');
 
   Future<Map<Object?, Object?>> setAlertsEnabled(bool enabled) =>

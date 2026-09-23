@@ -39,6 +39,9 @@ class DiagnosticReport {
       'aiImageModel',
       'protectedApps',
       'accessibility',
+      'shieldState',
+      'shieldImageModel',
+      'shieldAccessibility',
     ],
     'system': [
       'databaseOk',

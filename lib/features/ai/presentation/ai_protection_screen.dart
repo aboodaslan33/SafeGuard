@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/app_dependencies.dart';
+import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
@@ -97,10 +99,9 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
               color: c.info,
               background: c.infoMuted,
               text: tr(
-                'تعمل عند الطلب فقط: على عمليات البحث عبر SafeGuard بعد فحص '
-                    'القواعد، وعلى الصور التي تختار فحصها. لا تراقب الشاشة أو '
-                    'التطبيقات الأخرى.',
-                "Runs on demand only: on searches through SafeGuard after the rules, and on images you choose to check. It doesn't watch the screen or other apps.",
+                'تعمل على البحث عبر SafeGuard وعلى الصور التي تختارها. المحتوى داخل '
+                    'التطبيقات يفحصه «درع المحتوى الذكي» فقط، إن فعّلته.',
+                'Runs on searches through SafeGuard and images you pick. Content inside apps is checked only by the “AI Content Shield”, if you turn it on.',
               ),
             ),
             SectionHeader(title: tr('وضع الكشف', 'Detection mode')),
@@ -147,6 +148,20 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                 'الفئات نفسها تُطبَّق على فلترة الشبكة والبحث والتصنيف الذكي.',
                 'The same categories apply to network filtering, search and AI classification.',
               ),
+            ),
+            SectionHeader(title: tr('داخل التطبيقات', 'Inside apps')),
+            SgGroupedCard(
+              children: [
+                SecuritySettingTile(
+                  icon: Icons.shield_moon_outlined,
+                  title: tr('درع المحتوى الذكي', 'AI Content Shield'),
+                  subtitle: tr(
+                    'فحص النص الظاهر في تطبيقات مدعومة، على جهازك',
+                    'Checks text shown in supported apps, on your device',
+                  ),
+                  onTap: () => context.push(Routes.contentShield),
+                ),
+              ],
             ),
             SectionHeader(title: tr('فحص صورة', 'Check an image')),
             SgCard(

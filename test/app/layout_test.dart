@@ -47,6 +47,7 @@ void main() {
     '/categories',
     '/feedback?type=missed_content',
     '/privacy/analytics',
+    '/ai-shield',
   ];
 
   for (final textScale in [1.0, 1.3]) {

@@ -187,6 +187,13 @@ class _EventRow extends StatelessWidget {
                       'بحث · ${category?.title ?? 'فئة غير معروفة'}',
                       "Search · ${category?.title ?? 'Unknown category'}",
                     ),
+                    // App name in the subject; model version in the rule type.
+                    EventSourceKind.ai
+                        when event.ruleType.startsWith('ai_shield:') =>
+                      tr(
+                        'درع المحتوى · ${category?.title ?? 'فئة غير معروفة'}',
+                        "Content Shield · ${category?.title ?? 'Unknown category'}",
+                      ),
                     EventSourceKind.ai => tr(
                       'ذكاء اصطناعي · ${category?.title ?? 'فئة غير معروفة'}',
                       "AI · ${category?.title ?? 'Unknown category'}",

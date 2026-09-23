@@ -3,10 +3,12 @@ import 'dart:convert';
 import '../../../core/i18n/i18n.dart';
 import '../../ai/domain/ai_models.dart';
 import 'advanced_models.dart';
+import 'content_shield.dart';
 import 'explanation.dart';
 
 export '../../ai/domain/ai_models.dart';
 export 'advanced_models.dart';
+export 'content_shield.dart';
 export 'explanation.dart';
 
 /// Content categories SafeGuard can filter. [id] is the stable storage key
@@ -637,6 +639,19 @@ abstract interface class ProtectionEngine {
 
   /// Opens the system "save file" dialog for [json].
   Future<ExportResult> saveExport(String json, {String? fileName});
+
+  // ---- AI Content Shield ----
+  /// Real state: never "active" while image AI is unavailable.
+  Future<ShieldStatus> shieldStatus();
+
+  /// Turning it off needs the PIN (the UI checks it).
+  Future<ShieldStatus> setShieldEnabled(bool enabled);
+
+  /// [appKey] from [ShieldApp.key]; switching an app off needs the PIN.
+  Future<ShieldStatus> setShieldAppEnabled(String appKey, bool enabled);
+
+  /// Records the answer to the shield's accessibility disclosure.
+  Future<ShieldStatus> setShieldDisclosure({required bool accepted});
 }
 
 /// Engine for platforms without the native layer (tests, previews): reports
@@ -785,6 +800,17 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   @override
   Future<ExportResult> saveExport(String json, {String? fileName}) async =>
       ExportResult.failed;
+  @override
+  Future<ShieldStatus> shieldStatus() async => ShieldStatus.unsupported;
+  @override
+  Future<ShieldStatus> setShieldEnabled(bool enabled) async =>
+      ShieldStatus.unsupported;
+  @override
+  Future<ShieldStatus> setShieldAppEnabled(String appKey, bool enabled) async =>
+      ShieldStatus.unsupported;
+  @override
+  Future<ShieldStatus> setShieldDisclosure({required bool accepted}) async =>
+      ShieldStatus.unsupported;
 }
 
 abstract interface class ProtectionRepository {

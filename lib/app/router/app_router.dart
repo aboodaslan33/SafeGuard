@@ -24,6 +24,7 @@ import '../../features/search/presentation/search_protection_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/setup/presentation/setup_assistant_screen.dart';
 import '../../features/setup/presentation/setup_wizard_screen.dart';
+import '../../features/shield/presentation/content_shield_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/status/presentation/status_screen.dart';
 import '../app_dependencies.dart';
@@ -79,6 +80,10 @@ GoRouter createRouter(AppDependencies deps) {
       GoRoute(
         path: Routes.aiProtection,
         builder: (c, s) => const AiProtectionScreen(),
+      ),
+      GoRoute(
+        path: Routes.contentShield,
+        builder: (c, s) => const ContentShieldScreen(),
       ),
       GoRoute(path: Routes.keywords, builder: (c, s) => const KeywordsScreen()),
       GoRoute(

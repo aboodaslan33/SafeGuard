@@ -548,6 +548,92 @@ class FakeProtectionEngine implements ProtectionEngine {
     return keywordList.length != before;
   }
 
+  // ---- AI Content Shield (mirrors ShieldStatusResolver on the native side)
+
+  bool shieldEnabled = false;
+  AccessibilityStatus shieldAccessibility = AccessibilityStatus.disabled;
+  bool shieldTextModel = true;
+  final shieldDisabledApps = <String>{};
+  final shieldDisclosureAnswers = <bool>[];
+
+  static const _shieldApps = [
+    ('instagram', 'Instagram', ShieldSupportLevel.textLimited),
+    ('tiktok', 'TikTok', ShieldSupportLevel.textLimited),
+    ('youtube', 'YouTube', ShieldSupportLevel.textLimited),
+    ('reddit', 'Reddit', ShieldSupportLevel.text),
+    ('chrome', 'Chrome', ShieldSupportLevel.text),
+    ('firefox', 'Firefox', ShieldSupportLevel.text),
+  ];
+
+  ShieldStatus get shield {
+    final apps = [
+      for (final (key, name, level) in _shieldApps)
+        ShieldApp(
+          key: key,
+          name: name,
+          packages: ['pkg.$key'],
+          level: level,
+          limitations: const [ShieldLimitation.imagesNeedModel],
+          enabled: !shieldDisabledApps.contains(key),
+          installed: key != 'firefox',
+          verifiedOnDevice: false,
+        ),
+    ];
+    final blocking = [
+      if (shieldAccessibility != AccessibilityStatus.enabled)
+        ShieldIssue.accessibilityOff,
+      if (apps.every((a) => !a.enabled)) ShieldIssue.noApps,
+    ];
+    final text = shieldEnabled && blocking.isEmpty && shieldTextModel;
+    return ShieldStatus(
+      enabled: shieldEnabled,
+      state: !shieldEnabled
+          ? ShieldState.off
+          : text
+          ? ShieldState.partial
+          : ShieldState.unavailable,
+      issues: shieldEnabled
+          ? [
+              ...blocking,
+              if (!shieldTextModel) ShieldIssue.textModelUnavailable,
+              ShieldIssue.imageModelUnavailable,
+            ]
+          : const [],
+      textActive: text,
+      imageActive: false,
+      accessibility: shieldAccessibility,
+      textModel: 'sg-text-1',
+      textModelAvailable: shieldTextModel,
+      imageModelState: ImageModelState.notBundled,
+      apps: apps,
+    );
+  }
+
+  @override
+  Future<ShieldStatus> shieldStatus() async => shield;
+
+  @override
+  Future<ShieldStatus> setShieldEnabled(bool enabled) async {
+    shieldEnabled = enabled;
+    return shield;
+  }
+
+  @override
+  Future<ShieldStatus> setShieldAppEnabled(String appKey, bool enabled) async {
+    if (enabled) {
+      shieldDisabledApps.remove(appKey);
+    } else {
+      shieldDisabledApps.add(appKey);
+    }
+    return shield;
+  }
+
+  @override
+  Future<ShieldStatus> setShieldDisclosure({required bool accepted}) async {
+    shieldDisclosureAnswers.add(accepted);
+    return shield;
+  }
+
   String? exportedFileName;
 
   @override

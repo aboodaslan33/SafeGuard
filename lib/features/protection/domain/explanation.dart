@@ -23,6 +23,7 @@ enum DecisionExplanation {
   aiUnavailable('ai_unavailable', false),
   aiSafe('ai_safe', false),
   protectedApp('protected_app', true),
+  aiContentShield('ai_content_shield', true),
   temporaryUnlock('temporary_unlock', false);
 
   const DecisionExplanation(this.id, this.blocks);
@@ -86,6 +87,10 @@ enum DecisionExplanation {
     ),
     aiSafe => tr('صُنّف كمحتوى آمن', 'Classified as safe'),
     protectedApp => tr('تطبيق محمي', 'Protected app'),
+    aiContentShield => tr(
+      'درع المحتوى الذكي: محتوى في تطبيق لا يتوافق مع إعدادات الحماية',
+      "AI Content Shield: content in an app that doesn't match your protection settings",
+    ),
     temporaryUnlock => tr('إيقاف مؤقت للحماية', 'Temporary pause'),
   };
 }
