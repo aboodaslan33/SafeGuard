@@ -124,8 +124,9 @@ class BlockLogger(
     private val executor: Executor,
     private val clock: () -> Long = System::currentTimeMillis,
     private val dedupeWindowMs: Long = 30_000,
-    private val retentionMs: Long = 30L * 24 * 60 * 60 * 1000,
     private val maxRows: Int = 10_000,
+    /** User setting; read on every event so changes apply immediately. */
+    private val retention: () -> LogRetention = { LogRetention.DEFAULT },
 ) : BlockListener {
     private val lastLogged = LruCache<String, Long>(512)
     private var insertsSincePrune = 0
@@ -143,6 +144,8 @@ class BlockLogger(
      * [BlockEvent.subject] being non-sensitive; see `SearchEventRecorder`.
      */
     fun record(event: BlockEvent) {
+        val policy = retention()
+        if (!policy.keepsLog) return
         val now = event.timestamp
         val key = event.source.id + ":" + event.subject
         synchronized(this) {
@@ -154,8 +157,21 @@ class BlockLogger(
             store.insert(event)
             if (++insertsSincePrune >= 200) {
                 insertsSincePrune = 0
-                store.prune(now - retentionMs, maxRows)
+                store.prune(now - policy.retentionMs, maxRows)
             }
+        }
+    }
+
+    /**
+     * Deletes what the current [retention] no longer allows (at start-up and
+     * after the setting changes). [LogRetention.NEVER] removes every event
+     * row but keeps the lifetime counter.
+     */
+    fun applyRetention() {
+        val policy = retention()
+        val now = clock()
+        executor.execute {
+            if (policy.keepsLog) store.prune(now - policy.retentionMs, maxRows) else store.prune(Long.MAX_VALUE, 0)
         }
     }
 

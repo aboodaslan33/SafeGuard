@@ -63,6 +63,7 @@ import com.safeguard.app.engine.apps.AppDecision
 import com.safeguard.app.engine.apps.AppProtection
 import com.safeguard.app.engine.logging.BlockEvent
 import com.safeguard.app.engine.logging.EventSource
+import com.safeguard.app.engine.logging.LogRetention
 import com.safeguard.app.engine.privacy.QueryHasher
 import com.safeguard.app.engine.privacy.SearchEventRecorder
 import com.safeguard.app.engine.safesearch.SafeSearchConfig
@@ -107,11 +108,13 @@ class ProtectionManager private constructor(private val context: Context) {
     val engine = RuleEngine(CompositeRuleStore(rules, BundledListStore { bundledLists }))
     private val events = SqliteBlockEventStore(database)
     private val logExecutor = Executors.newSingleThreadExecutor { Thread(it, "sg-block-log").apply { isDaemon = true } }
-    val logger = BlockLogger(events, logExecutor)
+    val logger = BlockLogger(events, logExecutor, retention = { config.logRetention })
     private val statistics by lazy { StatisticsService(events, reportsSince = aiStats::reportsSince) }
     val status = ProtectionStatusHolder()
 
-    private val hasher = QueryHasher(config.hashKey())
+    /** Non-exportable Keystore HMAC key (event ids, AI cache keys). */
+    private val hmacKey = KeystoreHmacKey(context)
+    private val hasher = QueryHasher(hmacKey)
 
     // ---- AI (Phase 4): on-device only, on demand only -------------------
 
@@ -135,7 +138,7 @@ class ProtectionManager private constructor(private val context: Context) {
                 imageAdapter,
             ),
         ),
-        key = config.hashKey(),
+        macs = hmacKey,
     )
 
     val keywords = CustomKeywords(SqliteCustomKeywordStore(database))
@@ -168,6 +171,7 @@ class ProtectionManager private constructor(private val context: Context) {
     private val isDebuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
     init {
+        logger.applyRetention()
         seedBuiltInRules()
         refreshRuleCounts()
         // ~10 MB of lists: map and verify off the main thread, then enable.
@@ -509,6 +513,12 @@ class ProtectionManager private constructor(private val context: Context) {
 
     fun statistics(): BlockStatistics = statistics.compute()
 
+    fun setLogRetention(value: LogRetention) {
+        config.logRetention = value
+        logger.applyRetention()
+        if (!value.keepsLog) logger.reset()
+    }
+
     fun clearLogs() {
         events.clear()
         aiStats.clear()
@@ -526,6 +536,7 @@ class ProtectionManager private constructor(private val context: Context) {
         rules.deleteSource(RuleSource.USER)
         protectedApps.clear()
         config.clear()
+        hmacKey.rotate()
         onRulesChanged()
     }
 
@@ -597,7 +608,7 @@ class ProtectionManager private constructor(private val context: Context) {
                 database.setMeta(META_TEST_FIXTURES, "0")
             }
         } catch (e: Exception) {
-            Log.e("SafeGuard", "seeding rules failed", e)
+            Log.e("SafeGuard", "seeding rules failed: ${e.javaClass.simpleName}")
         }
     }
 

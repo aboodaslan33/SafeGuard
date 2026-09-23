@@ -128,6 +128,18 @@ class FakeProtectionEngine implements ProtectionEngine {
   @override
   Future<void> clearLogs() async => logs.clear();
 
+  LogRetention retention = LogRetention.defaultValue;
+
+  @override
+  Future<LogRetention> logRetention() async => retention;
+
+  @override
+  Future<LogRetention> setLogRetention(LogRetention value) async {
+    retention = value;
+    if (value == LogRetention.never) logs.clear();
+    return value;
+  }
+
   @override
   Future<ProtectionStats> statistics() async {
     final byCategory = <ProtectionCategory, int>{};

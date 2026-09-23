@@ -40,7 +40,7 @@ class BootReceiver : BroadcastReceiver() {
                 manager.config.recordBoot(BOOT_START_REQUESTED, now)
             } catch (e: IllegalStateException) {
                 // Background start not allowed on this device right now.
-                Log.w("SafeGuard", "could not start VPN after boot", e)
+                Log.w("SafeGuard", "could not start VPN after boot: ${e.javaClass.simpleName}")
                 manager.config.recordBoot(BOOT_BLOCKED, now)
                 manager.status.failed("boot start blocked by the system")
                 manager.recordIncident(IncidentKind.BOOT_START_FAILED)

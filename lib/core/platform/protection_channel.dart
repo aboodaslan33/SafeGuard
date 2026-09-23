@@ -79,6 +79,11 @@ class ProtectionChannel {
       _list('getBlockedLogs', {'limit': limit});
 
   Future<void> clearLogs() => _call<bool>('clearLogs');
+
+  Future<String?> getLogRetention() => _call<String>('getLogRetention');
+
+  Future<String?> setLogRetention(String id) =>
+      _call<String>('setLogRetention', {'value': id});
   Future<Map<Object?, Object?>> getStatistics() => _map('getStatistics');
   Future<void> openVpnSettings() => _call<bool>('openVpnSettings');
   Future<void> eraseAll() => _call<bool>('eraseAll');
@@ -163,6 +168,9 @@ class ProtectionChannel {
 
   Future<Map<Object?, Object?>> saveExport(String json) =>
       _map('saveExport', {'json': json});
+
+  /// `{elapsedMs, boot}`: time since boot and a boot id (PIN lockout).
+  Future<Map<Object?, Object?>> monotonicTime() => _map('monotonicTime');
 
   Future<T?> _call<T>(String method, [Object? args]) async {
     try {

@@ -112,6 +112,15 @@ class NativeProtectionEngine implements ProtectionEngine {
   Future<void> clearLogs() => _channel.clearLogs();
 
   @override
+  Future<LogRetention> logRetention() async =>
+      LogRetention.fromId(await _channel.getLogRetention()) ??
+      LogRetention.defaultValue;
+
+  @override
+  Future<LogRetention> setLogRetention(LogRetention value) async =>
+      LogRetention.fromId(await _channel.setLogRetention(value.id)) ?? value;
+
+  @override
   Future<ProtectionStats> statistics() async {
     final m = await _channel.getStatistics();
     int count(Object? v) => v is int ? v : 0;

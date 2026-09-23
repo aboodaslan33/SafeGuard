@@ -273,6 +273,35 @@ class BlockEvent {
   bool get isCustomCategory => categoryId == 'custom';
 }
 
+/// How long the activity log is kept on the device (Phase 6).
+/// [never] means no per-event log is written at all.
+enum LogRetention {
+  days7('7d', '7 أيام'),
+  days30('30d', '30 يومًا'),
+  never('never', 'لا يُحفظ سجل');
+
+  const LogRetention(this.id, this.label);
+  final String id;
+  final String label;
+
+  static const defaultValue = days30;
+
+  static LogRetention? fromId(Object? id) {
+    for (final r in values) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  /// Shorter than [other]: switching deletes existing entries.
+  bool isShorterThan(LogRetention other) => _rank < other._rank;
+  int get _rank => switch (this) {
+    never => 0,
+    days7 => 1,
+    days30 => 2,
+  };
+}
+
 class ProtectionStats {
   const ProtectionStats({
     this.today,
@@ -497,6 +526,10 @@ abstract interface class ProtectionEngine {
   Future<void> clearLogs();
   Future<ProtectionStats> statistics();
 
+  /// Activity-log retention; shortening it prunes existing entries.
+  Future<LogRetention> logRetention();
+  Future<LogRetention> setLogRetention(LogRetention value);
+
   /// Opens Android's VPN settings (for "Always-on VPN").
   Future<void> openVpnSettings();
 
@@ -610,6 +643,10 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   Future<void> clearLogs() async {}
   @override
   Future<ProtectionStats> statistics() async => ProtectionStats.unavailable;
+  @override
+  Future<LogRetention> logRetention() async => LogRetention.defaultValue;
+  @override
+  Future<LogRetention> setLogRetention(LogRetention value) async => value;
   @override
   Future<void> openVpnSettings() async {}
   @override

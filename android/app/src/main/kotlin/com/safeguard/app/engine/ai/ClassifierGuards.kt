@@ -1,9 +1,8 @@
 package com.safeguard.app.engine.ai
 
+import com.safeguard.app.engine.privacy.MacProvider
 import com.safeguard.app.engine.rules.LruCache
 import java.security.MessageDigest
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * Sliding one-minute cap on inferences per content kind, so a runaway
@@ -36,11 +35,13 @@ class InferenceBudget(
  */
 class GuardedContentClassifier(
     private val delegate: ContentClassifier,
-    key: ByteArray,
+    private val macs: MacProvider,
     private val budget: InferenceBudget = InferenceBudget(),
     capacity: Int = 256,
 ) : ContentClassifier {
-    private val keySpec = SecretKeySpec(key.copyOf(), "HmacSHA256")
+    constructor(delegate: ContentClassifier, key: ByteArray, budget: InferenceBudget = InferenceBudget(), capacity: Int = 256) :
+        this(delegate, MacProvider.fromBytes(key), budget, capacity)
+
     private val cache = LruCache<String, ClassificationResult>(capacity)
 
     override fun isAvailable(kind: ContentKind) = delegate.isAvailable(kind)
@@ -62,8 +63,7 @@ class GuardedContentClassifier(
     fun clear() = cache.clear()
 
     private fun cacheKey(input: ContentInput): String {
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(keySpec)
+        val mac = macs.newMac()
         val bytes = when (input) {
             is ContentInput.Text -> ("t:" + input.text).toByteArray(Charsets.UTF_8)
             is ContentInput.Image -> MessageDigest.getInstance("SHA-256").digest(input.bytes).let { byteArrayOf(0x69) + it }

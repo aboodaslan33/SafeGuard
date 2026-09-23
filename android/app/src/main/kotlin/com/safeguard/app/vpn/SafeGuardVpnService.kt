@@ -102,7 +102,7 @@ class SafeGuardVpnService : VpnService() {
                 // Our own sockets (and UI) use the physical network directly.
                 builder.addDisallowedApplication(packageName)
             } catch (e: PackageManager.NameNotFoundException) {
-                Log.w(TAG, "could not exclude own package", e)
+                Log.w(TAG, "could not exclude own package: ${e.javaClass.simpleName}")
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 // Metered-ness follows the underlying network, not "VPN = metered".
@@ -126,7 +126,7 @@ class SafeGuardVpnService : VpnService() {
             manager.status.running(System.currentTimeMillis())
             manager.onUpstreamChanged(monitor.current)
         } catch (e: Exception) {
-            Log.e(TAG, "failed to start VPN", e)
+            Log.e(TAG, "failed to start VPN: ${e.javaClass.simpleName}")
             manager.status.failed(e.javaClass.simpleName + ": " + (e.message ?: ""))
             shutdown()
             stopSelf()
@@ -193,13 +193,13 @@ class SafeGuardVpnService : VpnService() {
                 }
             }
         } catch (e: ErrnoException) {
-            Log.w(TAG, "poll failed", e)
+            Log.w(TAG, "poll failed: ${e.javaClass.simpleName}")
             failure = "poll: ${e.errno}"
         } catch (e: IOException) {
-            Log.w(TAG, "tun read failed", e)
+            Log.w(TAG, "tun read failed: ${e.javaClass.simpleName}")
             failure = "tun read: ${e.javaClass.simpleName}"
         } catch (e: RuntimeException) {
-            Log.e(TAG, "filter loop crashed", e)
+            Log.e(TAG, "filter loop crashed: ${e.javaClass.simpleName}")
             failure = "filter loop: ${e.javaClass.simpleName}"
         }
         if (!stopRequested) {

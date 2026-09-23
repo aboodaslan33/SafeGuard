@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 
 import '../core/error/failures.dart';
 import '../core/error/result.dart';
+import '../core/platform/protection_channel.dart';
 import '../core/storage/stores.dart';
 import '../features/pin/data/pin_data.dart';
 import '../features/pin/domain/pin_models.dart';
@@ -15,6 +16,18 @@ import '../features/protection/presentation/protection_controller.dart';
 import '../features/settings/data/local_settings_repository.dart';
 import '../features/settings/presentation/settings_controller.dart';
 
+/// Android's time-since-boot and boot id, for the PIN lockout.
+MonotonicSource platformMonotonicSource([ProtectionChannel? channel]) {
+  final c = channel ?? ProtectionChannel();
+  return () async {
+    final m = await c.monotonicTime();
+    final elapsed = m['elapsedMs'];
+    final boot = m['boot'];
+    if (elapsed is! int || boot is! int || boot < 0) return null;
+    return MonotonicReading(elapsedMs: elapsed, boot: boot);
+  };
+}
+
 enum BootStatus { loading, ready, failed }
 
 /// Composition root. The only place where concrete implementations are
@@ -25,6 +38,7 @@ class AppDependencies extends ChangeNotifier {
     required SecureStore secureStore,
     required PinHasher hasher,
     ProtectionEngine engine = const UnavailableProtectionEngine(),
+    MonotonicSource monotonic = noMonotonicSource,
   }) : _preferences = preferences,
        _secureStore = secureStore {
     settings = SettingsController(LocalSettingsRepository(preferences));
@@ -33,19 +47,27 @@ class AppDependencies extends ChangeNotifier {
       engine: engine,
     );
     security = SecurityController(
-      PinService(repository: SecurePinRepository(secureStore), hasher: hasher),
+      PinService(
+        repository: SecurePinRepository(secureStore),
+        hasher: hasher,
+        monotonic: monotonic,
+      ),
     );
   }
 
-  factory AppDependencies.production() => AppDependencies(
-    preferences: SharedPrefsStore(),
-    secureStore: KeystoreSecureStore(),
-    hasher: const Pbkdf2PinHasher(),
+  factory AppDependencies.production() {
     // The VPN / DNS engine exists only in the Android host.
-    engine: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
-        ? NativeProtectionEngine()
-        : const UnavailableProtectionEngine(),
-  );
+    final android = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    return AppDependencies(
+      preferences: SharedPrefsStore(),
+      secureStore: KeystoreSecureStore(),
+      hasher: const Pbkdf2PinHasher(),
+      engine: android
+          ? NativeProtectionEngine()
+          : const UnavailableProtectionEngine(),
+      monotonic: android ? platformMonotonicSource() : noMonotonicSource,
+    );
+  }
 
   final KeyValueStore _preferences;
   final SecureStore _secureStore;

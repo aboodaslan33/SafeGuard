@@ -120,6 +120,61 @@ abstract final class AdvancedActions {
     }
   }
 
+  /// Log retention. Any change needs the PIN (the log is what a parent
+  /// reviews); a shorter period deletes older entries, after confirmation.
+  /// Returns the value now in force, or null when unchanged.
+  static Future<LogRetention?> chooseLogRetention(
+    BuildContext context,
+    LogRetention current,
+  ) async {
+    final engine = AppScope.of(context).protection.engine;
+    final picked = await showSgBottomSheet<LogRetention>(
+      context,
+      title: 'مدة الاحتفاظ بالسجل',
+      subtitle: 'يُحذف ما هو أقدم تلقائيًا. السجل لا يحوي نصوص بحث أو محتوى.',
+      builder: (context) => Column(
+        children: [
+          for (final value in LogRetention.values)
+            SgChoiceRow(
+              label: value.label,
+              icon: value == LogRetention.never
+                  ? Icons.block_outlined
+                  : Icons.history_rounded,
+              selected: value == current,
+              onTap: () => Navigator.of(context).pop(value),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || picked == current || !context.mounted) return null;
+    if (picked.isShorterThan(current)) {
+      final confirmed = await showSgConfirmDialog(
+        context,
+        title: 'تقصير مدة السجل؟',
+        message: picked == LogRetention.never
+            ? 'يُحذف سجل الحماية الحالي ولن يُسجَّل شيء بعد الآن. '
+                  'تبقى الحماية تعمل كما هي.'
+            : 'تُحذف الأحداث الأقدم من ${picked.label} من هذا الجهاز.',
+        confirmLabel: 'متابعة',
+        destructive: true,
+      );
+      if (!confirmed || !context.mounted) return null;
+    }
+    if (!await requirePin(context, reason: 'لتغيير مدة الاحتفاظ بالسجل')) {
+      return null;
+    }
+    try {
+      final applied = await engine.setLogRetention(picked);
+      if (context.mounted) {
+        await AppScope.of(context).protection.refreshStats();
+      }
+      return applied;
+    } on AppFailure catch (f) {
+      if (context.mounted) showSgSnack(context, f.message);
+      return null;
+    }
+  }
+
   /// Secure defaults for every setting. Keeps the PIN, lists, keywords,
   /// protected apps and logs.
   static Future<void> resetProtection(BuildContext context) async {

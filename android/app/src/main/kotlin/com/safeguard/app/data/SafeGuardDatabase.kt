@@ -65,6 +65,24 @@ class SafeGuardDatabase(context: Context) :
     }
 
     /**
+     * An older app version installed over a newer one can't read the newer
+     * schema. Rather than failing to open (which would stop the VPN from
+     * filtering), start from an empty schema: built-in rules and bundled
+     * lists are re-seeded; user lists, keywords and logs are lost.
+     * Corruption is handled by SQLite's default error handler, which
+     * deletes the damaged file and lets the same re-seeding happen.
+     */
+    override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        val tables = db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name != 'android_metadata'",
+            emptyArray(),
+        ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
+        // Table names come from sqlite_master, not from input; quoted anyway.
+        tables.forEach { db.execSQL("DROP TABLE IF EXISTS \"${it.replace("\"", "\"\"")}\"") }
+        onCreate(db)
+    }
+
+    /**
      * v2 (Phase 3): events carry source/action/confidence/rule type
      * (`domain` now holds the event subject), and protected apps.
      * Existing v1 rows are DNS blocks with confidence 1.

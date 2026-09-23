@@ -105,17 +105,35 @@ class PinCredential {
 }
 
 /// Persisted brute-force counter.
+///
+/// A lockout is recorded both as a wall-clock end ([lockedUntil]) and as a
+/// monotonic anchor (time since boot + boot id), so moving the device clock
+/// forward does not end it early; see `PinService`.
 class PinAttempts {
-  const PinAttempts({this.failed = 0, this.lockedUntil});
+  const PinAttempts({
+    this.failed = 0,
+    this.lockedUntil,
+    this.lockMs,
+    this.anchorElapsedMs,
+    this.anchorBoot,
+  });
 
   static const none = PinAttempts();
 
   final int failed;
   final DateTime? lockedUntil;
 
+  /// Lockout length measured from the monotonic anchor.
+  final int? lockMs;
+  final int? anchorElapsedMs;
+  final int? anchorBoot;
+
   String encode() => jsonEncode({
     'failed': failed,
     'lockedUntil': lockedUntil?.millisecondsSinceEpoch,
+    if (lockMs != null) 'lockMs': lockMs,
+    if (anchorElapsedMs != null) 'anchorElapsed': anchorElapsedMs,
+    if (anchorBoot != null) 'anchorBoot': anchorBoot,
   });
 
   static PinAttempts decode(String raw) {
@@ -127,6 +145,9 @@ class PinAttempts {
         lockedUntil: until == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(until),
+        lockMs: json['lockMs'] as int?,
+        anchorElapsedMs: json['anchorElapsed'] as int?,
+        anchorBoot: json['anchorBoot'] as int?,
       );
     } catch (_) {
       // A corrupted counter must not unlock anything: treat it as a fresh
@@ -135,6 +156,19 @@ class PinAttempts {
     }
   }
 }
+
+/// Time since boot plus an id of the boot, from the platform. Unlike the
+/// wall clock, the user cannot move it.
+class MonotonicReading {
+  const MonotonicReading({required this.elapsedMs, required this.boot});
+  final int elapsedMs;
+  final int boot;
+}
+
+/// Returns null where no monotonic clock is available (tests, non-Android).
+typedef MonotonicSource = Future<MonotonicReading?> Function();
+
+Future<MonotonicReading?> noMonotonicSource() async => null;
 
 abstract interface class PinHasher {
   Future<PinCredential> create(String pin);

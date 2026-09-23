@@ -14,7 +14,7 @@ import '../domain/app_settings.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  static const appVersion = '1.4.0';
+  static const appVersion = '1.5.0';
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +188,7 @@ class SettingsScreen extends StatelessWidget {
                       'لا حساب، لا خوادم، لا تحليلات. '
                       'لا يغادر أي شيء هذا الجهاز.',
                 ),
+                if (engine.isSupported) const _LogRetentionTile(),
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.cleaning_services_outlined,
@@ -308,5 +309,49 @@ class SettingsScreen extends StatelessWidget {
       showSgSnack(context, failure.message);
     }
     // On success the router sends the user back to onboarding.
+  }
+}
+
+/// Shows and changes the activity-log retention (Phase 6).
+class _LogRetentionTile extends StatefulWidget {
+  const _LogRetentionTile();
+
+  @override
+  State<_LogRetentionTile> createState() => _LogRetentionTileState();
+}
+
+class _LogRetentionTileState extends State<_LogRetentionTile> {
+  LogRetention? _value;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_value == null) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final v = await AppScope.of(context).protection.engine.logRetention();
+      if (mounted) setState(() => _value = v);
+    } on Object {
+      // Leave the tile without a value; changing it will report the error.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _value ?? LogRetention.defaultValue;
+    return SecuritySettingTile(
+      icon: Icons.history_toggle_off_rounded,
+      title: 'مدة الاحتفاظ بالسجل',
+      value: _value?.label,
+      onTap: () async {
+        final applied = await AdvancedActions.chooseLogRetention(
+          context,
+          current,
+        );
+        if (applied != null && mounted) setState(() => _value = applied);
+      },
+    );
   }
 }

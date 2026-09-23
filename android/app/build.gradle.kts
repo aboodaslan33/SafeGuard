@@ -1,8 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Release signing (Phase 6). Secrets never live in the repository:
+// android/key.properties and the keystore it points to are gitignored.
+// See docs/RELEASE.md for the file format.
+val releaseKeys = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.isFile) f.inputStream().use { load(it) }
+}
+val hasReleaseKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    .all { !releaseKeys.getProperty(it).isNullOrBlank() }
 
 android {
     namespace = "com.safeguard.app"
@@ -36,11 +48,29 @@ android {
         noCompress += "sgbl"
     }
 
+    signingConfigs {
+        if (hasReleaseKeys) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeys.getProperty("storeFile"))
+                storePassword = releaseKeys.getProperty("storePassword")
+                keyAlias = releaseKeys.getProperty("keyAlias")
+                keyPassword = releaseKeys.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
+            // R8: shrink, optimise and obfuscate; strips Log.v/d/i calls
+            // (see proguard-rules.pro). Resource shrinking drops unused ones.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Without android/key.properties the build is signed with the
+            // local debug key so `flutter run --release` still works; such an
+            // APK must not be distributed (Play rejects debug-signed uploads).
+            signingConfig = if (hasReleaseKeys) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
 }

@@ -2,13 +2,13 @@ package com.safeguard.app.protection
 
 import android.content.Context
 import android.os.SystemClock
-import android.util.Base64
 import com.safeguard.app.engine.ai.AiSettings
 import com.safeguard.app.engine.ai.DetectionMode
 import com.safeguard.app.engine.ai.ThresholdProfiles
 import com.safeguard.app.engine.health.Incident
 import com.safeguard.app.engine.health.IncidentKind
 import com.safeguard.app.engine.health.IncidentLog
+import com.safeguard.app.engine.logging.LogRetention
 import com.safeguard.app.engine.modes.EffectiveSettings
 import com.safeguard.app.engine.modes.ProtectionMode
 import com.safeguard.app.engine.modes.ProtectionModes
@@ -20,7 +20,6 @@ import com.safeguard.app.engine.rules.UnknownDomainPolicy
 import com.safeguard.app.engine.safesearch.SafeSearchConfig
 import com.safeguard.app.engine.safesearch.YouTubeMode
 import com.safeguard.app.engine.search.SearchPolicyConfig
-import java.security.SecureRandom
 
 /**
  * Native copy of the protection settings.
@@ -205,6 +204,11 @@ class ProtectionConfigStore(
     // ---- Safe Mode, boot, incidents (Phase 5) ----------------------------
 
     /** Chosen by the user; blocks every automatic start until they re-enable protection. */
+    /** Activity-log retention (Phase 6 privacy setting). */
+    var logRetention: LogRetention
+        get() = LogRetention.fromId(prefs.getString(KEY_LOG_RETENTION, null)) ?: LogRetention.DEFAULT
+        set(value) = prefs.edit().putString(KEY_LOG_RETENTION, value.id).apply()
+
     var safeMode: Boolean
         get() = prefs.getBoolean(KEY_SAFE_MODE, false)
         set(value) = prefs.edit().putBoolean(KEY_SAFE_MODE, value).apply()
@@ -253,18 +257,6 @@ class ProtectionConfigStore(
         get() = prefs.getBoolean(KEY_A11Y_DECLINED, false)
         set(value) = prefs.edit().putBoolean(KEY_A11Y_DECLINED, value).apply()
 
-    /**
-     * Per-install random key for search-event hashes. Generated on first
-     * use, never leaves the device, deleted by [clear].
-     */
-    @Synchronized
-    fun hashKey(): ByteArray {
-        prefs.getString(KEY_HASH, null)?.let { return Base64.decode(it, Base64.NO_WRAP) }
-        val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
-        prefs.edit().putString(KEY_HASH, Base64.encodeToString(key, Base64.NO_WRAP)).apply()
-        return key
-    }
-
     private fun readSafeSearch() = SafeSearchConfig(
         // Search protection follows the Phase 1 "فلترة البحث" preference; on by default.
         enabled = prefs.getBoolean(KEY_SEARCH, true),
@@ -278,7 +270,7 @@ class ProtectionConfigStore(
      * "Reset protection": secure defaults for every setting (CUSTOM mode with
      * all categories, search + AI defaults — as on a new install), pause and
      * Safe Mode ended. Keeps the
-     * on/off intent, lists, keywords, protected apps, logs and the hash key.
+     * on/off intent, lists, keywords, protected apps, logs and the HMAC key.
      */
     @Synchronized
     fun resetSettings() {
@@ -334,7 +326,6 @@ class ProtectionConfigStore(
         const val KEY_SS_YOUTUBE = "safesearch_youtube"
         const val KEY_A11Y_DECLINED = "a11y_disclosure_declined"
         const val KEY_A11Y_WAS_ENABLED = "a11y_was_enabled"
-        const val KEY_HASH = "event_hash_key"
         const val KEY_AI_ENABLED = "ai_enabled"
         const val KEY_AI_MODE = "ai_mode"
         const val KEY_AI_THRESHOLD = "ai_threshold_"
@@ -342,6 +333,7 @@ class ProtectionConfigStore(
         const val KEY_PAUSE_ELAPSED = "pause_elapsed"
         const val KEY_PAUSE_DURATION = "pause_duration"
         const val KEY_SAFE_MODE = "safe_mode"
+        const val KEY_LOG_RETENTION = "log_retention"
         const val KEY_BOOT_RESULT = "boot_result"
         const val KEY_BOOT_AT = "boot_at"
         const val KEY_INCIDENTS = "incidents"

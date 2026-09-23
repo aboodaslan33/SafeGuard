@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import com.safeguard.app.engine.ai.AiSettings
 import com.safeguard.app.engine.ai.AiStatistics
@@ -29,6 +30,8 @@ import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.Rule
 import com.safeguard.app.engine.rules.RuleAction
 import com.safeguard.app.engine.rules.RuleSource
+import com.safeguard.app.engine.logging.LogRetention
+import com.safeguard.app.engine.pause.TemporaryUnlock
 import com.safeguard.app.engine.status.ProtectionStatus
 import com.safeguard.app.protection.ProtectionManager
 import io.flutter.plugin.common.BinaryMessenger
@@ -54,6 +57,8 @@ import java.util.concurrent.Executors
  *   getRules({action?, source?}) / searchRules({query}) → [rule]
  *   checkDomain({domain}) → decision
  *   getBlockedLogs({limit}) → [event]; clearLogs()
+ *   getLogRetention() → "7d"|"30d"|"never"; setLogRetention({value}) → id
+ *   monotonicTime() → {elapsedMs, boot}  (PIN lockout clock)
  *   getStatistics() → stats
  *   openVpnSettings(); eraseAll()
  *
@@ -252,6 +257,12 @@ class ProtectionChannel(
                 }
                 "getBlockedLogs" -> manager.recentBlocks((call.argument<Int>("limit") ?: 100).coerceIn(1, 500)).map { it.toMap() }
                 "clearLogs" -> { manager.clearLogs(); true }
+                "getLogRetention" -> manager.config.logRetention.id
+                "setLogRetention" -> {
+                    val value = LogRetention.fromId(call.argument<String>("value")) ?: throw bad("value")
+                    manager.setLogRetention(value)
+                    value.id
+                }
                 "getStatistics" -> manager.statistics().let { s ->
                     mapOf(
                         "today" to s.today,
@@ -336,8 +347,11 @@ class ProtectionChannel(
                     true
                 }
                 "tryRecover" -> manager.tryRecover()
+                "monotonicTime" -> mapOf("elapsedMs" to SystemClock.elapsedRealtime(), "boot" to bootCount())
                 "startPause" -> {
-                    manager.startPause(call.argument<Int>("minutes") ?: throw bad("minutes"))
+                    val minutes = call.argument<Int>("minutes") ?: throw bad("minutes")
+                    if (minutes !in TemporaryUnlock.ALLOWED_MINUTES) throw bad("minutes")
+                    manager.startPause(minutes)
                     health()
                 }
                 "endPause" -> { manager.endPause(); health() }
@@ -366,9 +380,19 @@ class ProtectionChannel(
             main.post { result.error(e.error.code, e.error.code, null) }
         } catch (e: AppRuleException) {
             main.post { result.error(e.error.code, e.error.code, null) }
+        } catch (e: IllegalArgumentException) {
+            main.post { result.error("INVALID_ARGUMENT", null, null) }
         } catch (e: Exception) {
+            // Class name only: messages may carry user input.
             main.post { result.error("INTERNAL", e.javaClass.simpleName, null) }
         }
+    }
+
+    /** Boot id for the PIN lockout; -1 where the platform doesn't expose it. */
+    private fun bootCount(): Int = try {
+        Settings.Global.getInt(activity.contentResolver, Settings.Global.BOOT_COUNT)
+    } catch (e: Settings.SettingNotFoundException) {
+        -1
     }
 
     private fun requestPermission(result: MethodChannel.Result) {
