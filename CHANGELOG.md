@@ -9,6 +9,35 @@ Every release lists **Migration notes** (data / settings changes),
 Play a rollback is always a *new* release with a higher `versionCode`
 carrying the previous code (see docs/RELEASE.md).
 
+## [1.9.0+10] — AI Content Shield: image AI, screen capture, skip
+
+### Added
+- **On-device image AI:** GantMan nsfw_model v1.1.0 MobileNetV2
+  (official `saved_model.tflite`, unmodified, MIT, 24.4 MB), pinned by
+  size and SHA-256 and run with LiteRT. porn/hentai → SEXUAL; sexy →
+  SUGGESTIVE (blocked in STRICT); drawings/neutral → SAFE.
+- **Image checks** through MediaProjection: Android's consent dialog,
+  capture indicator, foreground notification; frames only while a
+  supported app is in front; never saved or sent. PIN to stop.
+- **Skip action:** blocked content is swiped past (next reel/short/post),
+  then Back, then Home with the blocking screen.
+- **Facebook** and Facebook Lite in the supported apps.
+
+### Security notes
+- New permissions `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PROJECTION`
+  (used only after the user's consent). The accessibility service gains
+  `canPerformGestures` for the single skip swipe.
+- The image model's training data was web-scraped; provenance accepted by
+  the project owner (docs/AI_CONTENT_SHIELD.md §4).
+
+### Migration notes
+- No database change. Rule type of shield events gains the action
+  (`…:<skip|back|home>`); older entries still parse.
+
+### Rollback
+- Release 1.8.0 code as a higher `versionCode`; capture stops with the
+  old build (it has no capture service).
+
 ## [1.8.0+9] — Final AI phase: AI Content Shield
 
 ### Added

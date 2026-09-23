@@ -12,7 +12,7 @@ analytics SDK, crash SDK, advertising or tracking.
 | Search protection | Text typed into **SafeGuard's own** search screen, in memory only | What you type in other apps or browsers |
 | App protection (optional) | Package name of the app in the foreground | Screen content, text input, notifications |
 | AI | Search text above (in memory); images you pick yourself (in memory, not saved) | Anything else |
-| AI Content Shield (optional, off by default, 1.8.0) | Text **shown** on screen in the supported apps you left on (Instagram, TikTok, YouTube, Reddit, Chrome, Firefox), classified in memory on the device and discarded. This includes messages *displayed* in those apps | What you type (input fields), password fields, any other app, images/video (no image model), screenshots (none are taken) |
+| AI Content Shield (optional, off by default) | Text **shown** on screen in the supported apps you left on (Instagram, TikTok, YouTube, Reddit, Facebook, Chrome, Firefox); with "image checks" on (1.9.0, Android's capture consent), downscaled screen frames while those apps are open. Everything is classified in memory on the device and discarded. This includes messages *displayed* in those apps | What you type (input fields), password fields, any other app, protected (DRM) video. Frames are never saved, encoded or sent |
 
 ## What is stored (on the device only)
 

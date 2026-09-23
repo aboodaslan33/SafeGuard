@@ -1,4 +1,4 @@
-# Final project audit — SafeGuard 1.8.0+9 (after the final AI phase)
+# Final project audit — SafeGuard 1.9.0+10
 
 Every statement is labelled:
 
@@ -277,3 +277,25 @@ Issues found and fixed during this phase:
   scrolling would have produced UNKNOWN results. Fixed.
 - **Service robustness:** a block could fire after the service was
   destroyed; `execute` after shutdown would throw. Both fixed.
+
+## 14. Image AI, screen capture and skip (1.9.0+10)
+
+| Item | Status |
+|---|---|
+| Bundled image model (GantMan MobileNetV2, official tflite, unmodified) | VERIFIED: file SHA-256 and size pinned; test checks the asset |
+| Model runs and outputs sane probabilities on safe photos | VERIFIED in Python (LiteRT, real model): 11 safe sample photos all "safe" 0.74–0.96; flat skin colour SEXUAL 0.24 (§8b of AI_CONTENT_SHIELD.md) |
+| Kotlin preprocessing = the validated reference | VERIFIED (`preprocessorMatchesTheValidatedReference`, golden values) |
+| Detection accuracy on real explicit content | **NOT VERIFIED:** only the authors' own ≈ 92 % on their data; no explicit images were used here |
+| LiteRT adapter, capture service, gestures | Compile-checked locally against android.jar + TFLite API; Android build, lint and R8 build on CI: see the CI run for commit `9571101` |
+| Capture privacy (no saving, encoding, logging, network in capture code; exact permission set) | VERIFIED (`ShieldSourceAuditTest`) |
+| UI: consent before Android's dialog, PIN to stop, "active" only with text + image | VERIFIED (`content_shield_test`) |
+| On a real device: capture, inference latency, skip gesture in each app, battery | **NOT VERIFIED** (FINAL_AI_TESTING.md, all NOT EXECUTED) |
+
+KNOWN LIMITATIONS:
+- Content is visible for ~1–2 s before the skip.
+- Short video moments can be missed between samples; DRM video is black.
+- Android 14+ requires new capture consent after every restart.
+- The image model detects sexual/suggestive content only, and has a
+  training-data provenance risk.
+- False positives (swimwear, sports, dark or skin-toned scenes) are
+  expected, especially in STRICT mode.

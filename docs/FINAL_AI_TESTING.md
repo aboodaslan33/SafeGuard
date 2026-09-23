@@ -5,7 +5,7 @@ device. The development environment has no Android device or emulator.
 A scenario may be marked PASS only after it has actually been run on a
 real phone, with the device, Android version, build and date recorded.
 
-Build under test: 1.8.0+9, flavour `prod`, release build (debug builds
+Build under test: 1.9.0+10, flavour `prod`, release build (debug builds
 behave differently for R8 and performance).
 
 Legend: `NOT EXECUTED` · `PASS` · `FAIL (details)` · `N/A (reason)`.
@@ -18,25 +18,30 @@ Legend: `NOT EXECUTED` · `PASS` · `FAIL (details)` · `N/A (reason)`.
 3. Open AI protection → AI Content Shield. Turn it on, read the disclosure,
    agree, and enable "SafeGuard AI Content Shield" in Android's
    Accessibility settings.
-4. Check the screen reads **"Partially active"**:
-   - text checks: Running;
-   - image checks: Not running;
-   - image model: Not included in this version.
-   It must never read "Active".
-5. Mode: test each app in NORMAL and again in STRICT.
+4. Check the screen reads **"Partially active"** with text checks
+   Running and image checks Off. It must not read "Active" yet.
+5. Tap **Turn on image checks** → Continue → in Android's dialog choose
+   **entire screen** → Start. Check:
+   - Android's capture indicator appears;
+   - a "SafeGuard is checking images" notification appears;
+   - the shield now reads **"Active"**.
+6. Mode: test each app in NORMAL and again in STRICT. STRICT also blocks
+   revealing ("sexy") images.
 
-Use **non-graphic, text-based** test material only: captions, titles
-and web pages whose words are explicit. Do not open pornographic imagery
-on a test device; image checks are not active in this version anyway.
+Test material: use adult test content responsibly, on the owner's own
+device, and never keep screenshots of it. Test safe content (beach,
+sports, family photos) as carefully as unsafe content: false positives
+matter.
 
 ## 1. Per-app content scenarios
 
 Expected, for every app:
 - **Safe content:** no block.
-- **Clearly risky text:** block within about 1–3 s → home screen → "This
-  content was blocked" with the category, and never the content itself.
-- **Images and video without risky text:** not blocked (no image model).
-  This is the expected, documented limitation, not a failure.
+- **Clearly risky text or image:** within about 1–2 s SafeGuard swipes to
+  the next item. If it's still on screen: Back, then Home with "This
+  content was blocked" (category only, never the content).
+- **Safe images (beach, sports, family):** no block in NORMAL; STRICT
+  may block some swimwear or fitness photos (expected, but record it).
 
 | # | App | Content | Expected | Result |
 |---|---|---|---|---|
@@ -45,15 +50,21 @@ Expected, for every app:
 | A3 | Instagram | Post whose caption is explicitly sexual | Block (SEXUAL) | NOT EXECUTED |
 | A4 | Instagram | Violent / gory caption | Block (VIOLENCE/GORE) if the model flags it | NOT EXECUTED |
 | A5 | Instagram | Gambling promo caption | Block (GAMBLING) | NOT EXECUTED |
-| A6 | Instagram | Explicit image with neutral caption | Not blocked (no image model): documented limitation | NOT EXECUTED |
+| A6 | Instagram | Reel with nudity / explicit image, neutral caption | Skipped to the next reel (image model) | NOT EXECUTED |
+| A8 | Instagram | Beach / swimwear / gym photos | NORMAL: no block; STRICT: may skip (record which) | NOT EXECUTED |
 | A7 | Instagram | DM thread open | Nothing stored; no block unless displayed text is risky | NOT EXECUTED |
 | T1 | TikTok | Normal For You feed | No block | NOT EXECUTED |
 | T2 | TikTok | Video with explicit caption / on-screen text exposed as text | Block if exposed to accessibility | NOT EXECUTED |
 | T3 | TikTok | Gambling / drug caption | Block | NOT EXECUTED |
-| T4 | TikTok | Risky video without text | Not blocked: documented limitation | NOT EXECUTED |
+| T4 | TikTok | Explicit or nude video without text | Skipped to the next video | NOT EXECUTED |
 | Y1 | YouTube | Home feed, normal titles | No block | NOT EXECUTED |
 | Y2 | YouTube | Search results with explicit / gore titles | Block | NOT EXECUTED |
 | Y3 | YouTube | Gambling video title | Block | NOT EXECUTED |
+| Y4 | YouTube | Shorts with nudity | Skipped to the next short | NOT EXECUTED |
+| Y5 | YouTube | Normal video page showing explicit frames | Back (skip swipe doesn't change the video), then Home | NOT EXECUTED |
+| FB1 | Facebook | Normal feed | No block | NOT EXECUTED |
+| FB2 | Facebook | Reels / posts with nudity | Skipped; Back / Home if it stays | NOT EXECUTED |
+| FB3 | Facebook Lite | Same as FB1–FB2 | Same | NOT EXECUTED |
 | C1 | Chrome | News site (war, crash reports) | No block (NORMAL) | NOT EXECUTED |
 | C2 | Chrome | Casino landing page (if DNS lists didn't block it) | Block (GAMBLING) | NOT EXECUTED |
 | C3 | Chrome | Page with explicit sexual text | Block (SEXUAL); DNS may block first | NOT EXECUTED |
@@ -87,6 +98,13 @@ Expected, for every app:
 | B16 | "Delete all data" | Shield off, log empty | NOT EXECUTED |
 | B17 | Diagnostics copy | Shows shield state ids; no text or package lists | NOT EXECUTED |
 | B18 | English UI | Shield screen and block screen fully in English, LTR | NOT EXECUTED |
+| B19 | Image checks after a device restart (Android 14+) | Image checks off; turning them on asks Android's dialog again | NOT EXECUTED |
+| B20 | Stop image checks in SafeGuard | PIN required; indicator and notification disappear | NOT EXECUTED |
+| B21 | Stop casting from Android's quick settings / indicator | SafeGuard shows image checks off; no crash | NOT EXECUTED |
+| B22 | Leave supported apps (home screen, WhatsApp) | No frames processed (battery); indicator may stay (Android) | NOT EXECUTED |
+| B23 | Skip loop | A blocked reel followed by more blocked reels: skip, Back, Home, no endless swiping | NOT EXECUTED |
+| B24 | Battery with image checks on, 1 h of reels | Record battery % and phone temperature | NOT EXECUTED |
+| B25 | Netflix-style protected video in Chrome | Black frames, no block, no crash | NOT EXECUTED |
 
 ## 3. Recording
 

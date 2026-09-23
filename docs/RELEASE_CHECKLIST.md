@@ -1,7 +1,7 @@
 # Release checklist
 
 `[x]` means done **and** backed by the evidence named. `[ ]` means not
-done or not verified. State as of version 1.8.0+9 (final AI phase).
+done or not verified. State as of version 1.9.0+10.
 **The app is not ready for production release**: the unticked boxes,
 especially the real-device ones, are open.
 
@@ -28,7 +28,10 @@ especially the real-device ones, are open.
 - [ ] **Real-device testing completed:** 3 PASS rows out of 46 (TEST_MATRIX).
 - [ ] **AI Content Shield tested on a device:** every scenario in docs/FINAL_AI_TESTING.md is NOT EXECUTED.
 - [ ] **AI Content Shield Play declaration** (second accessibility service with window-content access) submitted with a video (docs/GOOGLE_PLAY.md §2b).
-- [ ] **Image model:** none bundled; image/video checks unavailable (docs/AI_CONTENT_SHIELD.md §4). Not a blocker for release, but the store listing must not claim image or video filtering.
+- [ ] **Image model legal review:** GantMan nsfw_model (MIT) was trained on web-scraped data; review provenance before a store release (docs/AI_CONTENT_SHIELD.md §4).
+- [ ] **Image model accuracy measured on real content** (lawful evaluation set incl. beach/sports/art false-positive cases). Only the authors' own ~92 % exists.
+- [ ] **MediaProjection foreground-service declaration** submitted with a video (docs/GOOGLE_PLAY.md §2c).
+- [ ] **Battery / latency of image checks measured on phones** (FINAL_AI_TESTING B24).
 
 ## Phase 8 operations
 
