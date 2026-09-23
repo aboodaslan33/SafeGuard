@@ -134,4 +134,32 @@ class SqliteStoresTest {
         assertTrue(ai.reports(10).isEmpty())
         assertEquals(1L, events.lifetimeTotal()) // DNS/search totals untouched
     }
+
+    @Test
+    fun phase5AllowlistScopeKeywordsAndBlockOnlyStatistics() {
+        rules.upsert(Rule("school.test", Category.SAFE, RuleAction.ALLOW, source = RuleSource.USER, updatedAt = 1, includeSubdomains = false))
+        assertFalse(rules.get("school.test", RuleSource.USER)!!.includeSubdomains)
+
+        val keywords = SqliteCustomKeywordStore(db)
+        val k = keywords.add("glitter bomb", Category.CUSTOM, 5)
+        assertTrue(k.id > 0)
+        assertEquals(listOf("glitter bomb"), keywords.list().map { it.phrase })
+        try {
+            keywords.add("glitter bomb", Category.CUSTOM, 6)
+            throw AssertionError("duplicate accepted")
+        } catch (e: android.database.sqlite.SQLiteConstraintException) {
+            // UNIQUE(phrase)
+        }
+        assertTrue(keywords.remove(k.id))
+        assertEquals(0, keywords.count())
+
+        events.insert(BlockEvent(10, "d.test", Category.SEXUAL))
+        events.insert(BlockEvent(11, "sg-text-1#abcd", Category.GORE, EventSource.AI))
+        events.insert(BlockEvent(12, "unlock:5m", Category.UNKNOWN, EventSource.MANUAL, RuleAction.ALLOW))
+        assertEquals(2, events.countSince(0))
+        assertEquals(mapOf(EventSource.DNS to 1, EventSource.AI to 1), events.countBySourceSince(0))
+        assertEquals(2L, events.lifetimeTotal())
+        assertEquals(3, events.recent(10).size)
+        assertTrue(db.isHealthy())
+    }
 }

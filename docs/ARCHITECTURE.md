@@ -1,4 +1,4 @@
-# SafeGuard — Architecture (Phases 2–4)
+# SafeGuard — Architecture (Phases 2–5)
 
 ## Layers
 
@@ -68,13 +68,16 @@ Per packet:
 ## Rule engine
 
 Rule = `domain, category, action, enabled, source, version, updatedAt`.
-Categories: `SEXUAL, VIOLENCE, GORE, GAMBLING, DRUGS, DANGEROUS, SAFE, UNKNOWN`.
+Categories: `SEXUAL, VIOLENCE, GORE, GAMBLING, DRUGS, DANGEROUS, SAFE, UNKNOWN`,
+and (Phase 5) `CUSTOM` for the user's own blocks/keywords (not a toggle).
 Sources: `BUILT_IN, USER, REMOTE (future), TEST (debug builds only)`.
 
 Precedence (first match wins):
 
 1. Protection off → ALLOW.
-2. User **allowlist** entry on the domain or any parent → ALLOW.
+2. User **allowlist** entry → ALLOW. Since Phase 5 an entry covers its
+   subdomains only if added with `includeSubdomains`; otherwise just the
+   domain and `www.` (entries from earlier versions keep covering subdomains).
 3. User **blocklist** entry on the domain or any parent → BLOCK (explicit
    intent; applies whatever the category toggles).
 4. Most specific list rule (longest domain; BLOCK wins a tie):
@@ -212,3 +215,37 @@ checkImage (channel, system picker) → ProtectionManager.checkImage
 | `BitmapImageDecoder` (Android) | `ai/BitmapImageDecoder.kt` |
 | DB v3 | `ai_feedback` table; AI counters in `counters` (`ai_*`) |
 | Trainer + seed set (build-time, test sources) | `src/test/.../ai/TextModelTrainer.kt`, `src/test/resources/ai/text_seed_v1.tsv` |
+
+## Phase 5 additions (advanced protection)
+
+Details: [`PHASE_5_REPORT.md`](PHASE_5_REPORT.md), plan: [`PHASE_5_PLAN.md`](PHASE_5_PLAN.md).
+
+```
+Flutter ProtectionState {enabled, categories (user), mode}
+  → setConfiguration {enabled, categories, mode}
+  → ProtectionConfigStore
+       raw user settings ── ProtectionModes.resolve(mode) ──► effective
+       + TemporaryUnlock (wall + elapsed clocks) + safeMode
+       → policy / safeSearch / searchPolicy / effectiveAi  (read per query)
+
+Search: CustomKeywords → lexicon (mode threshold) → AI → ProtectionDecisionEngine
+DNS:    RuleEngine (user allowlist scope: exact | subdomains) → …
+
+Health: ProtectionManager.health() → ProtectionHealthEvaluator
+        ← status, consent, upstream failures, rules, AI model, apps/a11y, DB
+Recovery: filter-loop crash (service) / app resume (tryRecover) → RecoveryPolicy
+Interruptions: status listener + a11y check → IncidentDetector → IncidentLog (prefs)
+Boot: BootReceiver → settings → Safe Mode → consent → start; outcome recorded
+```
+
+| Component | File |
+|---|---|
+| `ProtectionMode`, `ProtectionModes` | `engine/modes/ProtectionModes.kt` |
+| `ProtectionHealthEvaluator`, `HealthInputs`, `HealthReport` | `engine/health/ProtectionHealth.kt` |
+| `RecoveryPolicy`, `IncidentDetector`, `IncidentLog`, `UpstreamHealth` | `engine/health/Recovery.kt` |
+| `TemporaryUnlock` | `engine/pause/TemporaryUnlock.kt` |
+| `UserRules` (validation, duplicates, conflicts) | `engine/rules/UserRules.kt` |
+| `CustomKeywords` | `engine/search/CustomKeywords.kt`; SQLite: `data/SqliteCustomKeywordStore.kt` |
+| `StatisticsService.detailed()` | `engine/stats/Statistics.kt` |
+| DB v4 | `rules.include_subdomains`, `custom_keywords` |
+| Flutter `ProtectionGuard` (PIN policy), `AdvancedActions`, `SettingsExport` | `lib/features/protection/presentation/`, `lib/features/advanced/` |

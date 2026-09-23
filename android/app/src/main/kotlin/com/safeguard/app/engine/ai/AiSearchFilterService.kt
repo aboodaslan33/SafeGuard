@@ -2,6 +2,7 @@ package com.safeguard.app.engine.ai
 
 import com.safeguard.app.engine.logging.EventSource
 import com.safeguard.app.engine.rules.RuleAction
+import com.safeguard.app.engine.search.CustomKeywords
 import com.safeguard.app.engine.search.SearchClassifier
 import com.safeguard.app.engine.search.SearchDecision
 import com.safeguard.app.engine.search.SearchDecisionListener
@@ -17,13 +18,14 @@ fun interface AiDecisionListener {
 }
 
 /**
- * Search filtering = rule layer first, AI second (the rule engine is kept,
- * not replaced):
+ * Search filtering pipeline (rules first, AI last; nothing is replaced):
  *
- * - a known blocked query (lexicon score ≥ threshold, category enabled)
- *   → BLOCK immediately; the model is not run;
- * - otherwise, if AI Protection is on → on-device text model →
- *   [ProtectionDecisionEngine] → BLOCK / UNKNOWN (allowed) / ALLOW.
+ * 1. the user's custom keywords (whole words/phrases) → BLOCK — explicit
+ *    intent, applies whatever the category toggles;
+ * 2. the built-in lexicon (score ≥ the mode's threshold, category enabled)
+ *    → BLOCK immediately; the model is not run;
+ * 3. otherwise, if AI Protection is on → on-device text model →
+ *    [ProtectionDecisionEngine] → BLOCK / UNKNOWN (allowed) / ALLOW.
  *
  * Runs once per submitted query. The text stays in memory.
  */
@@ -34,6 +36,7 @@ class AiSearchFilterService(
     private val aiSettings: () -> AiSettings,
     private val listener: SearchDecisionListener = SearchDecisionListener { _, _ -> },
     private val aiListener: AiDecisionListener = AiDecisionListener { _, _ -> },
+    private val keywords: CustomKeywords? = null,
 ) : SearchFilterService {
 
     override val isActive: Boolean get() = config().enabled
@@ -46,7 +49,13 @@ class AiSearchFilterService(
     }
 
     private fun decide(query: SearchQuery, cfg: SearchPolicyConfig): SearchDecision {
-        val ruleDecision = SearchPolicy.decide(rules.classify(SearchNormalizer.normalize(query.text)), cfg)
+        val normalized = SearchNormalizer.normalize(query.text)
+        if (cfg.enabled) {
+            keywords?.match(normalized)?.let { k ->
+                return SearchDecision(RuleAction.BLOCK, k.category, "custom_keyword", 1.0, RULE_TYPE_CUSTOM_KEYWORD, "u${k.id}")
+            }
+        }
+        val ruleDecision = SearchPolicy.decide(rules.classify(normalized), cfg)
         if (!cfg.enabled || ruleDecision.action == RuleAction.BLOCK) return ruleDecision
 
         val settings = aiSettings()
@@ -72,6 +81,7 @@ class AiSearchFilterService(
 
     companion object {
         const val RULE_TYPE_AI_TEXT = "ai_text"
+        const val RULE_TYPE_CUSTOM_KEYWORD = "custom_keyword"
         const val RULE_TYPE_AI_IMAGE = "ai_image"
     }
 }

@@ -43,6 +43,7 @@ interface AiStatsStore {
     fun record(detected: List<Category>, blocked: Category?)
     fun addReport(report: FalsePositiveReport)
     fun reports(limit: Int): List<FalsePositiveReport>
+    fun reportsSince(since: Long): Int
     fun read(): AiStatistics
     fun clear()
 }
@@ -69,6 +70,8 @@ class InMemoryAiStatsStore : AiStatsStore {
     }
 
     @Synchronized override fun reports(limit: Int) = reports.sortedByDescending { it.timestamp }.take(limit)
+
+    @Synchronized override fun reportsSince(since: Long) = reports.count { it.timestamp >= since }
 
     @Synchronized override fun read() = s
 

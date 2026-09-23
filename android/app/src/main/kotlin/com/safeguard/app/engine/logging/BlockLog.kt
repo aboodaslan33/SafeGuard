@@ -49,18 +49,24 @@ data class BlockEvent(
         const val RULE_TYPE_DOMAIN = "domain"
         const val RULE_TYPE_KEYWORD = "keyword"
         const val RULE_TYPE_PROTECTED_APP = "protected_app"
+        const val RULE_TYPE_TEMPORARY_UNLOCK = "temporary_unlock"
     }
 }
 
 typealias ProtectionEvent = BlockEvent
 
+/**
+ * Event storage. Counting methods count **blocks only** (action BLOCK);
+ * other events (e.g. a MANUAL temporary unlock) are listed but not counted.
+ */
 interface BlockEventStore {
     fun insert(event: BlockEvent)
     fun recent(limit: Int): List<BlockEvent>
     fun countSince(since: Long): Int
     fun countByCategorySince(since: Long): Map<Category, Int>
+    fun countBySourceSince(since: Long): Map<EventSource, Int>
 
-    /** Lifetime count; survives log pruning and is reset only by [clear]. */
+    /** Lifetime block count; survives log pruning and is reset only by [clear]. */
     fun lifetimeTotal(): Long
 
     /** Deletes events older than [before] and keeps at most [maxRows]. */
@@ -74,16 +80,21 @@ class InMemoryBlockEventStore : BlockEventStore {
 
     @Synchronized override fun insert(event: BlockEvent) {
         events.add(event)
-        total++
+        if (event.action == RuleAction.BLOCK) total++
     }
 
     @Synchronized override fun recent(limit: Int) =
         events.sortedByDescending { it.timestamp }.take(limit)
 
-    @Synchronized override fun countSince(since: Long) = events.count { it.timestamp >= since }
+    private fun blocksSince(since: Long) = events.filter { it.timestamp >= since && it.action == RuleAction.BLOCK }
+
+    @Synchronized override fun countSince(since: Long) = blocksSince(since).size
 
     @Synchronized override fun countByCategorySince(since: Long) =
-        events.filter { it.timestamp >= since }.groupingBy { it.category }.eachCount()
+        blocksSince(since).groupingBy { it.category }.eachCount()
+
+    @Synchronized override fun countBySourceSince(since: Long) =
+        blocksSince(since).groupingBy { it.source }.eachCount()
 
     @Synchronized override fun lifetimeTotal() = total
 

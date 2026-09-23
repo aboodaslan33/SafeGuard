@@ -35,8 +35,12 @@ class ProtectionChannel {
   Future<Map<Object?, Object?>> setConfiguration({
     required bool enabled,
     required List<String> categories,
-  }) =>
-      _map('setConfiguration', {'enabled': enabled, 'categories': categories});
+    String? mode,
+  }) => _map('setConfiguration', {
+    'enabled': enabled,
+    'categories': categories,
+    'mode': ?mode,
+  });
 
   Future<Map<Object?, Object?>> updateCategory(String category, bool enabled) =>
       _map('updateCategory', {'category': category, 'enabled': enabled});
@@ -46,8 +50,13 @@ class ProtectionChannel {
     String category,
   ) => _map('addBlockedDomain', {'domain': domain, 'category': category});
 
-  Future<Map<Object?, Object?>> addAllowedDomain(String domain) =>
-      _map('addAllowedDomain', {'domain': domain});
+  Future<Map<Object?, Object?>> addAllowedDomain(
+    String domain, {
+    bool includeSubdomains = false,
+  }) => _map('addAllowedDomain', {
+    'domain': domain,
+    'includeSubdomains': includeSubdomains,
+  });
 
   Future<bool> removeBlockedDomain(String domain) async =>
       await _call<bool>('removeBlockedDomain', {'domain': domain}) ?? false;
@@ -125,6 +134,35 @@ class ProtectionChannel {
   });
 
   Future<Map<Object?, Object?>> checkImage() => _map('checkImage');
+
+  // ---- Phase 5 ----
+  Future<Map<Object?, Object?>> getHealth() => _map('getHealth');
+
+  Future<void> acknowledgeIncidents(int upTo) =>
+      _call<bool>('acknowledgeIncidents', {'upTo': upTo});
+
+  Future<bool> tryRecover() async => await _call<bool>('tryRecover') ?? false;
+
+  Future<Map<Object?, Object?>> startPause(int minutes) =>
+      _map('startPause', {'minutes': minutes});
+
+  Future<Map<Object?, Object?>> endPause() => _map('endPause');
+  Future<Map<Object?, Object?>> enterSafeMode() => _map('enterSafeMode');
+  Future<Map<Object?, Object?>> resetProtection() => _map('resetProtection');
+
+  Future<Map<Object?, Object?>> getDetailedStatistics() =>
+      _map('getDetailedStatistics');
+
+  Future<List<Map<Object?, Object?>>> getKeywords() => _list('getKeywords');
+
+  Future<Map<Object?, Object?>> addKeyword(String keyword, String category) =>
+      _map('addKeyword', {'keyword': keyword, 'category': category});
+
+  Future<bool> removeKeyword(int id) async =>
+      await _call<bool>('removeKeyword', {'id': id}) ?? false;
+
+  Future<Map<Object?, Object?>> saveExport(String json) =>
+      _map('saveExport', {'json': json});
 
   Future<T?> _call<T>(String method, [Object? args]) async {
     try {

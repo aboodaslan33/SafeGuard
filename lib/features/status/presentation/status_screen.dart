@@ -296,6 +296,8 @@ class _Summary extends StatelessWidget {
       ProtectionHealth.transitioning => ('جارٍ التشغيل', c.info),
       ProtectionHealth.inactive => ('الحماية غير نشطة', c.danger),
       ProtectionHealth.paused => ('الحماية متوقفة', c.warning),
+      ProtectionHealth.suspended => ('الحماية متوقفة مؤقتًا', c.warning),
+      ProtectionHealth.partial => ('الحماية مفعّلة جزئيًا', c.warning),
       ProtectionHealth.unsupported => ('الفلترة غير متاحة', c.info),
     };
     return SgCard(
@@ -458,6 +460,11 @@ class _Limitations extends StatelessWidget {
     'حماية التطبيقات تمنع فتح التطبيق كاملًا، ولا تستطيع فلترة المحتوى داخله.',
     'الحماية الذكية تعمل على الجهاز وعند الطلب فقط (بحث SafeGuard والصور التي '
         'تختار فحصها). نموذج النص صغير ومحدود الدقة، ولا يوجد نموذج صور في هذا الإصدار.',
+    'لا يرسل SafeGuard إشعارات؛ انقطاع الحماية (فصل VPN، سحب الموافقة، إيقاف '
+        'خدمة التطبيقات) يظهر عند فتح التطبيق.',
+    'بعد إعادة تشغيل الجهاز قد يمنع النظام بدء الحماية تلقائيًا؛ الطريقة '
+        'الموثوقة هي «VPN دائم التشغيل» في إعدادات Android.',
+    'وضع الأمان والإيقاف المؤقت يوقفان الفلترة عمدًا، ويظهران هنا كـ«غير محمي».',
     'SafeGuard طبقات حماية متعددة، ولا يضمن حجب 100% من المحتوى.',
   ];
 

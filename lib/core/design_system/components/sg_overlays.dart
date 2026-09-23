@@ -114,7 +114,7 @@ Future<T?> showSgBottomSheet<T>(
   );
 }
 
-/// Single-choice option row for bottom sheets.
+/// Single-choice option row (bottom sheets, mode pickers).
 class SgChoiceRow extends StatelessWidget {
   const SgChoiceRow({
     super.key,
@@ -122,46 +122,64 @@ class SgChoiceRow extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.icon,
+    this.description,
   });
 
   final String label;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// Null disables the row.
+  final VoidCallback? onTap;
   final IconData? icon;
+  final String? description;
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    final description = this.description;
     return Semantics(
       selected: selected,
       button: true,
+      enabled: onTap != null,
       child: InkWell(
         onTap: onTap,
         borderRadius: SgRadius.mdAll,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: SgSpace.x3,
-            vertical: SgSpace.x3,
-          ),
-          child: Row(
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 20, color: c.textSecondary),
-                const SizedBox(width: SgSpace.x3),
+        child: Opacity(
+          opacity: onTap == null && !selected ? 0.5 : 1,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SgSpace.x3,
+              vertical: SgSpace.x3,
+            ),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 20, color: c.textSecondary),
+                  const SizedBox(width: SgSpace.x3),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label, style: context.text.titleMedium),
+                      if (description != null)
+                        Text(description, style: context.text.bodySmall),
+                    ],
+                  ),
+                ),
+                AnimatedSwitcher(
+                  duration: SgMotion.fast,
+                  child: selected
+                      ? Icon(
+                          Icons.check_rounded,
+                          key: const ValueKey(true),
+                          color: c.accent,
+                          size: 22,
+                        )
+                      : const SizedBox(key: ValueKey(false), width: 22),
+                ),
               ],
-              Expanded(child: Text(label, style: context.text.titleMedium)),
-              AnimatedSwitcher(
-                duration: SgMotion.fast,
-                child: selected
-                    ? Icon(
-                        Icons.check_rounded,
-                        key: const ValueKey(true),
-                        color: c.accent,
-                        size: 22,
-                      )
-                    : const SizedBox(key: ValueKey(false), width: 22),
-              ),
-            ],
+            ),
           ),
         ),
       ),

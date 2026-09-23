@@ -124,20 +124,23 @@ class _EventRow extends StatelessWidget {
         '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
     final when = sameDay ? hhmm : '${t.day}/${t.month} $hhmm';
     return InkWell(
-      onTap: () => context.push(
-        Uri(
-          path: Routes.blocked,
-          queryParameters: {
-            'category': ?category?.id,
-            // Search/AI blocks can be reported as incorrect from there.
-            if (event.source == EventSourceKind.search ||
-                event.source == EventSourceKind.ai) ...{
-              'source': event.source.name,
-              'confidence': event.confidence.toStringAsFixed(2),
-            },
-          },
-        ).toString(),
-      ),
+      // Only blocks open the block screen (not e.g. a temporary unlock).
+      onTap: !event.isBlock
+          ? null
+          : () => context.push(
+              Uri(
+                path: Routes.blocked,
+                queryParameters: {
+                  'category': ?category?.id,
+                  // Search/AI blocks can be reported as incorrect from there.
+                  if (event.source == EventSourceKind.search ||
+                      event.source == EventSourceKind.ai) ...{
+                    'source': event.source.name,
+                    'confidence': event.confidence.toStringAsFixed(2),
+                  },
+                },
+              ).toString(),
+            ),
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: SgSpace.x4,
@@ -150,6 +153,7 @@ class _EventRow extends StatelessWidget {
                 EventSourceKind.app => Icons.apps_rounded,
                 EventSourceKind.search => Icons.manage_search_rounded,
                 EventSourceKind.ai => Icons.auto_awesome_outlined,
+                EventSourceKind.manual => Icons.timer_outlined,
                 _ => category?.icon ?? Icons.block_rounded,
               },
             ),
@@ -159,6 +163,10 @@ class _EventRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(switch (event.source) {
+                    EventSourceKind.manual
+                        when event.ruleType == 'temporary_unlock' =>
+                      'إيقاف مؤقت للحماية',
+                    _ when event.isCustomCategory => 'مخصص',
                     EventSourceKind.app => 'تطبيق محمي',
                     EventSourceKind.search =>
                       'بحث · ${category?.title ?? 'فئة غير معروفة'}',

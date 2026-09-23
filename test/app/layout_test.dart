@@ -36,6 +36,8 @@ void main() {
     '/app-protection',
     '/ai-protection',
     '/blocked?category=violence&source=ai&confidence=0.95',
+    '/keywords',
+    '/statistics',
   ];
 
   for (final textScale in [1.0, 1.3]) {
@@ -88,6 +90,30 @@ void main() {
               for (final c in ProtectionCategory.networkFiltered) c: 567,
             },
           );
+          // Phase 5: interruption banner, partial health, long keyword,
+          // statistics with every category.
+          engine
+            ..overall = OverallHealth.partiallyProtected
+            ..incidents.add(
+              ProtectionIncident(DateTime(2026), IncidentKind.bootStartFailed),
+            )
+            ..keywordList.add(
+              const CustomKeyword(
+                id: 1,
+                keyword: 'عبارة طويلة جدًا لاختبار التخطيط في الشاشة',
+              ),
+            )
+            ..detailed = DetailedStats(
+              today: WindowStats(
+                total: 123456,
+                bySource: {for (final s in EventSourceKind.values) s: 12345},
+                byCategory: {
+                  for (final c in ProtectionCategory.networkFiltered) c: 999,
+                },
+                customCategoryCount: 77,
+                falsePositiveReports: 42,
+              ),
+            );
           final deps = testDependencies(engine: engine);
           await deps.initialize();
           if (screen != '/welcome' && screen != '/pin/create') {

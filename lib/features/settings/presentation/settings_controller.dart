@@ -33,6 +33,10 @@ class SettingsController extends ChangeNotifier {
   Future<Result<void>> setAppLock(bool enabled) =>
       _update(_settings.copyWith(appLockEnabled: enabled));
 
+  /// PIN checks happen in the UI (turning the lock off needs the PIN).
+  Future<Result<void>> setProtectionLock(bool locked) =>
+      _update(_settings.copyWith(protectionLocked: locked));
+
   /// Called after all app data was wiped.
   void resetInMemory() {
     _settings = const AppSettings();

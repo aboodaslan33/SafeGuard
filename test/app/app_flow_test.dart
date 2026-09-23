@@ -82,6 +82,12 @@ void main() {
       of: find.byKey(const ValueKey('category-gambling')),
       matching: find.byType(Switch),
     );
+    // Phase 5: Home has a dashboard above the categories; scroll to them.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('category-gambling')),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.ensureVisible(gamblingSwitch);
     await tester.pumpAndSettle();
     await tester.tap(gamblingSwitch);

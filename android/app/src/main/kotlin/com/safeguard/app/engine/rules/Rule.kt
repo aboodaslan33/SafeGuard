@@ -12,10 +12,19 @@ enum class Category(val id: String) {
     DRUGS("drugs"),
     DANGEROUS("dangerous"),
     SAFE("safe"),
-    UNKNOWN("unknown");
+    UNKNOWN("unknown"),
+
+    /**
+     * User-defined (custom blocklist / keywords). Not a toggle: user rules
+     * are explicit intent and always apply while protection is on.
+     */
+    CUSTOM("custom");
 
     /** Whether the user can switch filtering of this category on or off. */
-    val isFilterable: Boolean get() = this != SAFE && this != UNKNOWN
+    val isFilterable: Boolean get() = this != SAFE && this != UNKNOWN && this != CUSTOM
+
+    /** Categories a user may assign to their own blocked domains/keywords. */
+    val isUserAssignable: Boolean get() = isFilterable || this == CUSTOM
 
     companion object {
         fun fromId(id: String?): Category? = entries.firstOrNull { it.id == id }
@@ -55,4 +64,14 @@ data class Rule(
     val version: Int = 1,
     /** Epoch millis of the last change. */
     val updatedAt: Long = 0L,
-)
+    /**
+     * Whether the rule also covers subdomains. Always true for list rules
+     * and user blocks; user allowlist entries may be exact (the domain and
+     * its `www.` alias only) so an exception can't open more than intended.
+     */
+    val includeSubdomains: Boolean = true,
+) {
+    /** Whether this rule applies to [domain] (already a suffix candidate). */
+    fun covers(domain: String): Boolean =
+        includeSubdomains || domain == this.domain || domain == "www." + this.domain
+}

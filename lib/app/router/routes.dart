@@ -18,6 +18,8 @@ abstract final class Routes {
   static const searchProtection = '/search-protection';
   static const appProtection = '/app-protection';
   static const aiProtection = '/ai-protection';
+  static const keywords = '/keywords';
+  static const statistics = '/statistics';
 
   static const _firstRun = {welcome, createPin};
   static const _entry = {splash, welcome, createPin, lock};

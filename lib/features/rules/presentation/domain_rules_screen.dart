@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/app_dependencies.dart';
-import '../../../app/router/app_router.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../protection/domain/protection.dart';
+import '../../protection/presentation/protection_guard.dart';
 import '../../protection/presentation/protection_ui.dart';
 import '../domain/domain_input.dart';
 
 /// Custom blocklist or allowlist.
 ///
-/// PIN rules: opening the allowlist requires the PIN (router-level, from
-/// Settings) because every entry loosens protection. On the blocklist,
-/// adding is free (it tightens) and removing requires the PIN.
+/// PIN rules: opening the allowlist requires the PIN (from Settings)
+/// because every entry loosens protection. On the blocklist, removing
+/// requires the PIN. With Protection Lock on, every change requires it.
+/// Duplicates and domains already in the other list are refused.
 class DomainRulesScreen extends StatefulWidget {
   const DomainRulesScreen({super.key, required this.action});
 
@@ -50,12 +51,22 @@ class _DomainRulesScreenState extends State<DomainRulesScreen> {
   }
 
   Future<void> _add() async {
+    // Adding to the blocklist tightens; it needs the PIN only when locked.
+    if (_isBlock &&
+        !await ProtectionGuard.authorize(
+          context,
+          loosens: false,
+          reason: 'لتعديل قائمة الحظر (إعدادات الحماية مقفلة)',
+        )) {
+      return;
+    }
+    if (!mounted) return;
     final added = await showSgBottomSheet<DomainRule>(
       context,
       title: _isBlock ? 'حظر نطاق' : 'السماح بنطاق',
       subtitle: _isBlock
-          ? 'يُحظر النطاق وجميع نطاقاته الفرعية.'
-          : 'يُسمح بالنطاق ونطاقاته الفرعية حتى لو كان ضمن فئة محظورة.',
+          ? 'يُحظر النطاق وجميع نطاقاته الفرعية، أيًا كانت إعدادات الفئات.'
+          : 'يُسمح بالنطاق حتى لو كان ضمن فئة محظورة. انتبه: السماح يتجاوز كل قواعد الحظر.',
       builder: (_) => _AddDomainForm(action: widget.action, engine: _engine),
     );
     if (added != null && mounted) {
@@ -65,8 +76,14 @@ class _DomainRulesScreenState extends State<DomainRulesScreen> {
   }
 
   Future<void> _remove(DomainRule rule) async {
-    if (_isBlock &&
-        !await requirePin(context, reason: 'لإزالة ${rule.domain} من الحظر')) {
+    // Removing a block loosens; removing an exception tightens.
+    if (!await ProtectionGuard.authorize(
+      context,
+      loosens: _isBlock,
+      reason: _isBlock
+          ? 'لإزالة ${rule.domain} من الحظر'
+          : 'لتعديل قائمة السماح (إعدادات الحماية مقفلة)',
+    )) {
       return;
     }
     try {
@@ -149,8 +166,12 @@ class _RuleRow extends StatelessWidget {
       child: Row(
         children: [
           SgIconWell(
-            icon: category?.icon ?? Icons.verified_outlined,
-            foreground: category == null ? c.accent : c.textSecondary,
+            icon: rule.action == RuleAction.allow
+                ? Icons.verified_outlined
+                : category?.icon ?? Icons.person_pin_outlined,
+            foreground: rule.action == RuleAction.allow
+                ? c.accent
+                : c.textSecondary,
           ),
           const SizedBox(width: SgSpace.x3),
           Expanded(
@@ -166,7 +187,11 @@ class _RuleRow extends StatelessWidget {
                   style: context.text.titleMedium,
                 ),
                 Text(
-                  category?.title ?? 'مسموح دائمًا',
+                  rule.action == RuleAction.block
+                      ? (category?.title ?? 'مخصص')
+                      : rule.includeSubdomains
+                      ? 'مسموح مع كل النطاقات الفرعية'
+                      : 'مسموح: النطاق نفسه وwww فقط',
                   style: context.text.bodySmall,
                 ),
               ],
@@ -198,7 +223,10 @@ class _AddDomainForm extends StatefulWidget {
 
 class _AddDomainFormState extends State<_AddDomainForm> {
   final _controller = TextEditingController();
-  ProtectionCategory _category = ProtectionCategory.sexual;
+
+  /// Null = the user's own "مخصص" category.
+  ProtectionCategory? _category;
+  bool _includeSubdomains = false;
   String? _error;
   bool _busy = false;
 
@@ -221,7 +249,10 @@ class _AddDomainFormState extends State<_AddDomainForm> {
     try {
       final rule = widget.action == RuleAction.block
           ? await widget.engine.addBlockedDomain(domain, _category)
-          : await widget.engine.addAllowedDomain(domain);
+          : await widget.engine.addAllowedDomain(
+              domain,
+              includeSubdomains: _includeSubdomains,
+            );
       if (mounted) Navigator.of(context).pop(rule);
     } on AppFailure catch (f) {
       if (mounted) {
@@ -261,6 +292,12 @@ class _AddDomainFormState extends State<_AddDomainForm> {
             const SizedBox(height: SgSpace.x4),
             Text('الفئة', style: context.text.titleSmall),
             const SizedBox(height: SgSpace.x1),
+            SgChoiceRow(
+              label: 'مخصص',
+              icon: Icons.person_pin_outlined,
+              selected: _category == null,
+              onTap: () => setState(() => _category = null),
+            ),
             for (final c in ProtectionCategory.networkFiltered)
               SgChoiceRow(
                 label: c.title,
@@ -268,6 +305,20 @@ class _AddDomainFormState extends State<_AddDomainForm> {
                 selected: c == _category,
                 onTap: () => setState(() => _category = c),
               ),
+          ],
+          if (widget.action == RuleAction.allow) ...[
+            const SizedBox(height: SgSpace.x2),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('يشمل كل النطاقات الفرعية'),
+              subtitle: Text(
+                _includeSubdomains
+                    ? 'سيُسمح بأي عنوان ينتهي بهذا النطاق، مثل shop.example.com.'
+                    : 'يُسمح بالنطاق نفسه وwww فقط، ولا تُفتح نطاقاته الفرعية.',
+              ),
+              value: _includeSubdomains,
+              onChanged: (v) => setState(() => _includeSubdomains = v),
+            ),
           ],
           const SizedBox(height: SgSpace.x4),
           PrimaryButton(label: 'إضافة', loading: _busy, onPressed: _submit),

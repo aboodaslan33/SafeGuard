@@ -1,3 +1,4 @@
+import '../../../core/error/failures.dart';
 import '../../../core/platform/protection_channel.dart';
 import '../domain/protection.dart';
 
@@ -23,10 +24,12 @@ class NativeProtectionEngine implements ProtectionEngine {
   @override
   Future<void> apply(ProtectionState state) => _channel.setConfiguration(
     enabled: state.enabled,
+    // The user's own choices; native resolves NORMAL/STRICT presets.
     categories: [
       for (final c in ProtectionCategory.networkFiltered)
-        if (state.isActive(c)) c.id,
+        if (state.isChosen(c)) c.id,
     ],
+    mode: state.mode.name,
   );
 
   @override
@@ -50,15 +53,29 @@ class NativeProtectionEngine implements ProtectionEngine {
   @override
   Future<DomainRule> addBlockedDomain(
     String domain,
-    ProtectionCategory category,
+    ProtectionCategory? category,
   ) async =>
-      _rule(await _channel.addBlockedDomain(domain, category.id)) ??
+      _rule(
+        await _channel.addBlockedDomain(domain, category?.id ?? 'custom'),
+      ) ??
       DomainRule(domain: domain, action: RuleAction.block, category: category);
 
   @override
-  Future<DomainRule> addAllowedDomain(String domain) async =>
-      _rule(await _channel.addAllowedDomain(domain)) ??
-      DomainRule(domain: domain, action: RuleAction.allow);
+  Future<DomainRule> addAllowedDomain(
+    String domain, {
+    bool includeSubdomains = false,
+  }) async =>
+      _rule(
+        await _channel.addAllowedDomain(
+          domain,
+          includeSubdomains: includeSubdomains,
+        ),
+      ) ??
+      DomainRule(
+        domain: domain,
+        action: RuleAction.allow,
+        includeSubdomains: includeSubdomains,
+      );
 
   @override
   Future<bool> removeRule(DomainRule rule) => switch (rule.action) {
@@ -83,6 +100,10 @@ class NativeProtectionEngine implements ProtectionEngine {
             ruleType: m['ruleType'] is String
                 ? m['ruleType']! as String
                 : 'domain',
+            isBlock: m['action'] != 'allow',
+            categoryId: m['category'] is String
+                ? m['category']! as String
+                : null,
           ),
     ];
   }
@@ -208,6 +229,7 @@ class NativeProtectionEngine implements ProtectionEngine {
       updatedAt: updated is int
           ? DateTime.fromMillisecondsSinceEpoch(updated)
           : null,
+      includeSubdomains: m['includeSubdomains'] != false,
     );
   }
 
@@ -237,4 +259,64 @@ class NativeProtectionEngine implements ProtectionEngine {
   @override
   Future<ImageCheck> checkImage() async =>
       ImageCheck.fromMap(await _channel.checkImage());
+
+  @override
+  Future<HealthReport> health() async =>
+      HealthReport.fromMap(await _channel.getHealth());
+
+  @override
+  Future<void> acknowledgeIncidents(DateTime upTo) =>
+      _channel.acknowledgeIncidents(upTo.millisecondsSinceEpoch);
+
+  @override
+  Future<bool> tryRecover() => _channel.tryRecover();
+
+  @override
+  Future<HealthReport> startPause(int minutes) async =>
+      HealthReport.fromMap(await _channel.startPause(minutes));
+
+  @override
+  Future<HealthReport> endPause() async =>
+      HealthReport.fromMap(await _channel.endPause());
+
+  @override
+  Future<HealthReport> enterSafeMode() async =>
+      HealthReport.fromMap(await _channel.enterSafeMode());
+
+  @override
+  Future<HealthReport> resetProtection() async =>
+      HealthReport.fromMap(await _channel.resetProtection());
+
+  @override
+  Future<DetailedStats> detailedStatistics() async =>
+      DetailedStats.fromMap(await _channel.getDetailedStatistics());
+
+  @override
+  Future<List<CustomKeyword>> keywords() async => (await _channel.getKeywords())
+      .map(CustomKeyword.fromMap)
+      .nonNulls
+      .toList();
+
+  @override
+  Future<CustomKeyword> addKeyword(
+    String keyword,
+    ProtectionCategory? category,
+  ) async =>
+      CustomKeyword.fromMap(
+        await _channel.addKeyword(keyword, category?.id ?? 'custom'),
+      ) ??
+      (throw EngineFailure('INTERNAL'));
+
+  @override
+  Future<bool> removeKeyword(int id) => _channel.removeKeyword(id);
+
+  @override
+  Future<ExportResult> saveExport(String json) async {
+    final r = await _channel.saveExport(json);
+    return switch (r['status']) {
+      'saved' => ExportResult.saved,
+      'cancelled' => ExportResult.cancelled,
+      _ => ExportResult.failed,
+    };
+  }
 }

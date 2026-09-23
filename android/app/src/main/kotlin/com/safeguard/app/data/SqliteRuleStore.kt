@@ -108,6 +108,7 @@ class SqliteRuleStore(private val db: SafeGuardDatabase) : RuleStore {
             source = source,
             version = c.getInt(5),
             updatedAt = c.getLong(6),
+            includeSubdomains = c.getInt(7) != 0,
         )
     }
 
@@ -119,9 +120,10 @@ class SqliteRuleStore(private val db: SafeGuardDatabase) : RuleStore {
         put("source", rule.source.id)
         put("version", rule.version)
         put("updated_at", rule.updatedAt)
+        put("include_subdomains", if (rule.includeSubdomains) 1 else 0)
     }
 
     private companion object {
-        const val COLUMNS = "domain, category, action, enabled, source, version, updated_at"
+        const val COLUMNS = "domain, category, action, enabled, source, version, updated_at, include_subdomains"
     }
 }

@@ -14,6 +14,7 @@ import android.system.OsConstants
 import android.system.StructPollfd
 import android.util.Log
 import com.safeguard.app.engine.dns.DnsPacketFilter
+import com.safeguard.app.engine.status.VpnState
 import com.safeguard.app.protection.ProtectionManager
 import java.io.FileDescriptor
 import java.io.FileInputStream
@@ -60,6 +61,12 @@ class SafeGuardVpnService : VpnService() {
                 if (!manager.config.enabled && intent?.action != ACTION_START) {
                     // The user turned protection off in SafeGuard; honour it
                     // even if the system tries to (re)start the VPN.
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                if (manager.config.safeMode) {
+                    // Safe Mode: no automatic start (boot, Always-on, sticky
+                    // restart) until the user re-enables protection in the app.
                     stopSelf()
                     return START_NOT_STICKY
                 }
@@ -112,7 +119,7 @@ class SafeGuardVpnService : VpnService() {
                 return
             }
             tun = fd
-            val forwarder = DnsForwarder(this) { this.monitor?.current }
+            val forwarder = DnsForwarder(this, { this.monitor?.current }, manager.upstreamHealth)
             this.forwarder = forwarder
             interruptPipe = Os.pipe()
             worker = Thread({ runLoop(fd, forwarder) }, "sg-vpn-loop").apply { start() }
@@ -198,11 +205,30 @@ class SafeGuardVpnService : VpnService() {
         if (!stopRequested) {
             // The loop died on its own. Leaving the tun up would route every
             // DNS query into a dead interface (the device loses name
-            // resolution while the UI says "active"). Report and tear down.
-            manager.status.failed(failure ?: "filter loop stopped")
-            Handler(Looper.getMainLooper()).post {
+            // resolution while the UI says "active"): tear down, then try a
+            // bounded, backed-off recovery (RecoveryPolicy). If recovery is
+            // not allowed or exhausted, report the failure honestly.
+            val reason = failure ?: "filter loop stopped"
+            val main = Handler(Looper.getMainLooper())
+            main.post {
                 shutdown()
-                stopSelf()
+                val delay = manager.recovery.nextDelay(manager.recoveryFacts(VpnState.ERROR), System.currentTimeMillis())
+                if (delay == null) {
+                    manager.status.failed(reason)
+                    stopSelf()
+                    return@post
+                }
+                manager.status.starting()
+                main.postDelayed({
+                    manager.recovery.recordAttempt(System.currentTimeMillis())
+                    if (!manager.config.enabled || manager.config.safeMode) {
+                        manager.status.stopped()
+                        stopSelf()
+                        return@postDelayed
+                    }
+                    establish()
+                    if (tun != null) manager.onRecovered()
+                }, delay)
             }
         }
     }

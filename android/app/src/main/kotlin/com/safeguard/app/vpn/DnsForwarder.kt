@@ -3,6 +3,7 @@ package com.safeguard.app.vpn
 import android.net.VpnService
 import com.safeguard.app.engine.dns.DnsMessage
 import com.safeguard.app.engine.dns.DnsPacketFilter
+import com.safeguard.app.engine.health.UpstreamHealth
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -24,6 +25,7 @@ import java.util.concurrent.TimeUnit
 class DnsForwarder(
     private val vpn: VpnService,
     private val upstream: () -> UpstreamNetwork?,
+    private val health: UpstreamHealth? = null,
 ) {
     private val executor = ThreadPoolExecutor(
         2, 8, 30, TimeUnit.SECONDS,
@@ -44,7 +46,14 @@ class DnsForwarder(
     }
 
     private fun resolve(query: ByteArray): ByteArray? {
-        val net = upstream() ?: return null // offline: SERVFAIL, fast
+        val net = upstream() ?: return null // offline: SERVFAIL, fast (not a failure)
+        val answer = resolveOn(net, query)
+        val now = System.currentTimeMillis()
+        if (answer != null) health?.success(now) else health?.failure(now)
+        return answer
+    }
+
+    private fun resolveOn(net: UpstreamNetwork, query: ByteArray): ByteArray? {
         val servers = net.dnsServers.ifEmpty { FALLBACK }
         val queryId = DnsMessage.id(query)
         for (server in servers.take(MAX_SERVERS)) {

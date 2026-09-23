@@ -75,21 +75,43 @@ class FakeProtectionEngine implements ProtectionEngine {
   Future<List<DomainRule>> userRules(RuleAction action) async =>
       rules.where((r) => r.action == action).toList();
 
-  DomainRule _add(String input, RuleAction action, ProtectionCategory? c) {
-    final domain = DomainInput.normalize(input);
+  /// Mirrors native `UserRules`: duplicates and cross-list conflicts are
+  /// refused, not silently replaced.
+  DomainRule _add(
+    String input,
+    RuleAction action,
+    ProtectionCategory? c, {
+    bool includeSubdomains = true,
+  }) {
+    final domain = DomainInput.normalize(input)
+        ?.replaceFirst(RegExp(r'^www\.'), '');
     if (domain == null) throw EngineFailure('INVALID_DOMAIN');
-    rules.removeWhere((r) => r.domain == domain);
-    final rule = DomainRule(domain: domain, action: action, category: c);
+    for (final r in rules) {
+      if (r.domain == domain) {
+        throw EngineFailure(
+          r.action == action ? 'DUPLICATE_DOMAIN' : 'IN_OTHER_LIST',
+        );
+      }
+    }
+    final rule = DomainRule(
+      domain: domain,
+      action: action,
+      category: c,
+      includeSubdomains: action == RuleAction.block || includeSubdomains,
+    );
     rules.add(rule);
     return rule;
   }
 
   @override
-  Future<DomainRule> addBlockedDomain(String d, ProtectionCategory c) async =>
+  Future<DomainRule> addBlockedDomain(String d, ProtectionCategory? c) async =>
       _add(d, RuleAction.block, c);
   @override
-  Future<DomainRule> addAllowedDomain(String d) async =>
-      _add(d, RuleAction.allow, null);
+  Future<DomainRule> addAllowedDomain(
+    String d, {
+    bool includeSubdomains = false,
+  }) async =>
+      _add(d, RuleAction.allow, null, includeSubdomains: includeSubdomains);
 
   @override
   Future<bool> removeRule(DomainRule rule) async {
@@ -129,6 +151,7 @@ class FakeProtectionEngine implements ProtectionEngine {
     rules.clear();
     logs.clear();
     protected.clear();
+    keywordList.clear();
     await stop();
   }
 
@@ -325,5 +348,131 @@ class FakeProtectionEngine implements ProtectionEngine {
   Future<ImageCheck> checkImage() async {
     imageChecks++;
     return imageResult;
+  }
+
+  // ---- Phase 5 ----
+  ProtectionMode nativeMode = ProtectionMode.custom;
+  Duration pausedFor = Duration.zero;
+  bool safeMode = false;
+  final incidents = <ProtectionIncident>[];
+  final keywordList = <CustomKeyword>[];
+  int recoverCalls = 0;
+  int resets = 0;
+  String? exported;
+  ExportResult exportResult = ExportResult.saved;
+  DetailedStats detailed = const DetailedStats();
+  List<LayerHealth> layers = const [
+    LayerHealth(HealthLayer.vpn, LayerState.active),
+    LayerHealth(HealthLayer.dns, LayerState.active),
+    LayerHealth(HealthLayer.rules, LayerState.active),
+    LayerHealth(HealthLayer.search, LayerState.active),
+    LayerHealth(HealthLayer.ai, LayerState.active),
+  ];
+  OverallHealth overall = OverallHealth.protected;
+
+  HealthReport get _report => HealthReport(
+    overall: overall,
+    layers: layers,
+    mode: applied?.mode ?? nativeMode,
+    pausedRemaining: pausedFor,
+    safeMode: safeMode,
+    incidents: List.of(incidents),
+  );
+
+  @override
+  Future<HealthReport> health() async => _report;
+
+  @override
+  Future<void> acknowledgeIncidents(DateTime upTo) async =>
+      incidents.removeWhere((i) => !i.time.isAfter(upTo));
+
+  @override
+  Future<bool> tryRecover() async {
+    recoverCalls++;
+    return false;
+  }
+
+  @override
+  Future<HealthReport> startPause(int minutes) async {
+    if (![5, 10, 30].contains(minutes)) throw EngineFailure('INVALID_ARGUMENT');
+    pausedFor = Duration(minutes: minutes);
+    logs.insert(
+      0,
+      BlockEvent(
+        time: DateTime(2026),
+        domain: 'unlock:${minutes}m',
+        category: null,
+        source: EventSourceKind.manual,
+        ruleType: 'temporary_unlock',
+        isBlock: false,
+        categoryId: 'unknown',
+      ),
+    );
+    return _report;
+  }
+
+  @override
+  Future<HealthReport> endPause() async {
+    pausedFor = Duration.zero;
+    return _report;
+  }
+
+  @override
+  Future<HealthReport> enterSafeMode() async {
+    safeMode = true;
+    overall = OverallHealth.notProtected;
+    await stop();
+    return _report;
+  }
+
+  @override
+  Future<HealthReport> resetProtection() async {
+    resets++;
+    pausedFor = Duration.zero;
+    safeMode = false;
+    return _report;
+  }
+
+  @override
+  Future<DetailedStats> detailedStatistics() async => detailed;
+
+  @override
+  Future<List<CustomKeyword>> keywords() async => List.of(keywordList);
+
+  @override
+  Future<CustomKeyword> addKeyword(
+    String keyword,
+    ProtectionCategory? category,
+  ) async {
+    final k = keyword.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    if (k.isEmpty || k.split(' ').length > 5) {
+      throw EngineFailure('INVALID_KEYWORD');
+    }
+    if (!k.contains(' ') && k.length < 3) {
+      throw EngineFailure('KEYWORD_TOO_SHORT');
+    }
+    if (keywordList.any((e) => e.keyword == k)) {
+      throw EngineFailure('DUPLICATE_KEYWORD');
+    }
+    final item = CustomKeyword(
+      id: keywordList.length + 1,
+      keyword: k,
+      category: category,
+    );
+    keywordList.add(item);
+    return item;
+  }
+
+  @override
+  Future<bool> removeKeyword(int id) async {
+    final before = keywordList.length;
+    keywordList.removeWhere((k) => k.id == id);
+    return keywordList.length != before;
+  }
+
+  @override
+  Future<ExportResult> saveExport(String json) async {
+    exported = json;
+    return exportResult;
   }
 }

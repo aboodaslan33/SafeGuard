@@ -65,7 +65,9 @@ fun interface DomainClassifier {
  *
  * Precedence, highest first:
  *  1. Protection off → ALLOW.
- *  2. User allowlist (domain or any parent) → ALLOW, even over a block.
+ *  2. User allowlist → ALLOW, even over a block. An entry covers its
+ *     subdomains only if it was added with `includeSubdomains`; otherwise
+ *     just the domain and its `www.` alias.
  *  3. User blocklist (domain or any parent) → BLOCK. User blocks apply
  *     whatever the category toggles, because they are explicit intent.
  *  4. Most specific list rule: SAFE/ALLOW → ALLOW; otherwise BLOCK only if
@@ -92,7 +94,7 @@ class RuleEngine(
         val domain = DomainName.normalizeQueryName(rawDomain)
             ?: return Decision(RuleAction.ALLOW, Category.UNKNOWN, DecisionReason.INVALID_DOMAIN, null)
 
-        val matches = matchesFor(domain)
+        val matches = matchesFor(domain).filter { it.covers(domain) }
 
         mostSpecific(matches.filter { it.source == RuleSource.USER && it.action == RuleAction.ALLOW })?.let {
             return Decision(RuleAction.ALLOW, it.category, DecisionReason.ALLOWLISTED, domain, it)

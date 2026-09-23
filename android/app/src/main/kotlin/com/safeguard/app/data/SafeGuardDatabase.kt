@@ -54,12 +54,14 @@ class SafeGuardDatabase(context: Context) :
         db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         migrateToV2(db)
         migrateToV3(db)
+        migrateToV4(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // One step per version; never drop user rules or logs.
         if (oldVersion < 2) migrateToV2(db)
         if (oldVersion < 3) migrateToV3(db)
+        if (oldVersion < 4) migrateToV4(db)
     }
 
     /**
@@ -95,6 +97,32 @@ class SafeGuardDatabase(context: Context) :
         )
     }
 
+    /**
+     * v4 (Phase 5): allowlist scope (existing rows keep covering subdomains,
+     * as before) and user keywords (stored normalised).
+     */
+    private fun migrateToV4(db: SQLiteDatabase) {
+        db.execSQL("ALTER TABLE rules ADD COLUMN include_subdomains INTEGER NOT NULL DEFAULT 1")
+        db.execSQL(
+            """
+            CREATE TABLE custom_keywords (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phrase TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL,
+                added_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        // Statistics use the existing ts index (checked with EXPLAIN QUERY PLAN).
+    }
+
+    /** Cheap liveness check for the health report: opens and reads. */
+    fun isHealthy(): Boolean = try {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM meta", emptyArray()).use { it.moveToFirst() }
+    } catch (e: Exception) {
+        false
+    }
+
     fun getMeta(key: String): String? =
         readableDatabase.rawQuery("SELECT value FROM meta WHERE key = ?", arrayOf(key)).use {
             if (it.moveToFirst()) it.getString(0) else null
@@ -106,6 +134,6 @@ class SafeGuardDatabase(context: Context) :
 
     companion object {
         const val NAME = "safeguard.db"
-        const val VERSION = 3
+        const val VERSION = 4
     }
 }

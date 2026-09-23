@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_dependencies.dart';
-import '../../../app/router/app_router.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_controller.dart';
+import '../../protection/presentation/protection_guard.dart';
 import '../../protection/presentation/protection_ui.dart';
 
 /// Search Protection: SafeSearch on supported engines (DNS level) and a
@@ -25,10 +25,18 @@ class SearchProtectionScreen extends StatelessWidget {
     return ListenableBuilder(
       listenable: protection,
       builder: (context, _) {
-        final s = protection.searchSettings.copyWith(
-          enabled: protection.searchProtectionEnabled,
-        );
         final state = protection.state;
+        final preset = state.mode.isPreset;
+        // NORMAL/STRICT enforce fixed search settings; show what is enforced.
+        final s = preset
+            ? SearchSettings(
+                youtube: state.mode == ProtectionMode.strict
+                    ? YouTubeMode.strict
+                    : YouTubeMode.moderate,
+              )
+            : protection.searchSettings.copyWith(
+                enabled: protection.searchProtectionEnabled,
+              );
         final running = protection.snapshot.isActive;
         final c = context.colors;
         return SgPage(
@@ -45,11 +53,28 @@ class SearchProtectionScreen extends StatelessWidget {
                   title: 'حماية البحث',
                   subtitle: s.enabled ? 'مفعّلة' : 'متوقفة',
                   switchValue: s.enabled,
-                  onSwitchChanged: (v) =>
-                      _update(context, protection, s, s.copyWith(enabled: v)),
+                  onSwitchChanged: preset
+                      ? null
+                      : (v) => _update(
+                          context,
+                          protection,
+                          s,
+                          s.copyWith(enabled: v),
+                        ),
                 ),
               ],
             ),
+            if (preset) ...[
+              const SizedBox(height: SgSpace.x3),
+              SgNote(
+                icon: Icons.lock_outline_rounded,
+                color: c.info,
+                background: c.infoMuted,
+                text:
+                    'وضع الحماية «${state.mode == ProtectionMode.strict ? 'صارم' : 'عادي'}» '
+                    'يحدد هذه الإعدادات. لتعديلها اختر الوضع «مخصص» من الشاشة الرئيسية.',
+              ),
+            ],
             if (s.enabled && !running) ...[
               const SizedBox(height: SgSpace.x3),
               SgNote(
@@ -92,7 +117,7 @@ class SearchProtectionScreen extends StatelessWidget {
                   icon: Icons.smart_display_outlined,
                   title: 'YouTube',
                   value: _youtubeLabel(s.youtube),
-                  onTap: s.enabled
+                  onTap: s.enabled && !preset
                       ? () => _pickYouTube(context, protection, s)
                       : null,
                 ),
@@ -110,7 +135,7 @@ class SearchProtectionScreen extends StatelessWidget {
                   CategoryTile(
                     category: category,
                     active: state.isActive(category),
-                    enabled: state.enabled && s.enabled,
+                    enabled: state.enabled && s.enabled && !preset,
                     onChanged: (v) =>
                         ProtectionActions.setCategory(context, category, v),
                   ),
@@ -138,7 +163,9 @@ class SearchProtectionScreen extends StatelessWidget {
       icon: Icons.travel_explore_rounded,
       title: name,
       switchValue: value && current.enabled,
-      onSwitchChanged: current.enabled
+      onSwitchChanged:
+          current.enabled &&
+              !AppScope.of(context).protection.state.mode.isPreset
           ? (v) => _update(context, protection, current, next(v))
           : null,
     );
@@ -185,11 +212,18 @@ class SearchProtectionScreen extends StatelessWidget {
     SearchSettings current,
     SearchSettings next,
   ) async {
-    if (current.isLoosenedBy(next)) {
-      final reason = !next.enabled
-          ? 'لإيقاف حماية البحث'
-          : 'لتخفيف إعدادات البحث الآمن';
-      if (!await requirePin(context, reason: reason)) return;
+    final loosens = current.isLoosenedBy(next);
+    final reason = !next.enabled
+        ? 'لإيقاف حماية البحث'
+        : loosens
+        ? 'لتخفيف إعدادات البحث الآمن'
+        : 'لتعديل إعدادات البحث (إعدادات الحماية مقفلة)';
+    if (!await ProtectionGuard.authorize(
+      context,
+      loosens: loosens,
+      reason: reason,
+    )) {
+      return;
     }
     final result = await protection.setSearchSettings(next);
     if (result case Err(:final failure) when context.mounted) {

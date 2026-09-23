@@ -12,6 +12,20 @@ import android.app.PendingIntent
 import android.net.VpnService
 import android.util.Log
 import com.safeguard.app.MainActivity
+import com.safeguard.app.data.SqliteCustomKeywordStore
+import com.safeguard.app.engine.health.HealthInputs
+import com.safeguard.app.engine.health.HealthReport
+import com.safeguard.app.engine.health.Incident
+import com.safeguard.app.engine.health.IncidentDetector
+import com.safeguard.app.engine.health.IncidentKind
+import com.safeguard.app.engine.health.ProtectionHealthEvaluator
+import com.safeguard.app.engine.health.RecoveryPolicy
+import com.safeguard.app.engine.health.UpstreamHealth
+import com.safeguard.app.engine.modes.ProtectionMode
+import com.safeguard.app.engine.pause.TemporaryUnlock
+import com.safeguard.app.engine.rules.UserRules
+import com.safeguard.app.engine.search.CustomKeywords
+import com.safeguard.app.engine.stats.DetailedStatistics
 import com.safeguard.app.ai.BitmapImageDecoder
 import com.safeguard.app.data.SqliteAiStatsStore
 import com.safeguard.app.engine.ai.AdapterContentClassifier
@@ -70,9 +84,6 @@ import com.safeguard.app.vpn.SafeGuardVpnService
 import com.safeguard.app.vpn.UpstreamNetwork
 import java.util.concurrent.Executors
 
-/** Why a rule change was refused. Surfaced to Flutter as error codes. */
-class RuleValidationException(val code: String, message: String) : IllegalArgumentException(message)
-
 /**
  * Process-wide facade over the native protection stack. Both the VPN
  * service and the Flutter channel talk to this object only.
@@ -86,7 +97,7 @@ class ProtectionManager private constructor(private val context: Context) {
     private val events = SqliteBlockEventStore(database)
     private val logExecutor = Executors.newSingleThreadExecutor { Thread(it, "sg-block-log").apply { isDaemon = true } }
     val logger = BlockLogger(events, logExecutor)
-    private val statistics = StatisticsService(events)
+    private val statistics by lazy { StatisticsService(events, reportsSince = aiStats::reportsSince) }
     val status = ProtectionStatusHolder()
 
     private val hasher = QueryHasher(config.hashKey())
@@ -116,14 +127,24 @@ class ProtectionManager private constructor(private val context: Context) {
         key = config.hashKey(),
     )
 
-    /** Search filtering: rule layer first, then the on-device text model. */
+    val keywords = CustomKeywords(SqliteCustomKeywordStore(database))
+
+    private val userRules = UserRules(rules)
+
+    // ---- Health, recovery, interruptions (Phase 5) ----------------------
+
+    val recovery = RecoveryPolicy()
+    val upstreamHealth = UpstreamHealth()
+
+    /** Search filtering: custom keywords, rule layer, then the on-device text model. */
     val searchFilter: SearchFilterService = AiSearchFilterService(
         rules = RuleBasedSearchClassifier(),
         config = { config.searchPolicy },
         ai = contentClassifier,
-        aiSettings = { config.rawAi },
+        aiSettings = { config.effectiveAi },
         listener = SearchEventRecorder(logger, hasher),
         aiListener = aiStatsRecorder,
+        keywords = keywords,
     )
 
     private val protectedApps = SqliteProtectedAppStore(database)
@@ -138,7 +159,19 @@ class ProtectionManager private constructor(private val context: Context) {
     init {
         seedBuiltInRules()
         refreshRuleCounts()
-        status.update { it.copy(protectionEnabled = config.enabled, enabledCategories = config.policy.blockedCategories.size) }
+        status.update { it.copy(protectionEnabled = config.enabled, enabledCategories = config.effectiveCategories.size) }
+        // Interruption ("tamper") detection: VPN transitions the user didn't ask for.
+        var previous = status.current.vpnState
+        status.addListener { s ->
+            val incident = IncidentDetector.onVpnTransition(
+                previous,
+                s.vpnState,
+                userWantsProtection = config.enabled && !config.safeMode,
+                now = System.currentTimeMillis(),
+            )
+            previous = s.vpnState
+            if (incident != null) config.addIncident(incident)
+        }
     }
 
     // ---- VPN lifecycle -------------------------------------------------
@@ -146,9 +179,12 @@ class ProtectionManager private constructor(private val context: Context) {
     /** Intent to show the system VPN consent dialog, or null if granted. */
     fun permissionIntent(): Intent? = VpnService.prepare(context)
 
-    /** Starts the VPN. Returns false if consent is required first. */
+    /** Starts the VPN (and leaves Safe Mode). Returns false if consent is required first. */
     fun start(): Boolean {
         config.update(enabled = true)
+        config.safeMode = false
+        recovery.reset()
+        upstreamHealth.reset()
         status.update { it.copy(protectionEnabled = true) }
         if (permissionIntent() != null) {
             status.permissionRequired()
@@ -181,46 +217,138 @@ class ProtectionManager private constructor(private val context: Context) {
 
     // ---- Configuration -------------------------------------------------
 
-    fun setConfiguration(enabled: Boolean, categories: Set<Category>) {
-        val policy = config.update(enabled = enabled, categories = categories)
-        status.update { it.copy(protectionEnabled = policy.enabled, enabledCategories = policy.blockedCategories.size) }
+    fun setConfiguration(enabled: Boolean, categories: Set<Category>, mode: ProtectionMode? = null) {
+        val policy = config.update(enabled = enabled, categories = categories, mode = mode)
+        status.update { it.copy(protectionEnabled = policy.enabled, enabledCategories = config.effectiveCategories.size) }
     }
 
     fun setCategory(category: Category, enabled: Boolean) {
         require(category.isFilterable) { "not a filterable category" }
-        val policy = config.setCategory(category, enabled)
-        status.update { it.copy(enabledCategories = policy.blockedCategories.size) }
+        config.setCategory(category, enabled)
+        status.update { it.copy(enabledCategories = config.effectiveCategories.size) }
     }
+
+    // ---- Temporary unlock, Safe Mode (Phase 5) --------------------------
+
+    /**
+     * Pauses filtering for [minutes] (5/10/30; the PIN was checked in the
+     * UI). The VPN stays up; the filter reads the deadline on every query,
+     * so protection resumes on time even if SafeGuard's UI is closed.
+     */
+    fun startPause(minutes: Int): TemporaryUnlock {
+        val p = config.startPause(minutes)
+        logger.record(
+            BlockEvent(
+                timestamp = p.startedAtWall,
+                subject = "unlock:${minutes}m",
+                category = Category.UNKNOWN,
+                source = EventSource.MANUAL,
+                action = RuleAction.ALLOW,
+                ruleType = BlockEvent.RULE_TYPE_TEMPORARY_UNLOCK,
+            ),
+        )
+        return p
+    }
+
+    fun endPause() = config.endPause()
+
+    /**
+     * Safe Mode: stops the VPN so a filtering problem can't keep the device
+     * offline, and blocks automatic restarts until [start] is called.
+     */
+    fun enterSafeMode() {
+        config.safeMode = true
+        SafeGuardVpnService.stop(context)
+    }
+
+    fun recordIncident(kind: IncidentKind) = config.addIncident(Incident(System.currentTimeMillis(), kind))
+
+    /** Called by the VPN service when a recovery attempt brought the filter back. */
+    fun onRecovered() = recordIncident(IncidentKind.RECOVERED)
+
+    fun recoveryFacts(state: VpnState = status.current.vpnState) = RecoveryPolicy.Facts(
+        userWantsProtection = config.enabled,
+        paused = config.isPaused(),
+        safeMode = config.safeMode,
+        vpnState = state,
+        vpnPermission = permissionIntent() == null,
+        otherVpnActive = status.current.otherVpnActive,
+    )
+
+    /**
+     * App-side recovery (e.g. when SafeGuard comes to the foreground): if
+     * protection should run but the VPN is stopped or failed, and the
+     * policy allows it, request one restart. Returns true if attempted; the
+     * result is visible in the next status/health report.
+     */
+    fun tryRecover(): Boolean {
+        refreshEnvironment()
+        val now = System.currentTimeMillis()
+        recovery.nextDelay(recoveryFacts(), now) ?: return false
+        recovery.recordAttempt(now)
+        SafeGuardVpnService.start(context)
+        return true
+    }
+
+    fun health(): HealthReport {
+        refreshEnvironment()
+        val a11y = accessibilityState()
+        val appCount = protectedApps.list().size
+        val a11yOn = a11y == AccessibilityState.ENABLED
+        IncidentDetector.onAccessibilityChange(config.accessibilityWasEnabled, a11yOn, appCount, System.currentTimeMillis())
+            ?.let { config.addIncident(it) }
+        if (config.accessibilityWasEnabled != a11yOn) config.accessibilityWasEnabled = a11yOn
+        val s = status.current
+        return ProtectionHealthEvaluator.evaluate(
+            HealthInputs(
+                protectionEnabled = config.enabled,
+                paused = config.isPaused(),
+                safeMode = config.safeMode,
+                vpnState = s.vpnState,
+                vpnPermission = permissionIntent() == null,
+                dnsFilterActive = s.dnsFilterActive,
+                upstreamAvailable = s.upstreamAvailable,
+                privateDnsStrict = s.privateDnsStrict,
+                otherVpnActive = s.otherVpnActive,
+                upstreamFailing = s.vpnState == VpnState.RUNNING && upstreamHealth.isFailing(System.currentTimeMillis()),
+                rulesReady = s.rulesReady,
+                blockingRuleCount = s.blockingRuleCount,
+                customKeywordCount = keywords.list().size,
+                searchEnabled = config.searchEffectivelyEnabled,
+                aiEnabled = config.effectiveAi.enabled,
+                aiTextModelAvailable = contentClassifier.isAvailable(ContentKind.TEXT),
+                protectedAppCount = appCount,
+                accessibility = a11y,
+                databaseOk = database.isHealthy(),
+            ),
+        )
+    }
+
+    fun detailedStatistics(): DetailedStatistics = statistics.detailed()
+
+    /** Secure defaults for all settings; keeps lists, keywords, apps, logs. */
+    fun resetProtection() {
+        config.resetSettings()
+        contentClassifier.clear()
+        status.update { it.copy(enabledCategories = config.effectiveCategories.size) }
+    }
+
+    // ---- Custom keywords -------------------------------------------------
+
+    fun addKeyword(raw: String, category: Category) = keywords.add(raw, category)
+
+    fun removeKeyword(id: Long) = keywords.remove(id)
 
     // ---- User rules (blocklist / allowlist) ----------------------------
 
-    fun addUserRule(input: String, action: RuleAction, category: Category): Rule {
-        val domain = DomainName.parseRuleDomain(input)
-            ?: throw RuleValidationException("INVALID_DOMAIN", "Not a valid domain name")
-        if (action == RuleAction.BLOCK && !category.isFilterable) {
-            throw RuleValidationException("INVALID_CATEGORY", "Blocked domains need a content category")
-        }
-        if (rules.count(RuleSource.USER) >= MAX_USER_RULES) {
-            throw RuleValidationException("LIMIT_REACHED", "Too many custom rules")
-        }
-        // A domain is either allowed or blocked by the user, never both.
-        rules.delete(domain, RuleSource.USER)
-        val rule = Rule(
-            domain = domain,
-            category = if (action == RuleAction.ALLOW) Category.SAFE else category,
-            action = action,
-            source = RuleSource.USER,
-            updatedAt = System.currentTimeMillis(),
-        )
-        rules.upsert(rule)
+    fun addUserRule(input: String, action: RuleAction, category: Category, includeSubdomains: Boolean = true): Rule {
+        val rule = userRules.add(input, action, category, includeSubdomains)
         onRulesChanged()
         return rule
     }
 
     fun removeUserRule(domain: String, action: RuleAction): Boolean {
-        val existing = rules.get(domain, RuleSource.USER) ?: return false
-        if (existing.action != action) return false
-        val removed = rules.delete(domain, RuleSource.USER)
+        val removed = userRules.remove(domain, action)
         if (removed) onRulesChanged()
         return removed
     }
@@ -260,7 +388,7 @@ class ProtectionManager private constructor(private val context: Context) {
         val decision = ProtectionDecisionEngine.decide(
             rule = RuleSignal.None,
             ai = result,
-            policy = DecisionPolicy(config.enabled, config.policy.blockedCategories, config.rawAi),
+            policy = DecisionPolicy(config.filteringActive, config.effectiveCategories, config.effectiveAi),
             source = EventSource.AI,
         )
         aiStatsRecorder.onAiDecision(ContentKind.IMAGE, decision)
@@ -296,7 +424,7 @@ class ProtectionManager private constructor(private val context: Context) {
 
     /** Called by the accessibility service on a foreground window change. */
     fun onForegroundApp(pkg: String?): AppDecision {
-        val decision = appProtection.decide(pkg, config.enabled)
+        val decision = appProtection.decide(pkg, config.filteringActive)
         if (decision.action == AppAction.BLOCK_APP) {
             logger.record(
                 BlockEvent(
@@ -377,6 +505,7 @@ class ProtectionManager private constructor(private val context: Context) {
         events.clear()
         aiStats.clear()
         contentClassifier.clear()
+        keywords.clear()
         rules.deleteSource(RuleSource.USER)
         protectedApps.clear()
         config.clear()
@@ -429,7 +558,6 @@ class ProtectionManager private constructor(private val context: Context) {
     companion object {
         private const val META_BUILTIN_VERSION = "builtin_version"
         private const val META_TEST_FIXTURES = "test_fixtures"
-        const val MAX_USER_RULES = 2000
 
         @Volatile private var instance: ProtectionManager? = null
 

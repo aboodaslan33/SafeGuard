@@ -215,6 +215,8 @@ void main() {
       expect(calls.single.arguments, {
         'enabled': true,
         'categories': ['sexual', 'violence', 'gore', 'gambling', 'dangerous'],
+        // Phase 5: the protection mode travels with the policy.
+        'mode': 'custom',
       });
     });
 

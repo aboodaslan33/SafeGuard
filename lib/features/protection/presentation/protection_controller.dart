@@ -23,6 +23,12 @@ enum ProtectionHealth {
   /// The user turned protection off.
   paused,
 
+  /// On, but not filtering on purpose: temporary unlock or Safe Mode.
+  suspended,
+
+  /// Filtering runs, but a layer that should work doesn't (health report).
+  partial,
+
   /// No native engine on this platform.
   unsupported,
 }
@@ -60,6 +66,123 @@ class ProtectionController extends ChangeNotifier {
 
   AccessibilityStatus _accessibility = AccessibilityStatus.unsupported;
   AccessibilityStatus get accessibility => _accessibility;
+
+  // ---- Phase 5 ----
+  HealthReport _healthReport = HealthReport.unknown;
+
+  /// Native health report (layers, mode, pause, Safe Mode, interruptions).
+  HealthReport get healthReport => _healthReport;
+
+  DateTime? _pauseEndsAt;
+  Timer? _pauseTimer;
+
+  /// Remaining temporary-unlock time, counted down locally between reports.
+  Duration get pauseRemaining {
+    final end = _pauseEndsAt;
+    if (end == null) return Duration.zero;
+    final left = end.difference(_clock());
+    return left.isNegative ? Duration.zero : left;
+  }
+
+  bool get isPaused => pauseRemaining > Duration.zero;
+
+  int _protectedAppCount = 0;
+  int get protectedAppCount => _protectedAppCount;
+
+  Future<void> refreshHealth() async {
+    if (!_engine.isSupported) return;
+    try {
+      _protectedAppCount = (await _engine.protectedApps()).length;
+      _applyHealth(await _engine.health());
+    } catch (e, s) {
+      AppLogger.error('health', e, s);
+    }
+  }
+
+  /// On app resume: ask native to recover a failed VPN (its policy decides),
+  /// then re-read status and health.
+  Future<void> onResume() async {
+    if (!_engine.isSupported) return;
+    try {
+      await _engine.tryRecover();
+    } catch (e, s) {
+      AppLogger.error('recover', e, s);
+    }
+    await refreshStatus();
+    await refreshHealth();
+  }
+
+  Future<Result<void>> acknowledgeIncidents() async {
+    final result = await guard(() => _engine.acknowledgeIncidents(_clock()));
+    await refreshHealth();
+    return result;
+  }
+
+  /// Temporary unlock (PIN checked by the UI). Filtering resumes by itself.
+  Future<Result<void>> startPause(int minutes) =>
+      _healthCall(() => _engine.startPause(minutes));
+
+  Future<Result<void>> endPause() => _healthCall(_engine.endPause);
+
+  Future<Result<void>> enterSafeMode() async {
+    final r = await _healthCall(_engine.enterSafeMode);
+    unawaited(refreshStatus());
+    return r;
+  }
+
+  /// Leaves Safe Mode by starting protection again (VPN consent is
+  /// checked by the UI, as for any start).
+  Future<Result<void>> exitSafeMode() async {
+    final r = await startEngine();
+    await refreshHealth();
+    return r;
+  }
+
+  /// Secure defaults for every setting; lists, keywords, apps and logs stay.
+  Future<Result<void>> resetProtection() async {
+    final saved = await _commit(
+      ProtectionState.initial().copyWith(
+        enabled: _state.enabled,
+        updatedAt: _clock(),
+      ),
+    );
+    if (!saved.isOk) return saved;
+    final r = await _healthCall(_engine.resetProtection);
+    await _syncEngine();
+    return r;
+  }
+
+  Future<Result<void>> setMode(ProtectionMode mode) {
+    if (mode == _state.mode) return Future.value(const Ok(null));
+    return _commit(_state.copyWith(mode: mode, updatedAt: _clock()));
+  }
+
+  Future<Result<void>> _healthCall(Future<HealthReport> Function() call) async {
+    if (!_engine.isSupported) return const Ok(null);
+    final result = await guard(call);
+    if (result case Ok(:final value)) _applyHealth(value);
+    return result;
+  }
+
+  void _applyHealth(HealthReport report) {
+    _healthReport = report;
+    _pauseTimer?.cancel();
+    if (report.paused) {
+      _pauseEndsAt = _clock().add(report.pausedRemaining);
+      // Tick once a second for the countdown; re-read health when it ends.
+      _pauseTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!isPaused) {
+          t.cancel();
+          _pauseEndsAt = null;
+          unawaited(refreshHealth());
+        }
+        notifyListeners();
+      });
+    } else {
+      _pauseEndsAt = null;
+    }
+    notifyListeners();
+  }
 
   AiSettings _ai = const AiSettings();
   AiSettings get aiSettings => _ai;
@@ -110,14 +233,17 @@ class ProtectionController extends ChangeNotifier {
     return result;
   }
 
-  /// Search Protection is the Phase 1 "فلترة البحث" preference.
+  /// Whether search protection is enforced (presets always enforce it).
   bool get searchProtectionEnabled =>
       _state.isActive(ProtectionCategory.unsafeSearch);
+
+  /// The user's own search switch (the Phase 1 "فلترة البحث" preference).
+  bool get _userSearchOn => _state.isChosen(ProtectionCategory.unsafeSearch);
 
   /// Applies SafeSearch settings. The master switch is stored as the
   /// unsafeSearch category so there is a single source of truth.
   Future<Result<void>> setSearchSettings(SearchSettings next) async {
-    if (next.enabled != searchProtectionEnabled) {
+    if (next.enabled != _userSearchOn) {
       final saved = await _commit(
         _state.withCategory(
           ProtectionCategory.unsafeSearch,
@@ -157,7 +283,12 @@ class ProtectionController extends ChangeNotifier {
   ProtectionHealth get health {
     if (!_engine.isSupported) return ProtectionHealth.unsupported;
     if (!_state.enabled) return ProtectionHealth.paused;
-    if (_snapshot.isActive) return ProtectionHealth.active;
+    if (_healthReport.safeMode || isPaused) return ProtectionHealth.suspended;
+    if (_snapshot.isActive) {
+      return _healthReport.overall == OverallHealth.partiallyProtected
+          ? ProtectionHealth.partial
+          : ProtectionHealth.active;
+    }
     if (_snapshot.isTransitioning) return ProtectionHealth.transitioning;
     return ProtectionHealth.inactive;
   }
@@ -229,20 +360,27 @@ class ProtectionController extends ChangeNotifier {
     _search = const SearchSettings();
     _ai = const AiSettings();
     _aiStats = const AiStatistics();
+    _pauseTimer?.cancel();
+    _pauseEndsAt = null;
+    _healthReport = HealthReport.unknown;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
+    _pauseTimer?.cancel();
     super.dispose();
   }
 
   void _onSnapshot(EngineSnapshot next) {
     final wasActive = _snapshot.isActive;
+    final stateChanged = next.vpnState != _snapshot.vpnState;
     _snapshot = next;
     notifyListeners();
     if (next.isActive && !wasActive) unawaited(refreshStats());
+    // VPN transitions change health (and may be interruptions).
+    if (stateChanged) unawaited(refreshHealth());
   }
 
   /// Pushes the policy to native and, when [resume] is set, restarts a VPN
@@ -252,9 +390,9 @@ class ProtectionController extends ChangeNotifier {
     try {
       await _engine.apply(_state);
       _search = await _engine.searchSettings();
-      if (_search.enabled != searchProtectionEnabled) {
+      if (_search.enabled != _userSearchOn) {
         _search = await _engine.setSearchSettings(
-          _search.copyWith(enabled: searchProtectionEnabled),
+          _search.copyWith(enabled: _userSearchOn),
         );
       }
       _accessibility = await _engine.accessibilityStatus();
@@ -269,6 +407,7 @@ class ProtectionController extends ChangeNotifier {
           await _engine.hasVpnPermission();
       if (shouldResume) await _engine.start();
       await refreshStats();
+      _applyHealth(await _engine.health());
     } catch (e, s) {
       AppLogger.error('engine', e, s);
     }
@@ -297,7 +436,7 @@ class ProtectionController extends ChangeNotifier {
     // The native mirror is best effort here; it is re-synced on every load.
     if (_engine.isSupported) {
       await guard(() => _engine.apply(next));
-      final searchOn = next.isActive(ProtectionCategory.unsafeSearch);
+      final searchOn = next.isChosen(ProtectionCategory.unsafeSearch);
       if (searchOn != _search.enabled) {
         await _pushSearch(_search.copyWith(enabled: searchOn));
       }

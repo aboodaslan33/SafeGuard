@@ -41,6 +41,8 @@ class _SafeGuardAppState extends State<SafeGuardApp> {
             DateTime.now().difference(hiddenAt) >= _relockAfter) {
           widget.dependencies.security.lock();
         }
+        // Detect interruptions and let native try a safe recovery.
+        widget.dependencies.protection.onResume();
       },
     );
   }

@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import '../../ai/domain/ai_models.dart';
+import 'advanced_models.dart';
 
 export '../../ai/domain/ai_models.dart';
+export 'advanced_models.dart';
 
 /// Content categories SafeGuard can filter. [id] is the stable storage key
 /// and must never change once shipped.
@@ -40,26 +42,36 @@ class ProtectionState {
   const ProtectionState({
     required this.enabled,
     required this.categories,
+    this.mode = ProtectionMode.custom,
     this.updatedAt,
   });
 
-  /// Secure default: everything on.
+  /// Secure default: everything on, CUSTOM mode (as protective as NORMAL,
+  /// and editable; NORMAL/STRICT are opt-in presets).
   factory ProtectionState.initial() => ProtectionState(
     enabled: true,
     categories: {for (final c in ProtectionCategory.values) c: true},
   );
 
   final bool enabled;
+
+  /// The user's own category choices (enforced only in CUSTOM mode).
   final Map<ProtectionCategory, bool> categories;
+  final ProtectionMode mode;
   final DateTime? updatedAt;
 
-  bool isActive(ProtectionCategory c) => categories[c] ?? true;
+  /// Whether [c] is enforced: presets enforce every category.
+  bool isActive(ProtectionCategory c) =>
+      mode.isPreset || (categories[c] ?? true);
+
+  /// The user's stored choice, whatever the mode.
+  bool isChosen(ProtectionCategory c) => categories[c] ?? true;
 
   int get activeCount => ProtectionCategory.values.where(isActive).length;
 
-  /// Categories the DNS engine should block (empty when disabled).
+  /// The user's categories sent to native (which resolves the mode).
   Set<ProtectionCategory> get networkCategories => enabled
-      ? ProtectionCategory.networkFiltered.where(isActive).toSet()
+      ? ProtectionCategory.networkFiltered.where(isChosen).toSet()
       : const {};
 
   int get activeNetworkCount =>
@@ -72,11 +84,13 @@ class ProtectionState {
   ProtectionState copyWith({
     bool? enabled,
     Map<ProtectionCategory, bool>? categories,
+    ProtectionMode? mode,
     DateTime? updatedAt,
   }) {
     return ProtectionState(
       enabled: enabled ?? this.enabled,
       categories: categories ?? this.categories,
+      mode: mode ?? this.mode,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
@@ -88,6 +102,7 @@ class ProtectionState {
   Map<String, Object?> toJson() => {
     'enabled': enabled,
     'categories': {for (final e in categories.entries) e.key.id: e.value},
+    'mode': mode.name,
     'updatedAt': updatedAt?.toIso8601String(),
   };
 
@@ -106,6 +121,8 @@ class ProtectionState {
     return ProtectionState(
       enabled: json['enabled'] as bool? ?? true,
       categories: categories,
+      // Saved before modes existed → CUSTOM, so nothing changes for them.
+      mode: ProtectionMode.fromId(json['mode']),
       updatedAt: updated == null ? null : DateTime.tryParse(updated),
     );
   }
@@ -232,6 +249,8 @@ class BlockEvent {
     this.source = EventSourceKind.dns,
     this.confidence = 1.0,
     this.ruleType = 'domain',
+    this.isBlock = true,
+    this.categoryId,
   });
 
   final DateTime time;
@@ -244,6 +263,14 @@ class BlockEvent {
   final EventSourceKind source;
   final double confidence;
   final String ruleType;
+
+  /// False for non-block events (e.g. a temporary unlock).
+  final bool isBlock;
+
+  /// Raw category id (e.g. "custom", which has no [ProtectionCategory]).
+  final String? categoryId;
+
+  bool get isCustomCategory => categoryId == 'custom';
 }
 
 class ProtectionStats {
@@ -276,14 +303,19 @@ class DomainRule {
     required this.action,
     this.category,
     this.updatedAt,
+    this.includeSubdomains = true,
   });
 
   final String domain;
   final RuleAction action;
 
-  /// Content category for blocked domains; null for allowed ones.
+  /// Content category for blocked domains; null for allowed ones and for
+  /// the user's own "custom" category.
   final ProtectionCategory? category;
   final DateTime? updatedAt;
+
+  /// Blocks always cover subdomains; allowlist entries may be exact.
+  final bool includeSubdomains;
 }
 
 enum YouTubeMode {
@@ -446,11 +478,19 @@ abstract interface class ProtectionEngine {
   Future<void> stop();
 
   Future<List<DomainRule>> userRules(RuleAction action);
+
+  /// [category] null = "custom" (the user's own category).
   Future<DomainRule> addBlockedDomain(
     String domain,
-    ProtectionCategory category,
+    ProtectionCategory? category,
   );
-  Future<DomainRule> addAllowedDomain(String domain);
+
+  /// Exact by default (the domain and `www.` only); [includeSubdomains]
+  /// opens every subdomain too.
+  Future<DomainRule> addAllowedDomain(
+    String domain, {
+    bool includeSubdomains = false,
+  });
   Future<bool> removeRule(DomainRule rule);
 
   Future<List<BlockEvent>> blockedLogs({int limit = 200});
@@ -500,6 +540,31 @@ abstract interface class ProtectionEngine {
   /// Lets the user pick one image in the system picker and classifies it
   /// in memory. Nothing is stored.
   Future<ImageCheck> checkImage();
+
+  // ---- Phase 5: advanced protection ----
+  Future<HealthReport> health();
+  Future<void> acknowledgeIncidents(DateTime upTo);
+
+  /// Asks native to restart a stopped/failed VPN if its policy allows.
+  Future<bool> tryRecover();
+
+  /// Temporary unlock: 5, 10 or 30 minutes (PIN checked by the UI).
+  Future<HealthReport> startPause(int minutes);
+  Future<HealthReport> endPause();
+  Future<HealthReport> enterSafeMode();
+  Future<HealthReport> resetProtection();
+  Future<DetailedStats> detailedStatistics();
+  Future<List<CustomKeyword>> keywords();
+
+  /// [category] null = "custom".
+  Future<CustomKeyword> addKeyword(
+    String keyword,
+    ProtectionCategory? category,
+  );
+  Future<bool> removeKeyword(int id);
+
+  /// Opens the system "save file" dialog for [json].
+  Future<ExportResult> saveExport(String json);
 }
 
 /// Engine for platforms without the native layer (tests, previews): reports
@@ -526,11 +591,17 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   @override
   Future<List<DomainRule>> userRules(RuleAction action) async => const [];
   @override
-  Future<DomainRule> addBlockedDomain(String d, ProtectionCategory c) async =>
+  Future<DomainRule> addBlockedDomain(String d, ProtectionCategory? c) async =>
       DomainRule(domain: d, action: RuleAction.block, category: c);
   @override
-  Future<DomainRule> addAllowedDomain(String d) async =>
-      DomainRule(domain: d, action: RuleAction.allow);
+  Future<DomainRule> addAllowedDomain(
+    String d, {
+    bool includeSubdomains = false,
+  }) async => DomainRule(
+    domain: d,
+    action: RuleAction.allow,
+    includeSubdomains: includeSubdomains,
+  );
   @override
   Future<bool> removeRule(DomainRule rule) async => false;
   @override
@@ -592,6 +663,31 @@ class UnavailableProtectionEngine implements ProtectionEngine {
     status: ImageCheckStatus.unavailable,
     error: 'unsupported',
   );
+  @override
+  Future<HealthReport> health() async => HealthReport.unknown;
+  @override
+  Future<void> acknowledgeIncidents(DateTime upTo) async {}
+  @override
+  Future<bool> tryRecover() async => false;
+  @override
+  Future<HealthReport> startPause(int minutes) async => HealthReport.unknown;
+  @override
+  Future<HealthReport> endPause() async => HealthReport.unknown;
+  @override
+  Future<HealthReport> enterSafeMode() async => HealthReport.unknown;
+  @override
+  Future<HealthReport> resetProtection() async => HealthReport.unknown;
+  @override
+  Future<DetailedStats> detailedStatistics() async => const DetailedStats();
+  @override
+  Future<List<CustomKeyword>> keywords() async => const [];
+  @override
+  Future<CustomKeyword> addKeyword(String k, ProtectionCategory? c) async =>
+      CustomKeyword(id: 0, keyword: k, category: c);
+  @override
+  Future<bool> removeKeyword(int id) async => false;
+  @override
+  Future<ExportResult> saveExport(String json) async => ExportResult.failed;
 }
 
 abstract interface class ProtectionRepository {

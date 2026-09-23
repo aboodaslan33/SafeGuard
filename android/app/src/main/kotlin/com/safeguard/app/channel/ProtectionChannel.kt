@@ -16,6 +16,12 @@ import com.safeguard.app.engine.ai.image.ImageLimits
 import com.safeguard.app.engine.ai.model.BuiltInModels
 import com.safeguard.app.engine.apps.AppRuleException
 import com.safeguard.app.engine.logging.EventSource
+import com.safeguard.app.engine.health.HealthReport
+import com.safeguard.app.engine.modes.ProtectionMode
+import com.safeguard.app.engine.rules.UserRuleException
+import com.safeguard.app.engine.search.CustomKeyword
+import com.safeguard.app.engine.search.KeywordException
+import com.safeguard.app.engine.stats.WindowStatistics
 import com.safeguard.app.engine.logging.BlockEvent
 import com.safeguard.app.engine.safesearch.SafeSearchConfig
 import com.safeguard.app.engine.safesearch.YouTubeMode
@@ -25,7 +31,6 @@ import com.safeguard.app.engine.rules.RuleAction
 import com.safeguard.app.engine.rules.RuleSource
 import com.safeguard.app.engine.status.ProtectionStatus
 import com.safeguard.app.protection.ProtectionManager
-import com.safeguard.app.protection.RuleValidationException
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -77,6 +82,23 @@ import java.util.concurrent.Executors
  *     {status, error?, action, category, confidence, reason, scores, modelId}
  *     or {status: "cancelled"}
  *
+ * Phase 5:
+ *   setConfiguration also takes {mode: normal|strict|custom}
+ *   addBlockedDomain category may be "custom"; addAllowedDomain takes
+ *     {includeSubdomains}; errors DUPLICATE_DOMAIN, IN_OTHER_LIST
+ *   getHealth() → {overall, reason, layers[{layer, state, reason}], mode,
+ *     pausedRemainingMs, safeMode, incidents[{timestamp, kind}], lastBoot}
+ *   acknowledgeIncidents({upTo}); tryRecover() → bool
+ *   startPause({minutes: 5|10|30}) / endPause() → health
+ *   enterSafeMode() → health
+ *   getDetailedStatistics() → {today, last7Days, last30Days} each
+ *     {total, bySource, byCategory, falsePositiveReports}
+ *   getKeywords() / addKeyword({keyword, category}) / removeKeyword({id})
+ *     errors INVALID_KEYWORD, KEYWORD_TOO_SHORT, DUPLICATE_KEYWORD, LIMIT_REACHED
+ *   resetProtection() → health
+ *   saveExport({json}) → system "save file" dialog; the JSON is built by
+ *     Flutter from non-sensitive settings only → {status: saved|cancelled}
+ *
  * Event channel `com.safeguard.app/protection/status` streams status maps.
  *
  * Work runs on a background thread; results are delivered on the main
@@ -95,6 +117,7 @@ class ProtectionChannel(
     private var sink: EventChannel.EventSink? = null
     private var pendingPermission: MethodChannel.Result? = null
     private var pendingImage: MethodChannel.Result? = null
+    private var pendingExport: Pair<MethodChannel.Result, String>? = null
     private val statusListener: (ProtectionStatus) -> Unit = { s -> main.post { sink?.success(s.toMap()) } }
 
     init {
@@ -119,6 +142,26 @@ class ProtectionChannel(
                 result.success(mapOf("status" to "cancelled"))
             } else {
                 io.execute { checkImage(uri, result) }
+            }
+            return true
+        }
+        if (requestCode == REQUEST_EXPORT) {
+            val (result, json) = pendingExport ?: return true
+            pendingExport = null
+            val uri = data?.data
+            if (resultCode != Activity.RESULT_OK || uri == null) {
+                result.success(mapOf("status" to "cancelled"))
+            } else {
+                io.execute {
+                    val value = try {
+                        activity.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                            ?: throw java.io.IOException("no stream")
+                        mapOf("status" to "saved")
+                    } catch (e: Exception) {
+                        mapOf("status" to "failed")
+                    }
+                    main.post { result.success(value) }
+                }
             }
             return true
         }
@@ -150,6 +193,7 @@ class ProtectionChannel(
             "openVpnSettings" -> result.success(open(Intent(Settings.ACTION_VPN_SETTINGS)))
             "openAccessibilitySettings" -> result.success(open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
             "checkImage" -> pickImage(result)
+            "saveExport" -> saveExport(call, result)
             else -> io.execute { handle(call, result) }
         }
     }
@@ -166,7 +210,10 @@ class ProtectionChannel(
                 "getProtectionStatus" -> { manager.refreshEnvironment(); status() }
                 "setConfiguration" -> {
                     val enabled = call.argument<Boolean>("enabled") ?: throw bad("enabled")
-                    manager.setConfiguration(enabled, categories(call.argument<List<String>>("categories")))
+                    val mode = call.argument<String>("mode")?.let { id ->
+                        ProtectionMode.entries.firstOrNull { it.id == id } ?: throw bad("mode")
+                    }
+                    manager.setConfiguration(enabled, categories(call.argument<List<String>>("categories")), mode)
                     status()
                 }
                 "updateCategory" -> {
@@ -177,9 +224,14 @@ class ProtectionChannel(
                 "addBlockedDomain" -> manager.addUserRule(
                     domainArg(call),
                     RuleAction.BLOCK,
-                    category(call.argument("category")),
+                    userCategory(call.argument("category")),
                 ).toMap()
-                "addAllowedDomain" -> manager.addUserRule(domainArg(call), RuleAction.ALLOW, Category.SAFE).toMap()
+                "addAllowedDomain" -> manager.addUserRule(
+                    domainArg(call),
+                    RuleAction.ALLOW,
+                    Category.SAFE,
+                    includeSubdomains = call.argument<Boolean>("includeSubdomains") ?: false,
+                ).toMap()
                 "removeBlockedDomain" -> manager.removeUserRule(domainArg(call), RuleAction.BLOCK)
                 "removeAllowedDomain" -> manager.removeUserRule(domainArg(call), RuleAction.ALLOW)
                 "getRules" -> manager.rules.list(
@@ -278,6 +330,28 @@ class ProtectionChannel(
                     manager.reportFalsePositive(source, category(call.argument("category")), confidence)
                     true
                 }
+                "getHealth" -> health()
+                "acknowledgeIncidents" -> {
+                    manager.config.acknowledgeIncidents(call.argument<Number>("upTo")?.toLong() ?: System.currentTimeMillis())
+                    true
+                }
+                "tryRecover" -> manager.tryRecover()
+                "startPause" -> {
+                    manager.startPause(call.argument<Int>("minutes") ?: throw bad("minutes"))
+                    health()
+                }
+                "endPause" -> { manager.endPause(); health() }
+                "enterSafeMode" -> { manager.enterSafeMode(); health() }
+                "resetProtection" -> { manager.resetProtection(); health() }
+                "getDetailedStatistics" -> manager.detailedStatistics().let {
+                    mapOf("today" to it.today.toMap(), "last7Days" to it.last7Days.toMap(), "last30Days" to it.last30Days.toMap())
+                }
+                "getKeywords" -> manager.keywords.list().map { it.toMap() }
+                "addKeyword" -> manager.addKeyword(
+                    call.argument<String>("keyword") ?: throw bad("keyword"),
+                    userCategory(call.argument("category")),
+                ).toMap()
+                "removeKeyword" -> manager.removeKeyword(call.argument<Number>("id")?.toLong() ?: throw bad("id"))
                 else -> {
                     main.post { result.notImplemented() }
                     return
@@ -286,8 +360,10 @@ class ProtectionChannel(
             main.post { result.success(value) }
         } catch (e: ChannelError) {
             main.post { result.error(e.code, e.message, null) }
-        } catch (e: RuleValidationException) {
-            main.post { result.error(e.code, e.message, null) }
+        } catch (e: UserRuleException) {
+            main.post { result.error(e.error.code, e.error.code, null) }
+        } catch (e: KeywordException) {
+            main.post { result.error(e.error.code, e.error.code, null) }
         } catch (e: AppRuleException) {
             main.post { result.error(e.error.code, e.error.code, null) }
         } catch (e: Exception) {
@@ -317,6 +393,47 @@ class ProtectionChannel(
     }
 
     private fun status() = manager.status.current.toMap()
+
+    private fun health(): Map<String, Any?> {
+        val report: HealthReport = manager.health()
+        val c = manager.config
+        return mapOf(
+            "overall" to report.overall.name.lowercase(),
+            "reason" to report.reason,
+            "layers" to report.layers.map {
+                mapOf("layer" to it.layer.id, "state" to it.state.name.lowercase(), "reason" to it.reason)
+            },
+            "mode" to c.mode.id,
+            "pausedRemainingMs" to c.pauseRemainingMs(),
+            "safeMode" to c.safeMode,
+            "incidents" to c.incidents.unacknowledged().map { mapOf("timestamp" to it.timestamp, "kind" to it.kind.id) },
+            "lastBoot" to c.lastBoot?.let { mapOf("result" to it.first, "at" to it.second) },
+        )
+    }
+
+    /** Lets the user choose where to save; SafeGuard gets write access to that one file. */
+    private fun saveExport(call: MethodCall, result: MethodChannel.Result) {
+        val json = call.argument<String>("json")
+        if (json == null || json.length > 1_000_000) {
+            result.error("INVALID_ARGUMENT", "json", null)
+            return
+        }
+        if (pendingExport != null) {
+            result.error("BUSY", "Export already in progress", null)
+            return
+        }
+        pendingExport = result to json
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/json")
+            .putExtra(Intent.EXTRA_TITLE, "safeguard-settings.json")
+        try {
+            activity.startActivityForResult(intent, REQUEST_EXPORT)
+        } catch (e: ActivityNotFoundException) {
+            pendingExport = null
+            result.error("UNSUPPORTED", "No document picker", null)
+        }
+    }
 
     private fun pickImage(result: MethodChannel.Result) {
         if (pendingImage != null) {
@@ -441,6 +558,13 @@ class ProtectionChannel(
         return c
     }
 
+    /** A category the user may give their own domains/keywords (incl. "custom"). */
+    private fun userCategory(id: String?): Category {
+        val c = Category.fromId(id) ?: throw bad("category")
+        if (!c.isUserAssignable) throw bad("category")
+        return c
+    }
+
     private fun categories(ids: List<String>?): Set<Category> =
         (ids ?: throw bad("categories")).mapNotNull { Category.fromId(it) }.filter { it.isFilterable }.toSet()
 
@@ -456,6 +580,7 @@ class ProtectionChannel(
         const val EVENT_CHANNEL = "com.safeguard.app/protection/status"
         const val REQUEST_VPN = 0x5647
         const val REQUEST_IMAGE = 0x5648
+        const val REQUEST_EXPORT = 0x5649
     }
 }
 
@@ -468,7 +593,18 @@ private fun AiStatistics.toMap(): Map<String, Any> = mapOf(
     "reportsByCategory" to reportsByCategory.mapKeys { it.key.id },
 )
 
+private fun WindowStatistics.toMap(): Map<String, Any> = mapOf(
+    "total" to total,
+    "bySource" to bySource.mapKeys { it.key.id },
+    "byCategory" to byCategory.mapKeys { it.key.id },
+    "falsePositiveReports" to falsePositiveReports,
+)
+
+private fun CustomKeyword.toMap(): Map<String, Any> =
+    mapOf("id" to id, "keyword" to phrase, "category" to category.id, "addedAt" to addedAt)
+
 private fun Rule.toMap(): Map<String, Any> = mapOf(
+    "includeSubdomains" to includeSubdomains,
     "domain" to domain,
     "category" to category.id,
     "action" to action.name.lowercase(),

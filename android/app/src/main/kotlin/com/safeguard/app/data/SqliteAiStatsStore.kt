@@ -51,6 +51,10 @@ class SqliteAiStatsStore(private val db: SafeGuardDatabase) : AiStatsStore {
             out
         }
 
+    override fun reportsSince(since: Long): Int =
+        db.readableDatabase.rawQuery("SELECT COUNT(*) FROM ai_feedback WHERE ts >= ?", arrayOf(since.toString()))
+            .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
     override fun read(): AiStatistics {
         val all = db.readableDatabase.rawQuery("SELECT name, value FROM counters WHERE name LIKE 'ai\\_%' ESCAPE '\\'", emptyArray())
             .use { c ->

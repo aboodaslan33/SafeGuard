@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design_system/design_system.dart';
 import '../../features/activity/presentation/activity_screen.dart';
+import '../../features/advanced/presentation/keywords_screen.dart';
+import '../../features/advanced/presentation/statistics_screen.dart';
 import '../../features/ai/presentation/ai_protection_screen.dart';
 import '../../features/apps/presentation/app_protection_screen.dart';
 import '../../features/blocking/presentation/blocked_content_screen.dart';
@@ -68,6 +70,11 @@ GoRouter createRouter(AppDependencies deps) {
       GoRoute(
         path: Routes.aiProtection,
         builder: (c, s) => const AiProtectionScreen(),
+      ),
+      GoRoute(path: Routes.keywords, builder: (c, s) => const KeywordsScreen()),
+      GoRoute(
+        path: Routes.statistics,
+        builder: (c, s) => const StatisticsScreen(),
       ),
       GoRoute(
         path: Routes.appProtection,

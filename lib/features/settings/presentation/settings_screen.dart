@@ -6,13 +6,15 @@ import '../../../app/router/app_router.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/result.dart';
+import '../../advanced/presentation/advanced_actions.dart';
 import '../../protection/domain/protection.dart';
+import '../../protection/presentation/protection_ui.dart';
 import '../domain/app_settings.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  static const appVersion = '1.3.0';
+  static const appVersion = '1.4.0';
 
   @override
   Widget build(BuildContext context) {
@@ -49,11 +51,24 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: 'استثناءات محمية برمز PIN',
                   onTap: () => _openAllowlist(context),
                 ),
+                SecuritySettingTile(
+                  icon: Icons.text_fields_rounded,
+                  title: 'الكلمات المحظورة',
+                  subtitle: 'كلمات تحظر البحث عبر SafeGuard',
+                  onTap: () => context.push(Routes.keywords),
+                ),
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.history_rounded,
                     title: 'سجل الحظر',
                     onTap: () => context.push(Routes.activity),
+                  ),
+                if (engine.isSupported)
+                  SecuritySettingTile(
+                    icon: Icons.bar_chart_rounded,
+                    title: 'الإحصاءات',
+                    subtitle: 'اليوم و7 أيام و30 يومًا',
+                    onTap: () => context.push(Routes.statistics),
                   ),
                 SecuritySettingTile(
                   icon: Icons.shield_outlined,
@@ -74,6 +89,48 @@ class SettingsScreen extends StatelessWidget {
                     title: 'VPN دائم التشغيل',
                     subtitle: 'ليعمل SafeGuard تلقائيًا بعد إعادة تشغيل الجهاز',
                     onTap: engine.openVpnSettings,
+                  ),
+              ],
+            ),
+            const SectionHeader(title: 'الحماية المتقدمة'),
+            SgGroupedCard(
+              children: [
+                SecuritySettingTile(
+                  icon: Icons.tune_rounded,
+                  title: 'وضع الحماية',
+                  value: modeLabel(protection.mode),
+                  onTap: () => context.go(Routes.home),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.lock_person_outlined,
+                  title: 'قفل إعدادات الحماية',
+                  subtitle: 'أي تغيير في الفئات والوضع والقوائم والحماية الذكية يتطلب PIN',
+                  switchValue: settings.protectionLocked,
+                  onSwitchChanged: (v) =>
+                      AdvancedActions.setProtectionLock(context, v),
+                ),
+                if (engine.isSupported)
+                  SecuritySettingTile(
+                    icon: Icons.timer_outlined,
+                    title: 'إيقاف مؤقت للحماية',
+                    subtitle: deps.protection.isPaused
+                        ? 'تُستأنف بعد ${formatCountdown(deps.protection.pauseRemaining)}'
+                        : '5 أو 10 أو 30 دقيقة، برمز PIN',
+                    onTap: deps.protection.isPaused
+                        ? () => deps.protection.endPause()
+                        : () => AdvancedActions.startTemporaryUnlock(context),
+                    value: deps.protection.isPaused ? 'استئناف الآن' : null,
+                  ),
+                if (engine.isSupported)
+                  SecuritySettingTile(
+                    icon: Icons.health_and_safety_outlined,
+                    title: 'وضع الأمان',
+                    subtitle: deps.protection.healthReport.safeMode
+                        ? 'مفعّل: الفلترة متوقفة. اضغط لإعادة تفعيل الحماية'
+                        : 'إذا تسببت الحماية في انقطاع الإنترنت',
+                    onTap: deps.protection.healthReport.safeMode
+                        ? () => AdvancedActions.exitSafeMode(context)
+                        : () => AdvancedActions.enterSafeMode(context),
                   ),
               ],
             ),
@@ -130,6 +187,26 @@ class SettingsScreen extends StatelessWidget {
                   subtitle:
                       'لا حساب، لا خوادم، لا تحليلات. '
                       'لا يغادر أي شيء هذا الجهاز.',
+                ),
+                if (engine.isSupported)
+                  SecuritySettingTile(
+                    icon: Icons.cleaning_services_outlined,
+                    title: 'مسح سجل الحماية',
+                    subtitle: 'السجل والإحصاءات والبلاغات',
+                    onTap: () => AdvancedActions.clearLogs(context),
+                  ),
+                if (engine.isSupported)
+                  SecuritySettingTile(
+                    icon: Icons.ios_share_rounded,
+                    title: 'تصدير الإعدادات',
+                    subtitle: 'ملف JSON دون رمز PIN أو السجل',
+                    onTap: () => AdvancedActions.exportSettings(context),
+                  ),
+                SecuritySettingTile(
+                  icon: Icons.settings_backup_restore_rounded,
+                  title: 'إعادة ضبط الحماية',
+                  subtitle: 'الإعدادات الافتراضية الآمنة؛ القوائم تبقى',
+                  onTap: () => AdvancedActions.resetProtection(context),
                 ),
                 SecuritySettingTile(
                   icon: Icons.delete_outline_rounded,

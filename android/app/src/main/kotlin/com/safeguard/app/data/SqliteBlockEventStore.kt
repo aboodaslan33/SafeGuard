@@ -25,9 +25,11 @@ class SqliteBlockEventStore(private val db: SafeGuardDatabase) : BlockEventStore
                     event.ruleType,
                 ),
             )
-            // UPSERT syntax needs SQLite 3.24 (Android 11+); minSdk is 24.
-            w.execSQL("INSERT OR IGNORE INTO counters(name, value) VALUES (?, 0)", arrayOf<Any>(TOTAL))
-            w.execSQL("UPDATE counters SET value = value + 1 WHERE name = ?", arrayOf<Any>(TOTAL))
+            if (event.action == RuleAction.BLOCK) {
+                // UPSERT syntax needs SQLite 3.24 (Android 11+); minSdk is 24.
+                w.execSQL("INSERT OR IGNORE INTO counters(name, value) VALUES (?, 0)", arrayOf<Any>(TOTAL))
+                w.execSQL("UPDATE counters SET value = value + 1 WHERE name = ?", arrayOf<Any>(TOTAL))
+            }
             w.setTransactionSuccessful()
         } finally {
             w.endTransaction()
@@ -55,18 +57,34 @@ class SqliteBlockEventStore(private val db: SafeGuardDatabase) : BlockEventStore
         }
 
     override fun countSince(since: Long): Int =
-        db.readableDatabase.rawQuery("SELECT COUNT(*) FROM block_events WHERE ts >= ?", arrayOf(since.toString()))
+        db.readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM block_events WHERE ts >= ? AND action = 'block'",
+            arrayOf(since.toString()),
+        )
             .use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
     override fun countByCategorySince(since: Long): Map<Category, Int> =
         db.readableDatabase.rawQuery(
-            "SELECT category, COUNT(*) FROM block_events WHERE ts >= ? GROUP BY category",
+            "SELECT category, COUNT(*) FROM block_events WHERE ts >= ? AND action = 'block' GROUP BY category",
             arrayOf(since.toString()),
         ).use { c ->
             val out = HashMap<Category, Int>()
             while (c.moveToNext()) {
                 val category = Category.fromId(c.getString(0)) ?: continue
                 out[category] = c.getInt(1)
+            }
+            out
+        }
+
+    override fun countBySourceSince(since: Long): Map<EventSource, Int> =
+        db.readableDatabase.rawQuery(
+            "SELECT source, COUNT(*) FROM block_events WHERE ts >= ? AND action = 'block' GROUP BY source",
+            arrayOf(since.toString()),
+        ).use { c ->
+            val out = HashMap<EventSource, Int>()
+            while (c.moveToNext()) {
+                val source = EventSource.entries.firstOrNull { it.id == c.getString(0) } ?: continue
+                out[source] = c.getInt(1)
             }
             out
         }

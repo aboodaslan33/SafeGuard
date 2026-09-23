@@ -64,7 +64,7 @@ final class EngineFailure extends AppFailure {
     'PERMISSION_DENIED': 'لم تُمنح موافقة VPN، لذلك لا يمكن تشغيل الحماية.',
     'INVALID_DOMAIN': 'هذا ليس اسم نطاق صالحًا.',
     'INVALID_CATEGORY': 'اختر فئة للنطاق المحظور.',
-    'LIMIT_REACHED': 'وصلت إلى الحد الأقصى للنطاقات المخصصة.',
+    'LIMIT_REACHED': 'وصلت إلى الحد الأقصى المسموح لهذه القائمة.',
     'UNSUPPORTED': 'هذا الجهاز لا يدعم تطبيقات VPN.',
     'INVALID_PACKAGE': 'اسم الحزمة غير صالح.',
     'PACKAGE_NOT_INSTALLED': 'التطبيق غير مثبت على هذا الجهاز.',
@@ -72,5 +72,13 @@ final class EngineFailure extends AppFailure {
     'PACKAGE_NOT_ALLOWED':
         'لا يمكن حماية هذا التطبيق: يحتاجه النظام أو الاتصال أو الإعدادات.',
     'INVALID_ARGUMENT': 'المدخلات غير صالحة.',
+    'DUPLICATE_DOMAIN': 'هذا النطاق موجود في القائمة بالفعل.',
+    'IN_OTHER_LIST':
+        'هذا النطاق موجود في القائمة الأخرى. احذفه منها أولًا إذا أردت نقله.',
+    'INVALID_KEYWORD': 'كلمة غير صالحة: استخدم كلمة أو عبارة من 5 كلمات كحد أقصى، دون أرقام فقط.',
+    'KEYWORD_TOO_SHORT':
+        'الكلمة قصيرة جدًا (3 أحرف على الأقل) لتجنّب حظر كلمات سليمة.',
+    'DUPLICATE_KEYWORD': 'هذه الكلمة موجودة بالفعل.',
+    'BUSY': 'هناك عملية مماثلة قيد التنفيذ.',
   };
 }

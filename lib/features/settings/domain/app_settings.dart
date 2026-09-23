@@ -5,6 +5,7 @@ class AppSettings {
     this.onboardingCompleted = false,
     this.theme = ThemePreference.dark,
     this.appLockEnabled = true,
+    this.protectionLocked = false,
   });
 
   final bool onboardingCompleted;
@@ -13,15 +14,21 @@ class AppSettings {
   /// Ask for the PIN when the app opens or returns from background.
   final bool appLockEnabled;
 
+  /// Protection Lock: every change to protection settings needs the PIN
+  /// (not only loosening ones).
+  final bool protectionLocked;
+
   AppSettings copyWith({
     bool? onboardingCompleted,
     ThemePreference? theme,
     bool? appLockEnabled,
+    bool? protectionLocked,
   }) {
     return AppSettings(
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       theme: theme ?? this.theme,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
+      protectionLocked: protectionLocked ?? this.protectionLocked,
     );
   }
 
@@ -29,6 +36,7 @@ class AppSettings {
     'onboardingCompleted': onboardingCompleted,
     'theme': theme.name,
     'appLockEnabled': appLockEnabled,
+    'protectionLocked': protectionLocked,
   };
 
   /// Tolerant decoding: unknown or missing fields fall back to defaults so
@@ -40,6 +48,7 @@ class AppSettings {
           json['onboardingCompleted'] as bool? ?? d.onboardingCompleted,
       theme: ThemePreference.values.asNameMap()[json['theme']] ?? d.theme,
       appLockEnabled: json['appLockEnabled'] as bool? ?? d.appLockEnabled,
+      protectionLocked: json['protectionLocked'] as bool? ?? d.protectionLocked,
     );
   }
 
@@ -48,10 +57,12 @@ class AppSettings {
       other is AppSettings &&
       other.onboardingCompleted == onboardingCompleted &&
       other.theme == theme &&
-      other.appLockEnabled == appLockEnabled;
+      other.appLockEnabled == appLockEnabled &&
+      other.protectionLocked == protectionLocked;
 
   @override
-  int get hashCode => Object.hash(onboardingCompleted, theme, appLockEnabled);
+  int get hashCode =>
+      Object.hash(onboardingCompleted, theme, appLockEnabled, protectionLocked);
 }
 
 abstract interface class SettingsRepository {

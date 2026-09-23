@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/app_dependencies.dart';
-import '../../../app/router/app_router.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_controller.dart';
+import '../../protection/presentation/protection_guard.dart';
 import '../../protection/presentation/protection_ui.dart';
 import '../../search/presentation/search_protection_screen.dart' show SgNote;
 import 'report_false_positive.dart';
@@ -40,8 +40,17 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
     return ListenableBuilder(
       listenable: protection,
       builder: (context, _) {
-        final ai = protection.aiSettings;
         final state = protection.state;
+        final preset = state.mode.isPreset;
+        // NORMAL/STRICT enforce AI on with their own thresholds.
+        final ai = preset
+            ? protection.aiSettings.copyWith(
+                enabled: true,
+                mode: state.mode == ProtectionMode.strict
+                    ? DetectionMode.strict
+                    : DetectionMode.normal,
+              )
+            : protection.aiSettings;
         final stats = protection.aiStatistics;
         final c = context.colors;
         return SgPage(
@@ -58,11 +67,23 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                   title: 'الحماية الذكية',
                   subtitle: ai.enabled ? 'مفعّلة' : 'متوقفة',
                   switchValue: ai.enabled,
-                  onSwitchChanged: (v) =>
-                      _update(protection, ai, ai.copyWith(enabled: v)),
+                  onSwitchChanged: preset
+                      ? null
+                      : (v) => _update(protection, ai, ai.copyWith(enabled: v)),
                 ),
               ],
             ),
+            if (preset) ...[
+              const SizedBox(height: SgSpace.x3),
+              SgNote(
+                icon: Icons.lock_outline_rounded,
+                color: c.info,
+                background: c.infoMuted,
+                text:
+                    'وضع الحماية «${state.mode == ProtectionMode.strict ? 'صارم' : 'عادي'}» '
+                    'يحدد إعدادات الحماية الذكية. لتعديلها اختر الوضع «مخصص».',
+              ),
+            ],
             const SizedBox(height: SgSpace.x3),
             SgNote(
               icon: Icons.info_outline_rounded,
@@ -80,11 +101,11 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                   _ModeRow(
                     mode: mode,
                     selected: ai.mode == mode,
-                    enabled: ai.enabled,
+                    enabled: ai.enabled && !preset,
                     onTap: () =>
                         _update(protection, ai, ai.copyWith(mode: mode)),
                   ),
-                if (ai.mode == DetectionMode.custom)
+                if (ai.mode == DetectionMode.custom && !preset)
                   SecuritySettingTile(
                     icon: Icons.tune_rounded,
                     title: 'تعديل الحدود',
@@ -102,7 +123,7 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                   CategoryTile(
                     category: category,
                     active: state.isActive(category),
-                    enabled: state.enabled && ai.enabled,
+                    enabled: state.enabled && ai.enabled && !preset,
                     onChanged: (v) =>
                         ProtectionActions.setCategory(context, category, v),
                   ),
@@ -202,11 +223,18 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
     AiSettings current,
     AiSettings next,
   ) async {
-    if (current.isLoosenedBy(next)) {
-      final reason = !next.enabled
-          ? 'لإيقاف الحماية الذكية'
-          : 'لتخفيف إعدادات الحماية الذكية';
-      if (!await requirePin(context, reason: reason)) return;
+    final loosens = current.isLoosenedBy(next);
+    final reason = !next.enabled
+        ? 'لإيقاف الحماية الذكية'
+        : loosens
+        ? 'لتخفيف إعدادات الحماية الذكية'
+        : 'لتعديل الحماية الذكية (إعدادات الحماية مقفلة)';
+    if (!await ProtectionGuard.authorize(
+      context,
+      loosens: loosens,
+      reason: reason,
+    )) {
+      return;
     }
     final result = await protection.setAiSettings(next);
     if (result case Err(:final failure) when mounted) {

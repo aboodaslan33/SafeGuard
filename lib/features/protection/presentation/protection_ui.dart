@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/app_dependencies.dart';
-import '../../../app/router/app_router.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/result.dart';
 import '../domain/protection.dart';
 import 'protection_controller.dart';
+import 'protection_guard.dart';
 
 /// Presentation metadata for each category (kept out of the domain layer).
 extension ProtectionCategoryUi on ProtectionCategory {
@@ -47,7 +47,11 @@ abstract final class ProtectionActions {
   static Future<void> setEnabled(BuildContext context, bool enabled) async {
     final protection = AppScope.of(context).protection;
     if (!enabled) {
-      if (!await requirePin(context, reason: 'لإيقاف الحماية على هذا الجهاز')) {
+      if (!await ProtectionGuard.authorize(
+        context,
+        loosens: true,
+        reason: 'لإيقاف الحماية على هذا الجهاز',
+      )) {
         return;
       }
     } else if (!context.mounted || !await ensureVpnConsent(context)) {
@@ -100,14 +104,34 @@ abstract final class ProtectionActions {
     bool active,
   ) async {
     final protection = AppScope.of(context).protection;
-    if (!active &&
-        !await requirePin(
-          context,
-          reason: 'لإيقاف فلترة «${category.title}»',
-        )) {
+    if (!await ProtectionGuard.authorize(
+      context,
+      loosens: !active,
+      reason: active
+          ? 'لتعديل الفئات (إعدادات الحماية مقفلة)'
+          : 'لإيقاف فلترة «${category.title}»',
+    )) {
       return;
     }
     final result = await protection.setCategory(category, active);
+    if (result case Err(:final failure) when context.mounted) {
+      showSgSnack(context, failure.message);
+    }
+  }
+
+  /// NORMAL → STRICT is free (unless locked); every other change needs the PIN.
+  static Future<void> setMode(BuildContext context, ProtectionMode mode) async {
+    final protection = AppScope.of(context).protection;
+    final from = protection.state.mode;
+    if (from == mode) return;
+    if (!await ProtectionGuard.authorize(
+      context,
+      loosens: ProtectionMode.changeNeedsPin(from, mode),
+      reason: 'لتغيير وضع الحماية',
+    )) {
+      return;
+    }
+    final result = await protection.setMode(mode);
     if (result case Err(:final failure) when context.mounted) {
       showSgSnack(context, failure.message);
     }
@@ -177,9 +201,15 @@ class ProtectionStatusCard extends StatelessWidget {
     required this.snapshot,
     required this.onToggle,
     required this.onRestart,
+    this.report = HealthReport.unknown,
+    this.pauseRemaining = Duration.zero,
+    this.onEndPause,
   });
 
   final ProtectionHealth health;
+  final HealthReport report;
+  final Duration pauseRemaining;
+  final VoidCallback? onEndPause;
   final ProtectionState state;
   final EngineSnapshot snapshot;
   final ValueChanged<bool> onToggle;
@@ -223,6 +253,20 @@ class ProtectionStatusCard extends StatelessWidget {
         'متوقفة',
         'الحماية متوقفة',
       ),
+      ProtectionHealth.suspended => (
+        c.warning,
+        c.warningMuted,
+        SgStatus.paused,
+        report.safeMode ? 'وضع الأمان' : 'إيقاف مؤقت',
+        report.safeMode ? 'وضع الأمان مفعّل' : 'الحماية متوقفة مؤقتًا',
+      ),
+      ProtectionHealth.partial => (
+        c.warning,
+        c.warningMuted,
+        SgStatus.paused,
+        'جزئية',
+        'الحماية مفعّلة جزئيًا',
+      ),
       ProtectionHealth.unsupported => (
         c.info,
         c.infoMuted,
@@ -238,6 +282,11 @@ class ProtectionStatusCard extends StatelessWidget {
       ProtectionHealth.transitioning => 'لحظات…',
       ProtectionHealth.inactive => _inactiveReason(snapshot),
       ProtectionHealth.paused => 'لا يتم حجب أي محتوى حاليًا.',
+      ProtectionHealth.suspended =>
+        report.safeMode
+            ? 'الفلترة متوقفة لاستعادة الاتصال بالإنترنت. أعد تفعيل الحماية عندما تكون جاهزًا.'
+            : 'لا يتم حجب أي محتوى. تُستأنف الحماية تلقائيًا بعد ${formatCountdown(pauseRemaining)}.',
+      ProtectionHealth.partial => partialReason(report),
       ProtectionHealth.unsupported =>
         'فلترة الشبكة تعمل على أجهزة Android فقط.',
     };
@@ -286,7 +335,8 @@ class ProtectionStatusCard extends StatelessWidget {
               ),
             ],
           ),
-          if (health == ProtectionHealth.active) ...[
+          if (health == ProtectionHealth.active ||
+              health == ProtectionHealth.partial) ...[
             const SizedBox(height: SgSpace.x5),
             _LayerGrid(snapshot: snapshot, state: state),
           ],
@@ -300,13 +350,26 @@ class ProtectionStatusCard extends StatelessWidget {
   Widget _action() {
     return switch (health) {
       ProtectionHealth.active ||
+      ProtectionHealth.partial ||
       ProtectionHealth.transitioning => SecondaryButton(
         label: 'إيقاف الحماية',
         icon: Icons.pause_rounded,
-        onPressed: health == ProtectionHealth.active
-            ? () => onToggle(false)
-            : null,
+        onPressed: health == ProtectionHealth.transitioning
+            ? null
+            : () => onToggle(false),
       ),
+      ProtectionHealth.suspended =>
+        report.safeMode
+            ? PrimaryButton(
+                label: 'إعادة تفعيل الحماية',
+                icon: Icons.shield_outlined,
+                onPressed: onRestart,
+              )
+            : PrimaryButton(
+                label: 'استئناف الحماية الآن',
+                icon: Icons.play_arrow_rounded,
+                onPressed: onEndPause,
+              ),
       ProtectionHealth.inactive => PrimaryButton(
         label: 'تشغيل الحماية',
         icon: Icons.play_arrow_rounded,
@@ -552,3 +615,40 @@ class CategoryTile extends StatelessWidget {
     );
   }
 }
+
+/// "4:05" style countdown (minutes:seconds).
+String formatCountdown(Duration d) {
+  final m = d.inMinutes;
+  final s = d.inSeconds % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+/// Why protection is only partial, from the native health reason
+/// (`<layer>:<reason>`).
+String partialReason(HealthReport r) => switch (r.reason?.split(':').last) {
+  'private_dns' => 'ميزة «DNS الخاص» في Android تتجاوز الفلترة. اضبطها على «تلقائي» أو «إيقاف».',
+  'upstream_failing' =>
+    'خادم DNS في شبكتك لا يستجيب. إذا انقطع الإنترنت استخدم «وضع الأمان».',
+  'no_blocking_rules' =>
+    'لا توجد قوائم حظر للنطاقات بعد؛ يعمل الحظر على قوائمك وكلماتك فقط.',
+  'model_unavailable' => 'نموذج الحماية الذكية غير متاح؛ القواعد تعمل.',
+  'database_error' => 'تعذّرت قراءة قاعدة البيانات المحلية.',
+  final other when other != null && other.startsWith('accessibility') =>
+    'لديك تطبيقات محمية لكن خدمة حماية التطبيقات غير مفعّلة.',
+  _ => 'إحدى طبقات الحماية لا تعمل كما يجب. راجع شاشة الحالة.',
+};
+
+/// Short Arabic label for one layer's state.
+String layerStateLabel(LayerState s) => switch (s) {
+  LayerState.active => 'يعمل',
+  LayerState.degraded => 'جزئي',
+  LayerState.inactive => 'متوقف',
+  LayerState.off => 'مطفأ',
+  LayerState.notConfigured => 'غير مُعد',
+};
+
+String modeLabel(ProtectionMode m) => switch (m) {
+  ProtectionMode.normal => 'عادي',
+  ProtectionMode.strict => 'صارم',
+  ProtectionMode.custom => 'مخصص',
+};
