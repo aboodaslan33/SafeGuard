@@ -286,7 +286,7 @@ Issues found and fixed during this phase:
 | Model runs and outputs sane probabilities on safe photos | VERIFIED in Python (LiteRT, real model): 11 safe sample photos all "safe" 0.74–0.96; flat skin colour SEXUAL 0.24 (§8b of AI_CONTENT_SHIELD.md) |
 | Kotlin preprocessing = the validated reference | VERIFIED (`preprocessorMatchesTheValidatedReference`, golden values) |
 | Detection accuracy on real explicit content | **NOT VERIFIED:** only the authors' own ≈ 92 % on their data; no explicit images were used here |
-| LiteRT adapter, capture service, gestures | Compile-checked locally against android.jar + TFLite API; Android build, lint and R8 build on CI: see the CI run for commit `9571101` |
+| LiteRT adapter, capture service, gestures | VERIFIED builds: CI run 35911787411 on `0c298fe` green (LiteRT resolved, Kotlin + Robolectric tests, lint, debug APKs, unsigned release APK with R8, Flutter 206 tests, gitleaks). **Not run on a device** |
 | Capture privacy (no saving, encoding, logging, network in capture code; exact permission set) | VERIFIED (`ShieldSourceAuditTest`) |
 | UI: consent before Android's dialog, PIN to stop, "active" only with text + image | VERIFIED (`content_shield_test`) |
 | On a real device: capture, inference latency, skip gesture in each app, battery | **NOT VERIFIED** (FINAL_AI_TESTING.md, all NOT EXECUTED) |
