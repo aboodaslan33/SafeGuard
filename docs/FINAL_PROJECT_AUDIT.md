@@ -23,7 +23,7 @@ security, and it can be bypassed (see Known limitations).
 | `flutter test` (dev container) | VERIFIED: **196 passed, 0 failed** |
 | Kotlin engine tests on the JVM (dev container harness) | VERIFIED: **268 passed, 0 failed** |
 | Android layer compile check against android-all 16 (harness) | VERIFIED: compiles (with a local `R` stub) |
-| GitHub Actions CI run #1 on commit `2fc1bfa` | PENDING at time of writing (run 35891453928); updated below when finished |
+| GitHub Actions CI, run 35891603507 on `f325ac6` | Flutter job (format, analyze, tests) **passed on GitHub**; secret scanning (gitleaks) **passed**; Android job **failed before any test ran** (`./gradlew` is gitignored). Fixed in the workflow; re-run result below |
 | Real device (owner): Infinix X6528, Android 13, **debug build of Phase 5** | VERIFIED there only: app runs, SafeSearch enforced, custom-blocklist domain blocked (DEVICE_TEST_LOG D1–D3) |
 | Real device, any Phase 6–8 build | **NOT VERIFIED:** not run |
 | Signed release AAB on a device | **NOT VERIFIED** |

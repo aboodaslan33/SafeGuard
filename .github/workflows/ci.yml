@@ -55,6 +55,9 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Generate Gradle wrapper + local.properties
+        # gradlew is gitignored (Flutter default); the Flutter tool writes it.
+        run: flutter build apk --config-only
       - name: Kotlin unit tests (JVM engine + Robolectric SQLite)
         working-directory: android
         run: ./gradlew --no-daemon testProdDebugUnitTest
