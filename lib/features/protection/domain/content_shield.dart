@@ -260,6 +260,8 @@ class ShieldStatus {
     required this.apps,
     this.imageModel,
     this.screenCaptureActive = false,
+    this.allApps = false,
+    this.maxSensitivity = false,
   });
 
   /// The user turned the shield on.
@@ -281,6 +283,12 @@ class ShieldStatus {
 
   /// Screen capture (MediaProjection) is running this session.
   final bool screenCaptureActive;
+
+  /// Image checks in every app, not only the supported list.
+  final bool allApps;
+
+  /// Revealing images count, lower threshold, one frame is enough.
+  final bool maxSensitivity;
 
   /// Shown on platforms without the native layer.
   static const unsupported = ShieldStatus(
@@ -313,6 +321,8 @@ class ShieldStatus {
     imageModelState: ImageModelState.fromId(m['imageModelState']),
     imageModel: m['imageModel'] is String ? m['imageModel']! as String : null,
     screenCaptureActive: m['screenCaptureActive'] == true,
+    allApps: m['allApps'] == true,
+    maxSensitivity: m['maxSensitivity'] == true,
     apps: [
       for (final a in (m['apps'] as List?) ?? const []) ?ShieldApp.fromMap(a),
     ],
@@ -331,5 +341,7 @@ class ShieldStatus {
     apps: apps ?? this.apps,
     imageModel: imageModel,
     screenCaptureActive: screenCaptureActive,
+    allApps: allApps,
+    maxSensitivity: maxSensitivity,
   );
 }

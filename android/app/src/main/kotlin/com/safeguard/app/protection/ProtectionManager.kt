@@ -239,6 +239,8 @@ class ProtectionManager private constructor(private val context: Context) {
         policy = { DecisionPolicy(config.filteringActive, config.effectiveCategories, config.effectiveAi) },
         settings = { config.shieldSettings },
         protectionActive = { config.filteringActive },
+        // Launcher, dialer, system UI, settings and SafeGuard itself are never inspected.
+        isExempt = { pkg -> appProtection.isNeverProtectable(pkg) },
     )
 
     /** Content-free debug trace of recent decisions (off by default, memory only). */
@@ -795,6 +797,17 @@ class ProtectionManager private constructor(private val context: Context) {
         onShieldStateChanged()
     }
 
+    /** Image checks in every app. Turning it off needs the PIN (UI). */
+    fun setShieldAllApps(on: Boolean) {
+        config.shieldSettings = config.shieldSettings.copy(allApps = on)
+        onShieldStateChanged()
+    }
+
+    /** Maximum image sensitivity. Turning it off needs the PIN (UI). */
+    fun setShieldMaxSensitivity(on: Boolean) {
+        config.shieldSettings = config.shieldSettings.copy(maxSensitivity = on)
+    }
+
     fun declineShieldDisclosure() {
         config.shieldDisclosureDeclined = true
     }
@@ -805,7 +818,7 @@ class ProtectionManager private constructor(private val context: Context) {
      * meantime, in which case nothing is blocked.
      */
     fun onShieldBlock(e: ShieldEvent, action: BlockAction): Boolean {
-        if (!shield.isActiveFor(e.packageName)) return false
+        if (!shield.isActiveFor(e.packageName, e.kind)) return false
         logger.record(
             BlockEvent(
                 timestamp = e.timestamp,

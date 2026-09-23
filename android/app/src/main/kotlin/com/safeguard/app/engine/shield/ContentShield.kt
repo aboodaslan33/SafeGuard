@@ -14,7 +14,23 @@ data class ShieldSettings(
     val enabled: Boolean = false,
     /** Supported-app keys the user switched off; every other supported app is inspected. */
     val disabledApps: Set<String> = emptySet(),
+    /**
+     * Image checks in every app, not only the supported list (system apps,
+     * the launcher, the dialer and SafeGuard excepted). Text is still read
+     * only in supported apps.
+     */
+    val allApps: Boolean = false,
+    /**
+     * Maximum sensitivity for images: revealing ("suggestive") images count
+     * as sexual in every mode, the threshold drops to
+     * [MAX_SENSITIVITY_THRESHOLD] and one frame is enough. Blocks more,
+     * including more safe images by mistake.
+     */
+    val maxSensitivity: Boolean = false,
 ) {
+    /** Whether the service must receive events from every app (for image checks). */
+    val watchesAllApps: Boolean get() = enabled && allApps
+
     fun isAppEnabled(app: SupportedApp) = app.key !in disabledApps
 
     fun enabledApps(): List<SupportedApp> = SupportedApps.all.filter(::isAppEnabled)
@@ -24,7 +40,15 @@ data class ShieldSettings(
 
     /** True if [next] inspects less (the UI requires the PIN). */
     fun isLoosenedBy(next: ShieldSettings): Boolean =
-        (enabled && !next.enabled) || (enabled && (next.disabledApps - disabledApps).isNotEmpty())
+        (enabled && !next.enabled) ||
+            (enabled && (next.disabledApps - disabledApps).isNotEmpty()) ||
+            (enabled && allApps && !next.allApps) ||
+            (enabled && maxSensitivity && !next.maxSensitivity)
+
+    companion object {
+        /** SEXUAL threshold for images with [maxSensitivity] (policy minimum is 0.50). */
+        const val MAX_SENSITIVITY_THRESHOLD = 0.60
+    }
 }
 
 enum class ShieldState(val id: String) {
@@ -237,6 +261,8 @@ class ContentShieldEngine(
     private val settings: () -> ShieldSettings,
     /** Protection on, not paused. */
     private val protectionActive: () -> Boolean,
+    /** Apps never inspected even with "all apps" (launcher, dialer, system UI, SafeGuard…). */
+    private val isExempt: (String) -> Boolean = { false },
     private val clock: () -> Long = System::currentTimeMillis,
     private val textWatchdog: InferenceWatchdog = InferenceWatchdog(limitMs = 250),
     private val imageWatchdog: InferenceWatchdog = InferenceWatchdog(limitMs = 1_500),
@@ -245,8 +271,10 @@ class ContentShieldEngine(
 ) {
     private val textGate = FrameGate(minIntervalMs = 1_000, settleMs = 400, maxWaitMs = 2_500, sameScreenBits = 0)
     private val imageGate = FrameGate()
+    private val imageGateFast = FrameGate(minIntervalMs = 450, settleMs = 200, maxWaitMs = 1_000)
     private val textConfirm = TemporalConfirmer()
     private val imageConfirm = TemporalConfirmer()
+    private val imageConfirmMax = TemporalConfirmer(confirmations = 1)
     @Volatile private var foreground: String? = null
     @Volatile private var lastTextHash: Long? = null
     @Volatile private var textPending = false
@@ -255,11 +283,17 @@ class ContentShieldEngine(
     val textSlow: Boolean get() = textWatchdog.isSlow(clock())
     val imageSlow: Boolean get() = imageWatchdog.isSlow(clock())
 
-    /** Whether content of [pkg] may be inspected right now. */
-    fun isActiveFor(pkg: String?): Boolean {
-        val app = SupportedApps.forPackage(pkg) ?: return false
+    /**
+     * Whether [kind] content of [pkg] may be inspected right now. Text: only
+     * supported apps the user left on. Images: the same, plus every other
+     * non-exempt app when "all apps" is on.
+     */
+    fun isActiveFor(pkg: String?, kind: ContentKind = ContentKind.TEXT): Boolean {
+        if (pkg == null) return false
         val s = settings()
-        return s.enabled && s.isAppEnabled(app) && protectionActive() && policy().ai.enabled
+        if (!s.enabled || !protectionActive() || !policy().ai.enabled) return false
+        val app = SupportedApps.forPackage(pkg)
+        return if (app != null) s.isAppEnabled(app) else kind == ContentKind.IMAGE && s.allApps && !isExempt(pkg)
     }
 
     /** The foreground app changed: evidence from the previous app is dropped. */
@@ -268,23 +302,23 @@ class ContentShieldEngine(
         foreground = pkg
         lastTextHash = null
         textPending = false
-        textGate.reset(); imageGate.reset()
-        textConfirm.reset(); imageConfirm.reset()
+        textGate.reset(); imageGate.reset(); imageGateFast.reset()
+        textConfirm.reset(); imageConfirm.reset(); imageConfirmMax.reset()
     }
 
     /** Scrolling or other content changes (debounces sampling). */
     fun onContentChanged() {
         val now = clock()
         textGate.onContentChanged(now)
-        imageGate.onContentChanged(now)
+        onImageContentChanged(now)
     }
 
     /** Whether a text snapshot should be taken now (call before walking the node tree). */
     fun wantsText(pkg: String?): Boolean =
-        isActiveFor(pkg) && textWatchdog.canRun(clock()) && textGate.shouldSample(clock(), null, true)
+        isActiveFor(pkg, ContentKind.TEXT) && textWatchdog.canRun(clock()) && textGate.shouldSample(clock(), null, true)
 
     fun onText(pkg: String, text: String): ShieldOutcome {
-        if (!isActiveFor(pkg) || text.isBlank()) return ShieldOutcome.Skipped
+        if (!isActiveFor(pkg, ContentKind.TEXT) || text.isBlank()) return ShieldOutcome.Skipped
         // Same text as last time and nothing to confirm: nothing new to learn.
         val hash = FrameHash.text(text)
         if (hash == lastTextHash && !textPending) return ShieldOutcome.Skipped
@@ -305,13 +339,21 @@ class ContentShieldEngine(
 
     /** [frame] is read in place and must be released by the caller afterwards. */
     fun onFrame(pkg: String, frame: RgbaFrame): ShieldOutcome {
-        if (!isActiveFor(pkg) || !image.isUsable) return ShieldOutcome.Skipped
+        if (!isActiveFor(pkg, ContentKind.IMAGE) || !image.isUsable) return ShieldOutcome.Skipped
+        val max = settings().maxSensitivity
+        val gate = if (max) imageGateFast else imageGate
         val now = clock()
         if (!imageWatchdog.canRun(now)) return ShieldOutcome.Skipped
-        if (!imageGate.shouldSample(now, FrameHash.dHash(frame), true)) return ShieldOutcome.Skipped
+        if (!gate.shouldSample(now, FrameHash.dHash(frame), true)) return ShieldOutcome.Skipped
         val c = image.classify(frame)
         imageWatchdog.record(clock(), clock() - now)
-        return decide(pkg, c, imageConfirm, imageGate)
+        return decide(pkg, c, if (max) imageConfirmMax else imageConfirm, gate, maxSensitivity = max)
+    }
+
+    /** Scrolling or other content changes (debounces sampling). Kept for both image gates. */
+    private fun onImageContentChanged(now: Long) {
+        imageGate.onContentChanged(now)
+        imageGateFast.onContentChanged(now)
     }
 
     /** Frees the image model (protection or shield stopped). */
@@ -320,10 +362,20 @@ class ContentShieldEngine(
         onForeground(null)
     }
 
-    private fun decide(pkg: String, c: AiClassification, confirm: TemporalConfirmer, gate: FrameGate): ShieldOutcome {
-        val p = policy()
+    private fun decide(
+        pkg: String,
+        c: AiClassification,
+        confirm: TemporalConfirmer,
+        gate: FrameGate,
+        maxSensitivity: Boolean = false,
+    ): ShieldOutcome {
+        val base = policy()
+        // Maximum sensitivity only lowers the SEXUAL threshold for images; the
+        // policy engine, category toggles and protection state still apply.
+        val p = if (maxSensitivity) ShieldScores.maxSensitivityPolicy(base) else base
         val now = clock()
-        val evidence = confirm.add(now, ShieldScores.toResult(c, ShieldScores.blockSuggestive(p.ai.mode)))
+        val suggestive = maxSensitivity || ShieldScores.blockSuggestive(base.ai.mode)
+        val evidence = confirm.add(now, ShieldScores.toResult(c, suggestive))
         val d = ShieldPolicy.decide(RuleSignal.None, evidence, c, p)
         val pending = evidence.status == ClassificationStatus.UNCERTAIN && c.status == ClassificationStatus.OK
         gate.onResult(pending)

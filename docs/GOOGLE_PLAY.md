@@ -110,6 +110,11 @@ to `SupportedApps`), `VisibleTextExtractor` (skips editable/password),
 `ShieldSourceAuditTest` (no logging, storage, network, capture or overlay
 APIs in the shield path), `ContentShieldService.block` (Home + activity).
 
+With the optional "check images in every app" switch, the service
+receives events from all apps, but only to learn which app is in front
+(for screen-capture image checks); window content is read only in the
+supported apps. The declaration must say so if that option ships.
+
 Video (not recorded): disclosure → enable in settings → open Chrome on a
 page with blocked text → home + "content blocked" screen → log entry.
 

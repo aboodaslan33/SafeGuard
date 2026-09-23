@@ -22,6 +22,10 @@ carrying the previous code (see docs/RELEASE.md).
 - **Skip action:** blocked content is swiped past (next reel/short/post),
   then Back, then Home with the blocking screen.
 - **Facebook** and Facebook Lite in the supported apps.
+- Optional **"check images in every app"** (text stays limited to
+  supported apps) and **"maximum image sensitivity"** (revealing images,
+  0.60 threshold, one frame). Turning either off needs the PIN.
+- CI uploads the prod release APK (debug-signed, for device testing only).
 
 ### Security notes
 - New permissions `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PROJECTION`

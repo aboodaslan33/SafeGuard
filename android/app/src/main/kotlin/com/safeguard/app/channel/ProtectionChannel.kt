@@ -320,6 +320,14 @@ class ProtectionChannel(
                     manager.setShieldAppEnabled(key, call.argument<Boolean>("enabled") ?: throw bad("enabled"))
                     shieldState()
                 }
+                "setShieldAllApps" -> {
+                    manager.setShieldAllApps(call.argument<Boolean>("enabled") ?: throw bad("enabled"))
+                    shieldState()
+                }
+                "setShieldMaxSensitivity" -> {
+                    manager.setShieldMaxSensitivity(call.argument<Boolean>("enabled") ?: throw bad("enabled"))
+                    shieldState()
+                }
                 "setShieldDisclosure" -> {
                     if (call.argument<Boolean>("accepted") != true) manager.declineShieldDisclosure()
                     shieldState()
@@ -495,6 +503,8 @@ class ProtectionChannel(
         val pm = activity.packageManager
         return mapOf(
             "enabled" to settings.enabled,
+            "allApps" to settings.allApps,
+            "maxSensitivity" to settings.maxSensitivity,
             "state" to status.state.id,
             "issues" to status.issues.map { it.id },
             "textActive" to status.textActive,

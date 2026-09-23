@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.util.DisplayMetrics
 import android.view.WindowManager
 import com.safeguard.app.R
+import com.safeguard.app.engine.ai.ContentKind
 import com.safeguard.app.engine.shield.RgbaFrame
 import com.safeguard.app.engine.shield.ShieldOutcome
 import com.safeguard.app.protection.ProtectionManager
@@ -129,7 +130,7 @@ class ScreenCaptureService : Service() {
     private fun applyActive() {
         val d = display ?: return
         val r = reader ?: return
-        val active = manager.shield.isActiveFor(manager.shieldForeground)
+        val active = manager.shield.isActiveFor(manager.shieldForeground, ContentKind.IMAGE)
         if (active == attached) return
         d.surface = if (active) r.surface else null
         attached = active

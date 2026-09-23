@@ -86,9 +86,12 @@ class ShieldSourceAuditTest {
         assertTrue(code.contains("createScreenCaptureIntent"))
     }
 
-    @Test fun serviceNeverReceivesEventsFromEveryApp() {
-        // A null packageNames list would mean "all apps".
+    @Test fun serviceReceivesEventsFromEveryAppOnlyWithAllAppsOn() {
+        // A null packageNames list means "all apps": only behind the user's switch.
         assertTrue(service.contains("ifEmpty { SupportedApps.allPackages }"))
+        assertTrue(service.contains("info.packageNames = if (manager.config.shieldSettings.watchesAllApps) null else"))
         assertFalse(service.contains("packageNames = null"))
+        // Text is only ever read in supported apps.
+        assertTrue(service.contains("if (!supported || !engine.isActiveFor(pkg))"))
     }
 }

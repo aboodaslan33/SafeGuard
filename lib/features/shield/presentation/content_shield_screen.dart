@@ -127,6 +127,33 @@ class _ContentShieldScreenState extends State<ContentShieldScreen> {
     await _refresh();
   }
 
+  Future<void> _setAllApps(bool on) async {
+    final ok = await ProtectionGuard.authorize(
+      context,
+      loosens: !on,
+      reason: on
+          ? tr('لفحص الصور في كل التطبيقات', 'to check images in every app')
+          : tr(
+              'لإيقاف فحص الصور في كل التطبيقات',
+              'to stop checking images in every app',
+            ),
+    );
+    if (!ok || !mounted) return;
+    await _run(() => _engine.setShieldAllApps(on));
+  }
+
+  Future<void> _setMaxSensitivity(bool on) async {
+    final ok = await ProtectionGuard.authorize(
+      context,
+      loosens: !on,
+      reason: on
+          ? tr('لتفعيل أقصى حساسية', 'to turn on maximum sensitivity')
+          : tr('لإيقاف أقصى حساسية', 'to turn off maximum sensitivity'),
+    );
+    if (!ok || !mounted) return;
+    await _run(() => _engine.setShieldMaxSensitivity(on));
+  }
+
   Future<void> _stopImageChecks() async {
     final ok = await ProtectionGuard.authorize(
       context,
@@ -193,6 +220,36 @@ class _ContentShieldScreenState extends State<ContentShieldScreen> {
             busy: _busy,
             onStart: _startImageChecks,
             onStop: _stopImageChecks,
+          ),
+          const SizedBox(height: SgSpace.x3),
+          SgGroupedCard(
+            children: [
+              SecuritySettingTile(
+                icon: Icons.apps_outage_rounded,
+                title: tr(
+                  'فحص الصور في كل التطبيقات',
+                  'Check images in every app',
+                ),
+                subtitle: tr(
+                  'وليس فقط التطبيقات المدعومة (عدا تطبيقات النظام والاتصال). النص يُقرأ فقط في التطبيقات المدعومة.',
+                  'Not only the supported apps (system and phone apps excepted). Text is still read only in supported apps.',
+                ),
+                switchValue: s.allApps,
+                onSwitchChanged: _busy || !s.enabled ? null : _setAllApps,
+              ),
+              SecuritySettingTile(
+                icon: Icons.local_fire_department_outlined,
+                title: tr('أقصى حساسية للصور', 'Maximum image sensitivity'),
+                subtitle: tr(
+                  'يحظر أيضًا الصور المثيرة والعري الجزئي من أول لقطة. يحظر أكثر، ومعه أخطاء أكثر (صور بحر ورياضة).',
+                  'Also blocks revealing images and partial nudity from the first frame. Blocks more, with more mistakes (beach and sports photos).',
+                ),
+                switchValue: s.maxSensitivity,
+                onSwitchChanged: _busy || !s.enabled
+                    ? null
+                    : _setMaxSensitivity,
+              ),
+            ],
           ),
           SectionHeader(
             title: tr('حالة نماذج الذكاء الاصطناعي', 'AI model status'),

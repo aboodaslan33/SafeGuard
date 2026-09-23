@@ -264,5 +264,41 @@ void main() {
       expect(engine.screenCapture, isFalse);
       expect(find.text('تفعيل فحص الصور'), findsOneWidget);
     });
+
+    testWidgets(
+      'maximum sensitivity and all apps: on freely, off needs the PIN',
+      (tester) async {
+        final engine = await open(
+          tester,
+          setup: (e) => e
+            ..shieldEnabled = true
+            ..shieldAccessibility = AccessibilityStatus.enabled,
+        );
+        final max = find.text('أقصى حساسية للصور');
+        await tester.scrollUntilVisible(
+          max,
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(switchOf('أقصى حساسية للصور'));
+        await tester.pumpAndSettle();
+        expect(find.text('أدخل رمز PIN'), findsNothing);
+        expect(engine.shieldMax, isTrue);
+        await tester.ensureVisible(switchOf('فحص الصور في كل التطبيقات'));
+        await tester.pumpAndSettle();
+        await tester.tap(switchOf('فحص الصور في كل التطبيقات'));
+        await tester.pumpAndSettle();
+        expect(engine.shieldAllApps, isTrue);
+
+        await tester.ensureVisible(switchOf('أقصى حساسية للصور'));
+        await tester.pumpAndSettle();
+        await tester.tap(switchOf('أقصى حساسية للصور'));
+        await tester.pumpAndSettle();
+        expect(find.text('أدخل رمز PIN'), findsOneWidget);
+        await enterPin(tester, '739154');
+        expect(engine.shieldMax, isFalse);
+      },
+    );
   });
 }

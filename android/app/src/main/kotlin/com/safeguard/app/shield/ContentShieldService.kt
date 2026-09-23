@@ -68,20 +68,23 @@ class ContentShieldService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
-        if (SupportedApps.forPackage(pkg) == null) return
+        // Events from other apps arrive only with "all apps" on (packageNames
+        // unset); they are used for the foreground app, never for text.
+        val supported = SupportedApps.forPackage(pkg) != null
         val engine = manager.shield
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                if (pkg != foreground) {
+                // The keyboard isn't "the app in front".
+                if (pkg != foreground && pkg != keyboardPackage()) {
                     foreground = pkg
                     manager.shieldForeground = pkg
                     engine.onForeground(pkg)
                     ScreenCaptureService.updateActive()
                 }
             }
-            else -> engine.onContentChanged()
+            else -> if (pkg == foreground) engine.onContentChanged()
         }
-        if (!engine.isActiveFor(pkg)) {
+        if (!supported || !engine.isActiveFor(pkg)) {
             main.removeCallbacks(snapshot)
             return
         }
@@ -171,7 +174,9 @@ class ContentShieldService : AccessibilityService() {
         val packages = manager.shieldPackages()
         val active = packages.isNotEmpty() && manager.shieldContentActive()
         // Never null: a null list would mean "every app".
-        info.packageNames = (packages.ifEmpty { SupportedApps.allPackages }).toTypedArray()
+        // Never null unless the user turned on "all apps" (image checks
+        // everywhere): a null list means events from every app.
+        info.packageNames = if (manager.config.shieldSettings.watchesAllApps) null else (packages.ifEmpty { SupportedApps.allPackages }).toTypedArray()
         info.eventTypes = when {
             packages.isEmpty() -> 0 // shield off: no events at all
             active -> AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
@@ -190,6 +195,18 @@ class ContentShieldService : AccessibilityService() {
             escalation.reset()
         }
         ScreenCaptureService.updateActive()
+    }
+
+    /** Package of the current keyboard (input method), cached briefly. */
+    private var keyboard: Pair<Long, String?>? = null
+
+    private fun keyboardPackage(): String? {
+        val now = android.os.SystemClock.elapsedRealtime()
+        keyboard?.let { (at, pkg) -> if (now - at < 60_000) return pkg }
+        val pkg = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)
+            ?.substringBefore('/')
+        keyboard = now to pkg
+        return pkg
     }
 
     override fun onInterrupt() = Unit

@@ -1,5 +1,6 @@
 package com.safeguard.app.engine.shield
 
+import com.safeguard.app.engine.ai.AiSettings
 import com.safeguard.app.engine.ai.ClassificationResult
 import com.safeguard.app.engine.ai.ClassificationStatus
 import com.safeguard.app.engine.ai.ContentKind
@@ -22,6 +23,18 @@ object ShieldScores {
 
     /** SUGGESTIVE counts toward the SEXUAL category only in STRICT mode. */
     fun blockSuggestive(mode: DetectionMode): Boolean = mode == DetectionMode.STRICT
+
+    /**
+     * The policy for images with maximum sensitivity: the same policy with
+     * the SEXUAL threshold lowered to [ShieldSettings.MAX_SENSITIVITY_THRESHOLD]
+     * (never raised). Other categories keep their thresholds.
+     */
+    fun maxSensitivityPolicy(p: DecisionPolicy): DecisionPolicy {
+        val thresholds = Category.filterable.associateWith { c ->
+            if (c == Category.SEXUAL) minOf(p.ai.threshold(c), ShieldSettings.MAX_SENSITIVITY_THRESHOLD) else p.ai.threshold(c)
+        }
+        return p.copy(ai = AiSettings(enabled = p.ai.enabled, mode = DetectionMode.CUSTOM, customThresholds = thresholds))
+    }
 
     fun toResult(c: AiClassification, blockSuggestive: Boolean): ClassificationResult {
         val status = c.status

@@ -14,8 +14,22 @@ policy says so, gets it off the screen.
 | Screen capture (MediaProjection, Android's consent dialog) | **Implemented.** Needs the user's consent each session (Android 14+ asks again after a restart). |
 | Apps: Instagram, TikTok, YouTube, Reddit, Facebook, Chrome, Firefox | **Supported by design, verified on no device.** Every app shows "Not tested on a device yet". |
 
-SafeGuard does not offer 100 % protection or 100 % detection, and does
-not work in every app.
+Two optional switches (off by default; turning either off needs the PIN):
+
+- **Check images in every app:** image checks run in any app in front,
+  except system, phone, settings and launcher apps and SafeGuard itself.
+  The accessibility service then receives events from every app, but only
+  to know which app is in front. **Text is still read only in the
+  supported apps.**
+- **Maximum image sensitivity:** revealing images ("sexy" class, e.g.
+  cleavage or swimwear) count as sexual in every mode. The SEXUAL
+  threshold for images drops to 0.60, a single frame is enough (no
+  confirmation), and frames are sampled every ~0.45 s instead of ~0.8 s.
+  This **blocks more and makes more mistakes** (beach, sports, fitness,
+  fashion photos). Category toggles and protection state still apply.
+
+SafeGuard does not offer 100 % protection or 100 % detection. No
+detection-and-block system is free of mistakes.
 
 ---
 

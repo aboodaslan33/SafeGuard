@@ -554,6 +554,8 @@ class FakeProtectionEngine implements ProtectionEngine {
   AccessibilityStatus shieldAccessibility = AccessibilityStatus.disabled;
   bool shieldTextModel = true;
   bool screenCapture = false;
+  bool shieldAllApps = false;
+  bool shieldMax = false;
   bool grantScreenCapture = true;
   int screenCaptureRequests = 0;
   final shieldDisabledApps = <String>{};
@@ -608,6 +610,8 @@ class FakeProtectionEngine implements ProtectionEngine {
       imageActive: image,
       imageModel: 'gantman-nsfw-mnv2@110',
       screenCaptureActive: screenCapture,
+      allApps: shieldAllApps,
+      maxSensitivity: shieldMax,
       accessibility: shieldAccessibility,
       textModel: 'sg-text-1',
       textModelAvailable: shieldTextModel,
@@ -632,6 +636,18 @@ class FakeProtectionEngine implements ProtectionEngine {
     } else {
       shieldDisabledApps.add(appKey);
     }
+    return shield;
+  }
+
+  @override
+  Future<ShieldStatus> setShieldAllApps(bool enabled) async {
+    shieldAllApps = enabled;
+    return shield;
+  }
+
+  @override
+  Future<ShieldStatus> setShieldMaxSensitivity(bool enabled) async {
+    shieldMax = enabled;
     return shield;
   }
 

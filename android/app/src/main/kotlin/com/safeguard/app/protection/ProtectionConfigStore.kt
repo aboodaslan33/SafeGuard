@@ -278,9 +278,13 @@ class ProtectionConfigStore(
             enabled = prefs.getBoolean(KEY_SHIELD_ENABLED, false),
             disabledApps = prefs.getString(KEY_SHIELD_DISABLED_APPS, "").orEmpty().split(',')
                 .filter { key -> SupportedApps.byKey(key) != null }.toSet(),
+            allApps = prefs.getBoolean(KEY_SHIELD_ALL_APPS, false),
+            maxSensitivity = prefs.getBoolean(KEY_SHIELD_MAX, false),
         )
         set(value) = prefs.edit()
             .putBoolean(KEY_SHIELD_ENABLED, value.enabled)
+            .putBoolean(KEY_SHIELD_ALL_APPS, value.allApps)
+            .putBoolean(KEY_SHIELD_MAX, value.maxSensitivity)
             .putString(KEY_SHIELD_DISABLED_APPS, value.disabledApps.filter { SupportedApps.byKey(it) != null }.sorted().joinToString(","))
             .apply()
 
@@ -360,6 +364,8 @@ class ProtectionConfigStore(
         const val KEY_SHIELD_ENABLED = "shield_enabled"
         const val KEY_SHIELD_DISABLED_APPS = "shield_disabled_apps"
         const val KEY_SHIELD_DECLINED = "shield_disclosure_declined"
+        const val KEY_SHIELD_ALL_APPS = "shield_all_apps"
+        const val KEY_SHIELD_MAX = "shield_max_sensitivity"
         const val KEY_A11Y_WAS_ENABLED = "a11y_was_enabled"
         const val KEY_AI_ENABLED = "ai_enabled"
         const val KEY_AI_MODE = "ai_mode"

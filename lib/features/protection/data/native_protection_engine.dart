@@ -243,6 +243,14 @@ class NativeProtectionEngine implements ProtectionEngine {
       ShieldStatus.fromMap(await _channel.setShieldDisclosure(accepted));
 
   @override
+  Future<ShieldStatus> setShieldAllApps(bool enabled) async =>
+      ShieldStatus.fromMap(await _channel.setShieldAllApps(enabled));
+
+  @override
+  Future<ShieldStatus> setShieldMaxSensitivity(bool enabled) async =>
+      ShieldStatus.fromMap(await _channel.setShieldMaxSensitivity(enabled));
+
+  @override
   Future<bool> requestScreenCapture() => _channel.requestScreenCapture();
 
   @override

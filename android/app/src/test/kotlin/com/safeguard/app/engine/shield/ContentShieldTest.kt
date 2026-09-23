@@ -83,6 +83,7 @@ class ContentShieldTest {
         var mode: DetectionMode = DetectionMode.NORMAL,
         var aiOn: Boolean = true,
         image: ShieldImageClassifier = ShieldImageClassifier(null, { null }, { null }),
+        exempt: Set<String> = emptySet(),
         clock: () -> Long,
     ) {
         var calls = 0
@@ -92,6 +93,7 @@ class ContentShieldTest {
             policy = { DecisionPolicy(true, Category.filterable.toSet(), AiSettings(enabled = aiOn, mode = mode)) },
             settings = { settings },
             protectionActive = { protection },
+            isExempt = { it in exempt },
             clock = clock,
         )
     }
@@ -235,6 +237,57 @@ class ContentShieldTest {
             fail("no model must not produce a result")
         } catch (e: IllegalStateException) {
         }
+    }
+
+    @Test fun allAppsCoversImagesEverywhereButTextOnlyInSupportedApps() {
+        val whatsapp = "com.whatsapp"
+        val launcher = "com.android.launcher3"
+        val h = Harness({ textResult(Category.SEXUAL, 0.99) }, exempt = setOf(launcher), clock = { now })
+        assertFalse(h.engine.isActiveFor(whatsapp, ContentKind.IMAGE))
+        h.settings = ShieldSettings(enabled = true, allApps = true)
+        assertTrue(h.engine.isActiveFor(whatsapp, ContentKind.IMAGE))
+        assertFalse("text is never read outside supported apps", h.engine.isActiveFor(whatsapp, ContentKind.TEXT))
+        assertEquals(ShieldOutcome.Skipped, h.engine.onText(whatsapp, "caption"))
+        assertFalse("exempt apps are never inspected", h.engine.isActiveFor(launcher, ContentKind.IMAGE))
+        h.protection = false
+        assertFalse(h.engine.isActiveFor(whatsapp, ContentKind.IMAGE))
+        assertTrue(ShieldSettings(enabled = true, allApps = true).watchesAllApps)
+        assertFalse(ShieldSettings(enabled = false, allApps = true).watchesAllApps)
+    }
+
+    @Test fun maximumSensitivityBlocksRevealingImagesOnTheFirstFrame() {
+        // drawings, hentai, neutral, porn, sexy (logits chosen so sexy ≈ 0.66)
+        val probs = floatArrayOf(0.10f, 0.02f, 0.20f, 0.02f, 0.66f)
+        val gm = BuiltInImagePacks.GANTMAN_NSFW_MNV2
+        val rt = FixedRuntime(probs)
+        fun harness(max: Boolean) = Harness(
+            { textResult(Category.SAFE, 0.0) },
+            settings = ShieldSettings(enabled = true, maxSensitivity = max),
+            image = ShieldImageClassifier(
+                gm.copy(sizeBytes = 4, sha256 = sha("abcd".toByteArray()), input = gm.input.copy(size = 32)),
+                { ByteBuffer.wrap("abcd".toByteArray()) },
+                { ImageRuntimeFactory { _, _ -> rt } },
+            ),
+            clock = { now },
+        )
+        val img = frame(64, 64) { _, _ -> 0x808080 }
+        // NORMAL mode, standard sensitivity: suggestive doesn't count → no block.
+        assertFalse(harness(max = false).engine.onFrame(instagram, img) is ShieldOutcome.Blocked)
+        // Maximum sensitivity: suggestive counts, threshold 0.60, one frame.
+        val out = harness(max = true).engine.onFrame(instagram, img)
+        assertTrue(out.toString(), out is ShieldOutcome.Blocked)
+        assertEquals(Category.SEXUAL, (out as ShieldOutcome.Blocked).event.category)
+        // Category toggle still wins: SEXUAL off → no block even at maximum.
+        val policy = ShieldScores.maxSensitivityPolicy(DecisionPolicy(true, setOf(Category.GAMBLING), AiSettings(mode = DetectionMode.NORMAL)))
+        assertEquals(0.60, policy.ai.threshold(Category.SEXUAL), 1e-9)
+        assertEquals(0.90, policy.ai.threshold(Category.GAMBLING), 1e-9)
+    }
+
+    @Test fun turningOffAllAppsOrMaximumNeedsThePin() {
+        val full = ShieldSettings(enabled = true, allApps = true, maxSensitivity = true)
+        assertTrue(full.isLoosenedBy(full.copy(allApps = false)))
+        assertTrue(full.isLoosenedBy(full.copy(maxSensitivity = false)))
+        assertFalse(ShieldSettings(enabled = true).isLoosenedBy(full))
     }
 
     @Test fun escalationGoesSkipBackHomeAndResets() {
