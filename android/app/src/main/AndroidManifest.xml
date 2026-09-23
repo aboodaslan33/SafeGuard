@@ -36,7 +36,7 @@
     </queries>
 
     <application
-        android:label="SafeGuard"
+        android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

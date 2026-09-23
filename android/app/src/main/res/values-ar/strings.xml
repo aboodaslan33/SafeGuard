@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_guard_label">حماية التطبيقات في SafeGuard</string>
+    <string name="app_guard_summary">يمنع فتح التطبيقات التي اخترت حمايتها.</string>
+    <string name="app_guard_description">يستخدم SafeGuard هذه الخدمة لمعرفة اسم التطبيق الذي فُتح فقط، ليمنع فتح التطبيقات التي أضفتها إلى «التطبيقات المحمية». لا يقرأ محتوى الشاشة ولا ما تكتبه، ولا يرسل أي بيانات خارج جهازك. يمكنك إيقاف الخدمة من هنا في أي وقت.</string>
+</resources>

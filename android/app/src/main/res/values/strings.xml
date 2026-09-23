@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Shown by Android (Accessibility settings), in the device language.
+     Arabic lives in values-ar. -->
 <resources>
-    <string name="app_guard_label">حماية التطبيقات في SafeGuard</string>
-    <string name="app_guard_summary">يمنع فتح التطبيقات التي اخترت حمايتها.</string>
-    <string name="app_guard_description">يستخدم SafeGuard هذه الخدمة لمعرفة اسم التطبيق الذي فُتح فقط، ليمنع فتح التطبيقات التي أضفتها إلى «التطبيقات المحمية». لا يقرأ محتوى الشاشة ولا ما تكتبه، ولا يرسل أي بيانات خارج جهازك. يمكنك إيقاف الخدمة من هنا في أي وقت.</string>
+    <string name="app_guard_label">SafeGuard app protection</string>
+    <string name="app_guard_summary">Stops the apps you chose to protect from opening.</string>
+    <string name="app_guard_description">SafeGuard uses this service only to learn the name of the app that opened, so it can stop the apps you added to “Protected apps”. It doesn\'t read screen content or what you type, and sends no data off your device. You can turn the service off here at any time.</string>
 </resources>

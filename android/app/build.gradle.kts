@@ -42,6 +42,36 @@ android {
         versionName = flutter.versionName
     }
 
+    // Build flavours (Phase 7). `flutter run` / `flutter build` without
+    // --flavor use "prod" (pubspec: flutter.default-flavor).
+    //  - dev:     developer builds; separate package, installs side by side.
+    //  - staging: internal QA / sideloaded beta builds; separate package.
+    //  - prod:    the Play Store package (also used on Play testing tracks).
+    // No flavour has different endpoints or credentials: the app has none.
+    buildFeatures {
+        // resValue(app_name) below; off by default in recent AGP versions.
+        resValues = true
+    }
+    flavorDimensions += "env"
+    productFlavors {
+        create("dev") {
+            dimension = "env"
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            resValue("string", "app_name", "SafeGuard Dev")
+        }
+        create("staging") {
+            dimension = "env"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            resValue("string", "app_name", "SafeGuard Beta")
+        }
+        create("prod") {
+            dimension = "env"
+            resValue("string", "app_name", "SafeGuard")
+        }
+    }
+
     // Bundled domain lists are memory-mapped from the APK; they must be stored
     // uncompressed (they are random hashes and wouldn't compress anyway).
     androidResources {
