@@ -636,7 +636,7 @@ abstract interface class ProtectionEngine {
   Future<bool> removeKeyword(int id);
 
   /// Opens the system "save file" dialog for [json].
-  Future<ExportResult> saveExport(String json);
+  Future<ExportResult> saveExport(String json, {String? fileName});
 }
 
 /// Engine for platforms without the native layer (tests, previews): reports
@@ -783,7 +783,8 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   @override
   Future<bool> removeKeyword(int id) async => false;
   @override
-  Future<ExportResult> saveExport(String json) async => ExportResult.failed;
+  Future<ExportResult> saveExport(String json, {String? fileName}) async =>
+      ExportResult.failed;
 }
 
 abstract interface class ProtectionRepository {

@@ -548,9 +548,12 @@ class FakeProtectionEngine implements ProtectionEngine {
     return keywordList.length != before;
   }
 
+  String? exportedFileName;
+
   @override
-  Future<ExportResult> saveExport(String json) async {
+  Future<ExportResult> saveExport(String json, {String? fileName}) async {
     exported = json;
+    exportedFileName = fileName;
     return exportResult;
   }
 }

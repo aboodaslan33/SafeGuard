@@ -45,6 +45,8 @@ void main() {
     '/about',
     '/privacy',
     '/categories',
+    '/feedback?type=missed_content',
+    '/privacy/analytics',
   ];
 
   for (final textScale in [1.0, 1.3]) {

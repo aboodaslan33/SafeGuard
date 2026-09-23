@@ -190,8 +190,8 @@ class ProtectionChannel {
   Future<bool> removeKeyword(int id) async =>
       await _call<bool>('removeKeyword', {'id': id}) ?? false;
 
-  Future<Map<Object?, Object?>> saveExport(String json) =>
-      _map('saveExport', {'json': json});
+  Future<Map<Object?, Object?>> saveExport(String json, {String? fileName}) =>
+      _map('saveExport', {'json': json, 'fileName': ?fileName});
 
   /// `{elapsedMs, boot}`: time since boot and a boot id (PIN lockout).
   Future<Map<Object?, Object?>> monotonicTime() => _map('monotonicTime');

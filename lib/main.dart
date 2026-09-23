@@ -12,6 +12,6 @@ void main() {
 
   // Loading happens behind the splash screen, not before runApp, so the
   // first frame appears immediately after the native launch screen.
-  final dependencies = AppDependencies.production();
+  final dependencies = AppDependencies.production()..observeErrors();
   runApp(SafeGuardApp(dependencies: dependencies));
 }

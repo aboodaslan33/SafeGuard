@@ -359,8 +359,8 @@ class NativeProtectionEngine implements ProtectionEngine {
   Future<bool> removeKeyword(int id) => _channel.removeKeyword(id);
 
   @override
-  Future<ExportResult> saveExport(String json) async {
-    final r = await _channel.saveExport(json);
+  Future<ExportResult> saveExport(String json, {String? fileName}) async {
+    final r = await _channel.saveExport(json, fileName: fileName);
     return switch (r['status']) {
       'saved' => ExportResult.saved,
       'cancelled' => ExportResult.cancelled,

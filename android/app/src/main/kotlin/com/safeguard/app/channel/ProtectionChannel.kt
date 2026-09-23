@@ -532,11 +532,18 @@ class ProtectionChannel(
             result.error("BUSY", "Export already in progress", null)
             return
         }
+        // Only our own fixed names: settings export (.json) or a feedback /
+        // crash report the user chose to save (.txt).
+        val fileName = call.argument<String>("fileName") ?: "safeguard-settings.json"
+        if (!Regex("^safeguard-[a-z0-9-]{1,40}\\.(json|txt)$").matches(fileName)) {
+            result.error("INVALID_ARGUMENT", "fileName", null)
+            return
+        }
         pendingExport = result to json
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
-            .setType("application/json")
-            .putExtra(Intent.EXTRA_TITLE, "safeguard-settings.json")
+            .setType(if (fileName.endsWith(".txt")) "text/plain" else "application/json")
+            .putExtra(Intent.EXTRA_TITLE, fileName)
         try {
             activity.startActivityForResult(intent, REQUEST_EXPORT)
         } catch (e: ActivityNotFoundException) {

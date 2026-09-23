@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../core/error/app_logger.dart';
 import '../core/error/failures.dart';
 import '../core/error/result.dart';
+import '../core/observability/crash_reporter.dart';
+import '../core/observability/telemetry.dart';
 import '../core/platform/protection_channel.dart';
 import '../core/storage/stores.dart';
 import '../features/pin/data/pin_data.dart';
@@ -15,6 +20,7 @@ import '../features/protection/domain/protection.dart';
 import '../features/protection/presentation/protection_controller.dart';
 import '../features/settings/data/local_settings_repository.dart';
 import '../features/settings/presentation/settings_controller.dart';
+import 'app_info.dart';
 
 /// Android's time-since-boot and boot id, for the PIN lockout.
 MonotonicSource platformMonotonicSource([ProtectionChannel? channel]) {
@@ -46,6 +52,8 @@ class AppDependencies extends ChangeNotifier {
       repository: LocalProtectionRepository(preferences),
       engine: engine,
     );
+    crashes = LocalCrashReporter(preferences, appVersion: AppInfo.version);
+    telemetry = LocalTelemetry(preferences);
     security = SecurityController(
       PinService(
         repository: SecurePinRepository(secureStore),
@@ -76,6 +84,29 @@ class AppDependencies extends ChangeNotifier {
   late final ProtectionController protection;
   late final SecurityController security;
 
+  /// Local-only crash records (view / copy / delete; can be turned off).
+  late final LocalCrashReporter crashes;
+
+  /// Opt-in, aggregated, local-only counts (off by default).
+  late final LocalTelemetry telemetry;
+
+  /// Routes app-wide errors to the crash reporter and telemetry.
+  void observeErrors() {
+    AppLogger.onError = (tag, error, stack) {
+      final event = switch (tag) {
+        'flutter' || 'uncaught' => TelemetryEvent.crash,
+        'health' || 'recover' => TelemetryEvent.healthCheckFailure,
+        'ai' => TelemetryEvent.aiUnavailable,
+        'guard' || 'protection' => TelemetryEvent.storageFailure,
+        _ => TelemetryEvent.engineFailure,
+      };
+      unawaited(telemetry.count(event));
+      if (event == TelemetryEvent.crash) {
+        unawaited(crashes.record(error, stack));
+      }
+    };
+  }
+
   BootStatus _status = BootStatus.loading;
   BootStatus get status => _status;
 
@@ -85,14 +116,30 @@ class AppDependencies extends ChangeNotifier {
   Future<void> initialize() async {
     _status = BootStatus.loading;
     notifyListeners();
+    await crashes.load();
+    await telemetry.load();
     final results = await Future.wait([
       settings.load(),
       protection.load(),
       security.load(),
     ]);
+    unawaited(_loadDeviceInfo());
     _failure = results.map((r) => r.failureOrNull).nonNulls.firstOrNull;
     _status = _failure == null ? BootStatus.ready : BootStatus.failed;
     notifyListeners();
+  }
+
+  /// Android version and model for crash records (from native diagnostics).
+  Future<void> _loadDeviceInfo() async {
+    if (!protection.engine.isSupported) return;
+    try {
+      final d = await protection.engine.diagnostics();
+      crashes
+        ..androidVersion = d['androidRelease'] is String
+            ? d['androidRelease']! as String
+            : null
+        ..deviceModel = d['model'] is String ? d['model']! as String : null;
+    } catch (_) {}
   }
 
   /// Erases every SafeGuard value on the device and returns to first run:

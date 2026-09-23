@@ -143,6 +143,22 @@ class HelpScreen extends StatelessWidget {
         SgGroupedCard(
           children: [
             SecuritySettingTile(
+              icon: Icons.thumb_down_alt_outlined,
+              title: tr('الإبلاغ عن حظر خاطئ', 'Report a false positive'),
+              onTap: () => context.push(Routes.feedbackFor('false_positive')),
+            ),
+            SecuritySettingTile(
+              icon: Icons.visibility_outlined,
+              title: tr('الإبلاغ عن محتوى لم يُحجب', 'Report missed content'),
+              onTap: () => context.push(Routes.feedbackFor('missed_content')),
+            ),
+            SecuritySettingTile(
+              icon: Icons.build_outlined,
+              title: tr('الإبلاغ عن مشكلة تقنية', 'Report a technical problem'),
+              onTap: () =>
+                  context.push(Routes.feedbackFor('technical_problem')),
+            ),
+            SecuritySettingTile(
               icon: Icons.fact_check_outlined,
               title: tr('مساعد الإعداد', 'Setup assistant'),
               onTap: () => context.push(Routes.setupAssistant),
@@ -350,6 +366,11 @@ class PrivacyScreen extends StatelessWidget {
                 title: tr('تصدير الإعدادات', 'Export settings'),
                 onTap: () => AdvancedActions.exportSettings(context),
               ),
+            SecuritySettingTile(
+              icon: Icons.insights_outlined,
+              title: tr('التحليلات والتقارير', 'Analytics and reports'),
+              onTap: () => context.push(Routes.analytics),
+            ),
             SecuritySettingTile(
               icon: Icons.settings_rounded,
               title: tr(

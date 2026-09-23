@@ -10,6 +10,9 @@ import '../../features/ai/presentation/ai_protection_screen.dart';
 import '../../features/apps/presentation/app_protection_screen.dart';
 import '../../features/blocking/presentation/blocked_content_screen.dart';
 import '../../features/diagnostics/presentation/diagnostics_screen.dart';
+import '../../features/feedback/domain/feedback.dart';
+import '../../features/feedback/presentation/analytics_screen.dart';
+import '../../features/feedback/presentation/feedback_screen.dart';
 import '../../features/home/presentation/categories_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/info/presentation/info_screens.dart';
@@ -129,6 +132,23 @@ GoRouter createRouter(AppDependencies deps) {
       GoRoute(
         path: Routes.categories,
         builder: (c, s) => const CategoriesScreen(),
+      ),
+      GoRoute(
+        path: Routes.feedback,
+        builder: (c, s) => FeedbackScreen(
+          type: FeedbackType.fromId(s.uri.queryParameters['type']),
+          category: ProtectionCategory.fromId(
+            s.uri.queryParameters['category'] ?? '',
+          ),
+          source: switch (s.uri.queryParameters['source']) {
+            final String id => EventSourceKind.fromId(id),
+            null => null,
+          },
+        ),
+      ),
+      GoRoute(
+        path: Routes.analytics,
+        builder: (c, s) => const AnalyticsScreen(),
       ),
       StatefulShellRoute.indexedStack(
         pageBuilder: (c, s, shell) => _fade(s, AppShell(shell: shell)),

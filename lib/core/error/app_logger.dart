@@ -11,7 +11,17 @@ abstract final class AppLogger {
     developer.log(message, name: 'SafeGuard/$tag');
   }
 
+  /// Observers (crash reporter / telemetry) — also in release builds.
+  /// They receive the tag (a code constant) and the error object and must
+  /// sanitise it themselves.
+  static void Function(String tag, Object error, StackTrace? stack)? onError;
+
   static void error(String tag, Object error, [StackTrace? stack]) {
+    try {
+      onError?.call(tag, error, stack);
+    } catch (_) {
+      // An observer must never break the caller.
+    }
     if (kReleaseMode) return;
     developer.log(
       error.toString(),

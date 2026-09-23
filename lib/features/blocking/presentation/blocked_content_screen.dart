@@ -171,6 +171,19 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
                 },
               ),
           ],
+          SgTextButton(
+            label: tr(
+              'إرسال ملاحظات للمطوّر',
+              'Send feedback to the developer',
+            ),
+            onPressed: () => context.push(
+              Routes.feedbackFor(
+                'false_positive',
+                category: category?.id,
+                source: source?.name,
+              ),
+            ),
+          ),
         ],
       ),
     );

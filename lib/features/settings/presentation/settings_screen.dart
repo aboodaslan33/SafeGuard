@@ -353,6 +353,24 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => context.push(Routes.privacy),
                 ),
                 SecuritySettingTile(
+                  icon: Icons.feedback_outlined,
+                  title: tr('إرسال ملاحظات', 'Send feedback'),
+                  subtitle: tr(
+                    'حظر خاطئ، محتوى لم يُحجب، أو مشكلة تقنية',
+                    'False positive, missed content, or a technical problem',
+                  ),
+                  onTap: () => context.push(Routes.feedback),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.insights_outlined,
+                  title: tr('التحليلات والتقارير', 'Analytics and reports'),
+                  subtitle: tr(
+                    'متوقفة افتراضيًا؛ تبقى على جهازك',
+                    'Off by default; stays on your device',
+                  ),
+                  onTap: () => context.push(Routes.analytics),
+                ),
+                SecuritySettingTile(
                   icon: Icons.bug_report_outlined,
                   title: tr('التشخيص', 'Diagnostics'),
                   subtitle: tr(

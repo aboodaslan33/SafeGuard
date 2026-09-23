@@ -30,6 +30,20 @@ abstract final class Routes {
   static const privacy = '/privacy';
   static const categories = '/categories';
 
+  // Phase 8
+  static const feedback = '/feedback';
+  static const analytics = '/privacy/analytics';
+
+  static String feedbackFor(String type, {String? category, String? source}) =>
+      Uri(
+        path: feedback,
+        queryParameters: {
+          'type': type,
+          'category': ?category,
+          'source': ?source,
+        },
+      ).toString();
+
   static const _firstRun = {welcome, createPin};
   static const _entry = {splash, welcome, createPin, lock};
 

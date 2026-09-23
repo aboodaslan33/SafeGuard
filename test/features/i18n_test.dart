@@ -135,6 +135,9 @@ void main() {
         Routes.about,
         Routes.privacy,
         Routes.categories,
+        Routes.feedback,
+        Routes.feedbackFor('false_positive', category: 'gambling'),
+        Routes.analytics,
         Routes.setup,
       ];
       for (final route in routes) {
