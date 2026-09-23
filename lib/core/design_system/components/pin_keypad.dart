@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../i18n/i18n.dart';
 import '../theme/app_theme.dart';
 import '../tokens/sg_tokens.dart';
 
@@ -67,7 +68,7 @@ class PinKeypad extends StatelessWidget {
     if (key == '<') {
       return _Key(
         height: keyHeight,
-        semanticLabel: 'حذف',
+        semanticLabel: tr('حذف', 'Delete'),
         onTap: enabled ? onBackspace : null,
         child: Icon(
           Icons.backspace_outlined,
@@ -179,7 +180,10 @@ class _PinDotsState extends State<PinDots> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final c = context.colors;
     return Semantics(
-      label: 'تم إدخال ${widget.filled} من ${widget.length} أرقام',
+      label: tr(
+        'تم إدخال ${widget.filled} من ${widget.length} أرقام',
+        '${widget.filled} of ${widget.length} digits entered',
+      ),
       excludeSemantics: true,
       child: AnimatedBuilder(
         animation: _shake,

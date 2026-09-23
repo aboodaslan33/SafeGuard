@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design_system/design_system.dart';
+import '../../core/i18n/i18n.dart';
 import '../../features/activity/presentation/activity_screen.dart';
 import '../../features/advanced/presentation/keywords_screen.dart';
 import '../../features/advanced/presentation/statistics_screen.dart';
@@ -131,8 +132,8 @@ GoRouter createRouter(AppDependencies deps) {
     ],
     errorBuilder: (context, state) => Scaffold(
       body: ErrorState(
-        title: 'الصفحة غير موجودة',
-        retryLabel: 'العودة للرئيسية',
+        title: tr('الصفحة غير موجودة', 'Page not found'),
+        retryLabel: tr('العودة للرئيسية', 'Back to home'),
         onRetry: () => context.go(Routes.home),
       ),
     ),

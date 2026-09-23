@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/design_system/design_system.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_controller.dart';
 import '../../protection/presentation/protection_ui.dart';
@@ -21,16 +22,30 @@ class InterruptionBanner extends StatelessWidget {
   final VoidCallback onDismiss;
 
   static String describe(IncidentKind k) => switch (k) {
-    IncidentKind.vpnRevoked =>
+    IncidentKind.vpnRevoked => tr(
       'فُصل اتصال VPN الخاص بـ SafeGuard (من إعدادات النظام أو بسبب VPN آخر).',
-    IncidentKind.vpnFailed =>
+      "SafeGuard's VPN connection was disconnected (from system settings or by another VPN).",
+    ),
+    IncidentKind.vpnFailed => tr(
       'توقّف فلتر الحماية بسبب خطأ ولم تنجح محاولات الاستعادة التلقائية.',
-    IncidentKind.permissionRevoked => 'سُحبت موافقة VPN من SafeGuard.',
-    IncidentKind.accessibilityDisabled =>
+      "The protection filter stopped because of an error and automatic recovery didn't succeed.",
+    ),
+    IncidentKind.permissionRevoked => tr(
+      'سُحبت موافقة VPN من SafeGuard.',
+      "SafeGuard's VPN consent was revoked.",
+    ),
+    IncidentKind.accessibilityDisabled => tr(
       'أُوقفت خدمة حماية التطبيقات في إعدادات تسهيل الاستخدام.',
-    IncidentKind.bootStartFailed =>
+      'The app protection service was turned off in Accessibility settings.',
+    ),
+    IncidentKind.bootStartFailed => tr(
       'لم يسمح النظام بتشغيل الحماية تلقائيًا بعد إعادة تشغيل الجهاز.',
-    IncidentKind.recovered => 'استُعيدت الحماية تلقائيًا بعد خطأ.',
+      "The system didn't allow protection to start automatically after the device restarted.",
+    ),
+    IncidentKind.recovered => tr(
+      'استُعيدت الحماية تلقائيًا بعد خطأ.',
+      'Protection was restored automatically after an error.',
+    ),
   };
 
   @override
@@ -53,7 +68,7 @@ class InterruptionBanner extends StatelessWidget {
                 const SizedBox(width: SgSpace.x2),
                 Expanded(
                   child: Text(
-                    'انقطعت الحماية',
+                    tr('انقطعت الحماية', 'Protection was interrupted'),
                     style: context.text.titleMedium,
                   ),
                 ),
@@ -63,7 +78,10 @@ class InterruptionBanner extends StatelessWidget {
             Text(describe(latest.kind), style: context.text.bodyMedium),
             if (report.incidents.length > 1)
               Text(
-                'و${report.incidents.length - 1} انقطاع آخر منذ آخر مراجعة.',
+                tr(
+                  'و${report.incidents.length - 1} انقطاع آخر منذ آخر مراجعة.',
+                  'and ${report.incidents.length - 1} more interruption(s) since the last review.',
+                ),
                 style: context.text.bodySmall,
               ),
             const SizedBox(height: SgSpace.x3),
@@ -71,12 +89,12 @@ class InterruptionBanner extends StatelessWidget {
               children: [
                 Expanded(
                   child: PrimaryButton(
-                    label: 'أعد تفعيل الحماية',
+                    label: tr('أعد تفعيل الحماية', 'Turn protection back on'),
                     onPressed: onRestart,
                   ),
                 ),
                 const SizedBox(width: SgSpace.x2),
-                SgTextButton(label: 'تم', onPressed: onDismiss),
+                SgTextButton(label: tr('تم', 'Done'), onPressed: onDismiss),
               ],
             ),
           ],
@@ -94,11 +112,18 @@ class ModeSelector extends StatelessWidget {
   final ValueChanged<ProtectionMode>? onChanged;
 
   static String explain(ProtectionMode m) => switch (m) {
-    ProtectionMode.normal =>
+    ProtectionMode.normal => tr(
       'كل الفئات، والحظر عند الثقة العالية فقط لتقليل الأخطاء.',
-    ProtectionMode.strict =>
+      'All categories, blocking only at high confidence to reduce mistakes.',
+    ),
+    ProtectionMode.strict => tr(
       'كل الفئات بحدود أشد: يحظر أكثر، وقد يحظر محتوى سليمًا.',
-    ProtectionMode.custom => 'تختار بنفسك الفئات والبحث والحماية الذكية.',
+      'All categories with stricter thresholds: blocks more, and may block harmless content.',
+    ),
+    ProtectionMode.custom => tr(
+      'تختار بنفسك الفئات والبحث والحماية الذكية.',
+      'You choose categories, search and AI protection yourself.',
+    ),
   };
 
   @override
@@ -137,10 +162,16 @@ class DashboardPanel extends StatelessWidget {
     final c = context.colors;
     final r = protection.healthReport;
     final (String overall, Color tone) = switch (r.overall) {
-      OverallHealth.protected => ('محمي بالكامل', c.accent),
-      OverallHealth.partiallyProtected => ('محمي جزئيًا', c.warning),
-      OverallHealth.notProtected => ('غير محمي', c.danger),
-      OverallHealth.unknown => ('غير معروف', c.textTertiary),
+      OverallHealth.protected => (
+        tr('محمي بالكامل', 'Fully protected'),
+        c.accent,
+      ),
+      OverallHealth.partiallyProtected => (
+        tr('محمي جزئيًا', 'Partially protected'),
+        c.warning,
+      ),
+      OverallHealth.notProtected => (tr('غير محمي', 'Not protected'), c.danger),
+      OverallHealth.unknown => (tr('غير معروف', 'Unknown'), c.textTertiary),
     };
     String layer(HealthLayer l) {
       final h = r.layer(l);
@@ -193,13 +224,27 @@ class DashboardPanel extends StatelessWidget {
             ],
           ),
           const Divider(height: SgSpace.x5),
-          row('الوضع', modeLabel(protection.state.mode)),
+          row(tr('الوضع', 'Mode'), modeLabel(protection.state.mode)),
           row('VPN', layer(HealthLayer.vpn), tint(HealthLayer.vpn)),
           row('DNS', layer(HealthLayer.dns), tint(HealthLayer.dns)),
-          row('البحث', layer(HealthLayer.search), tint(HealthLayer.search)),
-          row('الذكاء الاصطناعي', layer(HealthLayer.ai), tint(HealthLayer.ai)),
-          row('التطبيقات المحمية', '${protection.protectedAppCount}'),
-          row('المحجوب اليوم', today == null ? '—' : '$today'),
+          row(
+            tr('البحث', 'Search'),
+            layer(HealthLayer.search),
+            tint(HealthLayer.search),
+          ),
+          row(
+            tr('الذكاء الاصطناعي', 'AI'),
+            layer(HealthLayer.ai),
+            tint(HealthLayer.ai),
+          ),
+          row(
+            tr('التطبيقات المحمية', 'Protected apps'),
+            '${protection.protectedAppCount}',
+          ),
+          row(
+            tr('المحجوب اليوم', 'Blocked today'),
+            today == null ? '—' : '$today',
+          ),
         ],
       ),
     );

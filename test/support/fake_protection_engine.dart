@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:safeguard/core/error/failures.dart';
+import 'package:safeguard/core/i18n/i18n.dart';
 import 'package:safeguard/features/protection/domain/protection.dart';
 import 'package:safeguard/features/rules/domain/domain_input.dart';
 
@@ -129,6 +130,11 @@ class FakeProtectionEngine implements ProtectionEngine {
   Future<void> clearLogs() async => logs.clear();
 
   LogRetention retention = LogRetention.defaultValue;
+  AppLanguage? uiLanguage;
+
+  @override
+  Future<void> setUiLanguage(AppLanguage language) async =>
+      uiLanguage = language;
 
   @override
   Future<LogRetention> logRetention() async => retention;

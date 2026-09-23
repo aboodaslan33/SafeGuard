@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/result.dart';
+import '../../../core/i18n/i18n.dart';
 import '../domain/protection.dart';
 import 'protection_controller.dart';
 import 'protection_guard.dart';
@@ -10,23 +11,44 @@ import 'protection_guard.dart';
 /// Presentation metadata for each category (kept out of the domain layer).
 extension ProtectionCategoryUi on ProtectionCategory {
   String get title => switch (this) {
-    ProtectionCategory.sexual => 'المحتوى الجنسي',
-    ProtectionCategory.violence => 'المحتوى العنيف',
-    ProtectionCategory.gore => 'المحتوى الدموي',
-    ProtectionCategory.gambling => 'المقامرة',
-    ProtectionCategory.drugs => 'المخدرات',
-    ProtectionCategory.dangerous => 'المحتوى الخطِر',
-    ProtectionCategory.unsafeSearch => 'فلترة البحث',
+    ProtectionCategory.sexual => tr('المحتوى الجنسي', 'Sexual content'),
+    ProtectionCategory.violence => tr('المحتوى العنيف', 'Violent content'),
+    ProtectionCategory.gore => tr('المحتوى الدموي', 'Gore'),
+    ProtectionCategory.gambling => tr('المقامرة', 'Gambling'),
+    ProtectionCategory.drugs => tr('المخدرات', 'Drugs'),
+    ProtectionCategory.dangerous => tr('المحتوى الخطِر', 'Dangerous content'),
+    ProtectionCategory.unsafeSearch => tr('فلترة البحث', 'Search filtering'),
   };
 
   String get description => switch (this) {
-    ProtectionCategory.sexual => 'المواقع الإباحية والمحتوى الصريح',
-    ProtectionCategory.violence => 'مشاهد الإيذاء والعنف الجسدي',
-    ProtectionCategory.gore => 'الصور والمقاطع الصادمة',
-    ProtectionCategory.gambling => 'الكازينوهات ومواقع المراهنات',
-    ProtectionCategory.drugs => 'الترويج للمخدرات وبيعها',
-    ProtectionCategory.dangerous => 'إيذاء النفس والتحديات الخطرة',
-    ProtectionCategory.unsafeSearch => 'البحث الآمن في Google وBing وYouTube',
+    ProtectionCategory.sexual => tr(
+      'المواقع الإباحية والمحتوى الصريح',
+      'Pornographic sites and explicit content',
+    ),
+    ProtectionCategory.violence => tr(
+      'مشاهد الإيذاء والعنف الجسدي',
+      'Scenes of harm and physical violence',
+    ),
+    ProtectionCategory.gore => tr(
+      'الصور والمقاطع الصادمة',
+      'Shocking images and videos',
+    ),
+    ProtectionCategory.gambling => tr(
+      'الكازينوهات ومواقع المراهنات',
+      'Casinos and betting sites',
+    ),
+    ProtectionCategory.drugs => tr(
+      'الترويج للمخدرات وبيعها',
+      'Promotion and sale of drugs',
+    ),
+    ProtectionCategory.dangerous => tr(
+      'إيذاء النفس والتحديات الخطرة',
+      'Self-harm and dangerous challenges',
+    ),
+    ProtectionCategory.unsafeSearch => tr(
+      'البحث الآمن في Google وBing وYouTube',
+      'SafeSearch on Google, Bing and YouTube',
+    ),
   };
 
   IconData get icon => switch (this) {
@@ -50,7 +72,10 @@ abstract final class ProtectionActions {
       if (!await ProtectionGuard.authorize(
         context,
         loosens: true,
-        reason: 'لإيقاف الحماية على هذا الجهاز',
+        reason: tr(
+          'لإيقاف الحماية على هذا الجهاز',
+          'to stop protection on this device',
+        ),
       )) {
         return;
       }
@@ -83,17 +108,28 @@ abstract final class ProtectionActions {
       if (!context.mounted) return false;
       final proceed = await showSgBottomSheet<bool>(
         context,
-        title: 'اتصال VPN محلي',
+        title: tr('اتصال VPN محلي', 'Local VPN connection'),
         builder: (context) => const _VpnConsentExplainer(),
       );
       if (proceed != true) return false;
       final granted = await engine.requestVpnPermission();
       if (!granted && context.mounted) {
-        showSgSnack(context, 'لم تُمنح موافقة VPN، لذلك لم تُشغَّل الحماية.');
+        showSgSnack(
+          context,
+          tr(
+            'لم تُمنح موافقة VPN، لذلك لم تُشغَّل الحماية.',
+            "VPN consent wasn't granted, so protection didn't start.",
+          ),
+        );
       }
       return granted;
     } catch (e) {
-      if (context.mounted) showSgSnack(context, 'تعذّر طلب إذن VPN.');
+      if (context.mounted) {
+        showSgSnack(
+          context,
+          tr('تعذّر طلب إذن VPN.', "Couldn't request VPN permission."),
+        );
+      }
       return false;
     }
   }
@@ -108,8 +144,14 @@ abstract final class ProtectionActions {
       context,
       loosens: !active,
       reason: active
-          ? 'لتعديل الفئات (إعدادات الحماية مقفلة)'
-          : 'لإيقاف فلترة «${category.title}»',
+          ? tr(
+              'لتعديل الفئات (إعدادات الحماية مقفلة)',
+              'to change categories (protection settings are locked)',
+            )
+          : tr(
+              'لإيقاف فلترة «${category.title}»',
+              'to stop filtering “${category.title}”',
+            ),
     )) {
       return;
     }
@@ -127,7 +169,7 @@ abstract final class ProtectionActions {
     if (!await ProtectionGuard.authorize(
       context,
       loosens: ProtectionMode.changeNeedsPin(from, mode),
-      reason: 'لتغيير وضع الحماية',
+      reason: tr('لتغيير وضع الحماية', 'to change the protection mode'),
     )) {
       return;
     }
@@ -159,31 +201,43 @@ class _VpnConsentExplainer extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'يحتاج SafeGuard إلى إنشاء اتصال VPN محلي حتى يستطيع فلترة طلبات '
-          'DNS وحظر النطاقات المصنفة ضمن الفئات التي اخترتها.',
+          tr(
+            'يحتاج SafeGuard إلى إنشاء اتصال VPN محلي حتى يستطيع فلترة طلبات '
+                'DNS وحظر النطاقات المصنفة ضمن الفئات التي اخترتها.',
+            'SafeGuard needs to create a local VPN connection so it can filter DNS requests and block domains in the categories you chose.',
+          ),
           style: context.text.bodyLarge,
         ),
         const SizedBox(height: SgSpace.x5),
         point(
           Icons.phone_android_rounded,
-          'الاتصال يعمل داخل جهازك فقط، ولا يمر عبر أي خادم.',
+          tr(
+            'الاتصال يعمل داخل جهازك فقط، ولا يمر عبر أي خادم.',
+            "The connection runs inside your device only and doesn't pass through any server.",
+          ),
         ),
         point(
           Icons.dns_outlined,
-          'يرى أسماء النطاقات فقط، لا محتوى الصفحات ولا كلمات المرور ولا الرسائل.',
+          tr(
+            'يرى أسماء النطاقات فقط، لا محتوى الصفحات ولا كلمات المرور ولا الرسائل.',
+            'It sees domain names only — not page content, passwords or messages.',
+          ),
         ),
         point(
           Icons.verified_user_outlined,
-          'سيعرض Android نافذة موافقة رسمية. يمكنك إيقاف الاتصال من إعدادات النظام في أي وقت.',
+          tr(
+            'سيعرض Android نافذة موافقة رسمية. يمكنك إيقاف الاتصال من إعدادات النظام في أي وقت.',
+            'Android will show an official consent dialog. You can stop the connection from system settings at any time.',
+          ),
         ),
         const SizedBox(height: SgSpace.x4),
         PrimaryButton(
-          label: 'تفعيل الحماية',
+          label: tr('تفعيل الحماية', 'Turn on protection'),
           onPressed: () => Navigator.of(context).pop(true),
         ),
         const SizedBox(height: SgSpace.x2),
         SgTextButton(
-          label: 'ليس الآن',
+          label: tr('ليس الآن', 'Not now'),
           onPressed: () => Navigator.of(context).pop(false),
         ),
       ],
@@ -229,66 +283,83 @@ class ProtectionStatusCard extends StatelessWidget {
         c.accent,
         c.accentMuted,
         SgStatus.active,
-        'نشطة',
-        'الحماية نشطة',
+        tr('نشطة', 'Active'),
+        tr('الحماية نشطة', 'Protection is active'),
       ),
       ProtectionHealth.transitioning => (
         c.info,
         c.infoMuted,
         SgStatus.unavailable,
-        'جارٍ التشغيل',
-        'جارٍ تشغيل الحماية',
+        tr('جارٍ التشغيل', 'Starting'),
+        tr('جارٍ تشغيل الحماية', 'Starting protection'),
       ),
       ProtectionHealth.inactive => (
         c.danger,
         c.dangerMuted,
         SgStatus.error,
-        'غير نشطة',
-        'الحماية غير نشطة',
+        tr('غير نشطة', 'Inactive'),
+        tr('الحماية غير نشطة', 'Protection is inactive'),
       ),
       ProtectionHealth.paused => (
         c.warning,
         c.warningMuted,
         SgStatus.paused,
-        'متوقفة',
-        'الحماية متوقفة',
+        tr('متوقفة', 'Off'),
+        tr('الحماية متوقفة', 'Protection is off'),
       ),
       ProtectionHealth.suspended => (
         c.warning,
         c.warningMuted,
         SgStatus.paused,
-        report.safeMode ? 'وضع الأمان' : 'إيقاف مؤقت',
-        report.safeMode ? 'وضع الأمان مفعّل' : 'الحماية متوقفة مؤقتًا',
+        report.safeMode
+            ? tr('وضع الأمان', 'Safe Mode')
+            : tr('إيقاف مؤقت', 'Paused'),
+        report.safeMode
+            ? tr('وضع الأمان مفعّل', 'Safe Mode is on')
+            : tr('الحماية متوقفة مؤقتًا', 'Protection is paused'),
       ),
       ProtectionHealth.partial => (
         c.warning,
         c.warningMuted,
         SgStatus.paused,
-        'جزئية',
-        'الحماية مفعّلة جزئيًا',
+        tr('جزئية', 'Partial'),
+        tr('الحماية مفعّلة جزئيًا', 'Protection is partially on'),
       ),
       ProtectionHealth.unsupported => (
         c.info,
         c.infoMuted,
         SgStatus.unavailable,
-        'غير متاحة',
-        'الفلترة غير متاحة هنا',
+        tr('غير متاحة', 'Unavailable'),
+        tr('الفلترة غير متاحة هنا', "Filtering isn't available here"),
       ),
     };
 
     final summary = switch (health) {
-      ProtectionHealth.active =>
+      ProtectionHealth.active => tr(
         'يتم فحص طلبات DNS على هذا الجهاز وحجب الفئات المحددة.',
-      ProtectionHealth.transitioning => 'لحظات…',
+        'DNS requests on this device are checked and the selected categories are blocked.',
+      ),
+      ProtectionHealth.transitioning => tr('لحظات…', 'One moment…'),
       ProtectionHealth.inactive => _inactiveReason(snapshot),
-      ProtectionHealth.paused => 'لا يتم حجب أي محتوى حاليًا.',
+      ProtectionHealth.paused => tr(
+        'لا يتم حجب أي محتوى حاليًا.',
+        'No content is being blocked right now.',
+      ),
       ProtectionHealth.suspended =>
         report.safeMode
-            ? 'الفلترة متوقفة لاستعادة الاتصال بالإنترنت. أعد تفعيل الحماية عندما تكون جاهزًا.'
-            : 'لا يتم حجب أي محتوى. تُستأنف الحماية تلقائيًا بعد ${formatCountdown(pauseRemaining)}.',
+            ? tr(
+                'الفلترة متوقفة لاستعادة الاتصال بالإنترنت. أعد تفعيل الحماية عندما تكون جاهزًا.',
+                "Filtering is stopped to restore internet access. Turn protection back on when you're ready.",
+              )
+            : tr(
+                'لا يتم حجب أي محتوى. تُستأنف الحماية تلقائيًا بعد ${formatCountdown(pauseRemaining)}.',
+                'No content is being blocked. Protection resumes automatically in ${formatCountdown(pauseRemaining)}.',
+              ),
       ProtectionHealth.partial => partialReason(report),
-      ProtectionHealth.unsupported =>
+      ProtectionHealth.unsupported => tr(
         'فلترة الشبكة تعمل على أجهزة Android فقط.',
+        'Network filtering works on Android devices only.',
+      ),
     };
 
     return AnimatedContainer(
@@ -352,7 +423,7 @@ class ProtectionStatusCard extends StatelessWidget {
       ProtectionHealth.active ||
       ProtectionHealth.partial ||
       ProtectionHealth.transitioning => SecondaryButton(
-        label: 'إيقاف الحماية',
+        label: tr('إيقاف الحماية', 'Stop protection'),
         icon: Icons.pause_rounded,
         onPressed: health == ProtectionHealth.transitioning
             ? null
@@ -361,22 +432,22 @@ class ProtectionStatusCard extends StatelessWidget {
       ProtectionHealth.suspended =>
         report.safeMode
             ? PrimaryButton(
-                label: 'إعادة تفعيل الحماية',
+                label: tr('إعادة تفعيل الحماية', 'Turn protection back on'),
                 icon: Icons.shield_outlined,
                 onPressed: onRestart,
               )
             : PrimaryButton(
-                label: 'استئناف الحماية الآن',
+                label: tr('استئناف الحماية الآن', 'Resume protection now'),
                 icon: Icons.play_arrow_rounded,
                 onPressed: onEndPause,
               ),
       ProtectionHealth.inactive => PrimaryButton(
-        label: 'تشغيل الحماية',
+        label: tr('تشغيل الحماية', 'Start protection'),
         icon: Icons.play_arrow_rounded,
         onPressed: onRestart,
       ),
       ProtectionHealth.paused => PrimaryButton(
-        label: 'تفعيل الحماية',
+        label: tr('تفعيل الحماية', 'Turn on protection'),
         icon: Icons.shield_outlined,
         onPressed: () => onToggle(true),
       ),
@@ -386,15 +457,28 @@ class ProtectionStatusCard extends StatelessWidget {
 
   static String _inactiveReason(EngineSnapshot s) {
     if (s.otherVpnActive) {
-      return 'توقف اتصال VPN الخاص بـ SafeGuard لأن تطبيق VPN آخر يعمل.';
+      return tr(
+        'توقف اتصال VPN الخاص بـ SafeGuard لأن تطبيق VPN آخر يعمل.',
+        "SafeGuard's VPN connection stopped because another VPN app is running.",
+      );
     }
     return switch (s.vpnState) {
-      VpnState.permissionRequired =>
+      VpnState.permissionRequired => tr(
         'موافقة VPN غير ممنوحة. شغّل الحماية لإعادة طلبها.',
-      VpnState.revoked =>
+        "VPN consent isn't granted. Start protection to request it again.",
+      ),
+      VpnState.revoked => tr(
         'فُصل اتصال VPN من إعدادات النظام أو من تطبيق VPN آخر.',
-      VpnState.error => 'تعذّر تشغيل VPN. حاول مجددًا.',
-      _ => 'اتصال VPN متوقف، ولا يتم حجب أي نطاق الآن.',
+        'The VPN connection was disconnected from system settings or by another VPN app.',
+      ),
+      VpnState.error => tr(
+        'تعذّر تشغيل VPN. حاول مجددًا.',
+        "Couldn't start the VPN. Try again.",
+      ),
+      _ => tr(
+        'اتصال VPN متوقف، ولا يتم حجب أي نطاق الآن.',
+        'The VPN connection is stopped, and no domains are being blocked now.',
+      ),
     };
   }
 }
@@ -443,16 +527,29 @@ class _LayerGrid extends StatelessWidget {
       ),
       child: Row(
         children: [
-          cell('VPN', 'يعمل', snapshot.vpnState == VpnState.running),
-          cell('فلتر DNS', 'يعمل', snapshot.dnsFilterActive),
           cell(
-            'القواعد',
-            snapshot.blockingRuleCount > 0 ? 'محمّلة' : 'بلا قوائم',
+            'VPN',
+            tr('يعمل', 'Running'),
+            snapshot.vpnState == VpnState.running,
+          ),
+          cell(
+            tr('فلتر DNS', 'DNS filter'),
+            tr('يعمل', 'Running'),
+            snapshot.dnsFilterActive,
+          ),
+          cell(
+            tr('القواعد', 'Rules'),
+            snapshot.blockingRuleCount > 0
+                ? tr('محمّلة', 'Loaded')
+                : tr('بلا قوائم', 'No lists'),
             snapshot.blockingRuleCount > 0,
           ),
           cell(
-            'الفئات',
-            '${state.activeNetworkCount} مفعّلة',
+            tr('الفئات', 'Categories'),
+            tr(
+              '${state.activeNetworkCount} مفعّلة',
+              '${state.activeNetworkCount} on',
+            ),
             state.activeNetworkCount > 0,
           ),
         ],
@@ -479,25 +576,37 @@ class EngineWarnings extends StatelessWidget {
       if (snapshot.otherVpnActive)
         (
           Icons.vpn_lock_outlined,
-          'يوجد VPN آخر نشط وقد يمنع SafeGuard من العمل. '
-              'يمكن تشغيل تطبيق VPN واحد فقط في الوقت نفسه على Android.',
+          tr(
+            'يوجد VPN آخر نشط وقد يمنع SafeGuard من العمل. '
+                'يمكن تشغيل تطبيق VPN واحد فقط في الوقت نفسه على Android.',
+            'Another VPN is active and may stop SafeGuard from working. Android runs only one VPN app at a time.',
+          ),
         ),
       if (snapshot.privateDnsStrict)
         (
           Icons.dns_outlined,
-          'ميزة «DNS الخاص» في Android مضبوطة على مزوّد محدد، وقد تتجاوز '
-              'فلترة SafeGuard. اضبطها على «تلقائي» أو «إيقاف» لحماية كاملة.',
+          tr(
+            'ميزة «DNS الخاص» في Android مضبوطة على مزوّد محدد، وقد تتجاوز '
+                'فلترة SafeGuard. اضبطها على «تلقائي» أو «إيقاف» لحماية كاملة.',
+            "Android's “Private DNS” is set to a specific provider and may bypass SafeGuard's filtering. Set it to “Automatic” or “Off” for full protection.",
+          ),
         ),
       if (snapshot.isActive && snapshot.blockingRuleCount == 0)
         (
           Icons.playlist_remove_rounded,
-          'لا توجد قوائم حظر مثبتة للفئات بعد. الحظر يعمل الآن على النطاقات '
-              'التي تضيفها بنفسك فقط.',
+          tr(
+            'لا توجد قوائم حظر مثبتة للفئات بعد. الحظر يعمل الآن على النطاقات '
+                'التي تضيفها بنفسك فقط.',
+            'No category block lists are installed yet. Blocking currently works only on domains you add yourself.',
+          ),
         ),
       if (snapshot.isActive && !snapshot.upstreamAvailable)
         (
           Icons.wifi_off_rounded,
-          'لا يوجد اتصال بالشبكة. الحظر مستمر، والمواقع الأخرى ستعمل عند عودة الاتصال.',
+          tr(
+            'لا يوجد اتصال بالشبكة. الحظر مستمر، والمواقع الأخرى ستعمل عند عودة الاتصال.',
+            'No network connection. Blocking continues, and other sites will work when the connection returns.',
+          ),
         ),
     ];
     if (items.isEmpty) return const SizedBox.shrink();
@@ -600,9 +709,9 @@ class CategoryTile extends StatelessWidget {
                 ),
                 const SizedBox(width: SgSpace.x2),
                 if (comingSoon)
-                  const StatusIndicator(
+                  StatusIndicator(
                     status: SgStatus.unavailable,
-                    label: 'قريبًا',
+                    label: tr('قريبًا', 'Coming soon'),
                     dense: true,
                   )
                 else
@@ -626,29 +735,47 @@ String formatCountdown(Duration d) {
 /// Why protection is only partial, from the native health reason
 /// (`<layer>:<reason>`).
 String partialReason(HealthReport r) => switch (r.reason?.split(':').last) {
-  'private_dns' => 'ميزة «DNS الخاص» في Android تتجاوز الفلترة. اضبطها على «تلقائي» أو «إيقاف».',
-  'upstream_failing' =>
+  'private_dns' => tr(
+    'ميزة «DNS الخاص» في Android تتجاوز الفلترة. اضبطها على «تلقائي» أو «إيقاف».',
+    "Android's “Private DNS” bypasses filtering. Set it to “Automatic” or “Off”.",
+  ),
+  'upstream_failing' => tr(
     'خادم DNS في شبكتك لا يستجيب. إذا انقطع الإنترنت استخدم «وضع الأمان».',
-  'no_blocking_rules' =>
+    "Your network's DNS server isn't responding. If the internet stops working, use Safe Mode.",
+  ),
+  'no_blocking_rules' => tr(
     'لا توجد قوائم حظر للنطاقات بعد؛ يعمل الحظر على قوائمك وكلماتك فقط.',
-  'model_unavailable' => 'نموذج الحماية الذكية غير متاح؛ القواعد تعمل.',
-  'database_error' => 'تعذّرت قراءة قاعدة البيانات المحلية.',
-  final other when other != null && other.startsWith('accessibility') =>
+    'No domain block lists yet; blocking works on your own lists and keywords only.',
+  ),
+  'model_unavailable' => tr(
+    'نموذج الحماية الذكية غير متاح؛ القواعد تعمل.',
+    'The AI protection model is unavailable; rules still work.',
+  ),
+  'database_error' => tr(
+    'تعذّرت قراءة قاعدة البيانات المحلية.',
+    "Couldn't read the local database.",
+  ),
+  final other when other != null && other.startsWith('accessibility') => tr(
     'لديك تطبيقات محمية لكن خدمة حماية التطبيقات غير مفعّلة.',
-  _ => 'إحدى طبقات الحماية لا تعمل كما يجب. راجع شاشة الحالة.',
+    'You have protected apps, but the app protection service is off.',
+  ),
+  _ => tr(
+    'إحدى طبقات الحماية لا تعمل كما يجب. راجع شاشة الحالة.',
+    "One of the protection layers isn't working as it should. Check the Status screen.",
+  ),
 };
 
 /// Short Arabic label for one layer's state.
 String layerStateLabel(LayerState s) => switch (s) {
-  LayerState.active => 'يعمل',
-  LayerState.degraded => 'جزئي',
-  LayerState.inactive => 'متوقف',
-  LayerState.off => 'مطفأ',
-  LayerState.notConfigured => 'غير مُعد',
+  LayerState.active => tr('يعمل', 'Working'),
+  LayerState.degraded => tr('جزئي', 'Partial'),
+  LayerState.inactive => tr('متوقف', 'Stopped'),
+  LayerState.off => tr('مطفأ', 'Off'),
+  LayerState.notConfigured => tr('غير مُعد', 'Not set up'),
 };
 
 String modeLabel(ProtectionMode m) => switch (m) {
-  ProtectionMode.normal => 'عادي',
-  ProtectionMode.strict => 'صارم',
-  ProtectionMode.custom => 'مخصص',
+  ProtectionMode.normal => tr('عادي', 'Normal'),
+  ProtectionMode.strict => tr('صارم', 'Strict'),
+  ProtectionMode.custom => tr('مخصص', 'Custom'),
 };

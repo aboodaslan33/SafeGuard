@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_guard.dart';
 import '../../protection/presentation/protection_ui.dart';
@@ -56,21 +57,35 @@ class _DomainRulesScreenState extends State<DomainRulesScreen> {
         !await ProtectionGuard.authorize(
           context,
           loosens: false,
-          reason: 'لتعديل قائمة الحظر (إعدادات الحماية مقفلة)',
+          reason: tr(
+            'لتعديل قائمة الحظر (إعدادات الحماية مقفلة)',
+            'to edit the blocklist (protection settings are locked)',
+          ),
         )) {
       return;
     }
     if (!mounted) return;
     final added = await showSgBottomSheet<DomainRule>(
       context,
-      title: _isBlock ? 'حظر نطاق' : 'السماح بنطاق',
+      title: _isBlock
+          ? tr('حظر نطاق', 'Block a domain')
+          : tr('السماح بنطاق', 'Allow a domain'),
       subtitle: _isBlock
-          ? 'يُحظر النطاق وجميع نطاقاته الفرعية، أيًا كانت إعدادات الفئات.'
-          : 'يُسمح بالنطاق حتى لو كان ضمن فئة محظورة. انتبه: السماح يتجاوز كل قواعد الحظر.',
+          ? tr(
+              'يُحظر النطاق وجميع نطاقاته الفرعية، أيًا كانت إعدادات الفئات.',
+              'The domain and all its subdomains are blocked, whatever the category settings.',
+            )
+          : tr(
+              'يُسمح بالنطاق حتى لو كان ضمن فئة محظورة. انتبه: السماح يتجاوز كل قواعد الحظر.',
+              "The domain is allowed even if it's in a blocked category. Note: allowing overrides every block rule.",
+            ),
       builder: (_) => _AddDomainForm(action: widget.action, engine: _engine),
     );
     if (added != null && mounted) {
-      showSgSnack(context, 'أُضيف ${added.domain}');
+      showSgSnack(
+        context,
+        tr('أُضيف ${added.domain}', 'Added ${added.domain}'),
+      );
       await _load();
     }
   }
@@ -81,8 +96,14 @@ class _DomainRulesScreenState extends State<DomainRulesScreen> {
       context,
       loosens: _isBlock,
       reason: _isBlock
-          ? 'لإزالة ${rule.domain} من الحظر'
-          : 'لتعديل قائمة السماح (إعدادات الحماية مقفلة)',
+          ? tr(
+              'لإزالة ${rule.domain} من الحظر',
+              'to remove ${rule.domain} from the blocklist',
+            )
+          : tr(
+              'لتعديل قائمة السماح (إعدادات الحماية مقفلة)',
+              'to edit the allowlist (protection settings are locked)',
+            ),
     )) {
       return;
     }
@@ -99,13 +120,21 @@ class _DomainRulesScreenState extends State<DomainRulesScreen> {
     final rules = _rules;
     return SgPage(
       showBack: true,
-      title: _isBlock ? 'النطاقات المحظورة' : 'النطاقات المسموحة',
+      title: _isBlock
+          ? tr('النطاقات المحظورة', 'Blocked domains')
+          : tr('النطاقات المسموحة', 'Allowed domains'),
       subtitle: _isBlock
-          ? 'نطاقات تحظرها بنفسك، أيًا كانت إعدادات الفئات.'
-          : 'استثناءات تتجاوز كل قواعد الحظر.',
+          ? tr(
+              'نطاقات تحظرها بنفسك، أيًا كانت إعدادات الفئات.',
+              'Domains you block yourself, whatever the category settings.',
+            )
+          : tr(
+              'استثناءات تتجاوز كل قواعد الحظر.',
+              'Exceptions that override every block rule.',
+            ),
       bottom: _engine.isSupported
           ? PrimaryButton(
-              label: 'إضافة نطاق',
+              label: tr('إضافة نطاق', 'Add domain'),
               icon: Icons.add_rounded,
               onPressed: _add,
             )
@@ -116,7 +145,7 @@ class _DomainRulesScreenState extends State<DomainRulesScreen> {
           SizedBox(
             height: 320,
             child: ErrorState(
-              title: 'تعذّر تحميل القائمة',
+              title: tr('تعذّر تحميل القائمة', "Couldn't load the list"),
               message: _error,
               onRetry: _load,
             ),
@@ -128,10 +157,18 @@ class _DomainRulesScreenState extends State<DomainRulesScreen> {
             height: 320,
             child: EmptyState(
               icon: _isBlock ? Icons.block_rounded : Icons.verified_outlined,
-              title: _isBlock ? 'لا توجد نطاقات محظورة' : 'لا توجد استثناءات',
+              title: _isBlock
+                  ? tr('لا توجد نطاقات محظورة', 'No blocked domains')
+                  : tr('لا توجد استثناءات', 'No exceptions'),
               message: _isBlock
-                  ? 'أضف نطاقًا لحظره على هذا الجهاز.'
-                  : 'أضف نطاقًا تثق به ليبقى متاحًا دائمًا.',
+                  ? tr(
+                      'أضف نطاقًا لحظره على هذا الجهاز.',
+                      'Add a domain to block it on this device.',
+                    )
+                  : tr(
+                      'أضف نطاقًا تثق به ليبقى متاحًا دائمًا.',
+                      'Add a domain you trust so it always stays available.',
+                    ),
             ),
           )
         else
@@ -188,17 +225,23 @@ class _RuleRow extends StatelessWidget {
                 ),
                 Text(
                   rule.action == RuleAction.block
-                      ? (category?.title ?? 'مخصص')
+                      ? (category?.title ?? tr('مخصص', 'Custom'))
                       : rule.includeSubdomains
-                      ? 'مسموح مع كل النطاقات الفرعية'
-                      : 'مسموح: النطاق نفسه وwww فقط',
+                      ? tr(
+                          'مسموح مع كل النطاقات الفرعية',
+                          'Allowed with all subdomains',
+                        )
+                      : tr(
+                          'مسموح: النطاق نفسه وwww فقط',
+                          'Allowed: this domain and www only',
+                        ),
                   style: context.text.bodySmall,
                 ),
               ],
             ),
           ),
           IconButton(
-            tooltip: 'إزالة',
+            tooltip: tr('إزالة', 'Remove'),
             icon: Icon(
               Icons.remove_circle_outline_rounded,
               color: c.textTertiary,
@@ -239,7 +282,12 @@ class _AddDomainFormState extends State<_AddDomainForm> {
   Future<void> _submit() async {
     final domain = DomainInput.normalize(_controller.text);
     if (domain == null) {
-      setState(() => _error = 'أدخل اسم نطاق صالحًا، مثل example.com');
+      setState(
+        () => _error = tr(
+          'أدخل اسم نطاق صالحًا، مثل example.com',
+          'Enter a valid domain name, such as example.com',
+        ),
+      );
       return;
     }
     setState(() {
@@ -290,10 +338,10 @@ class _AddDomainFormState extends State<_AddDomainForm> {
           ),
           if (widget.action == RuleAction.block) ...[
             const SizedBox(height: SgSpace.x4),
-            Text('الفئة', style: context.text.titleSmall),
+            Text(tr('الفئة', 'Category'), style: context.text.titleSmall),
             const SizedBox(height: SgSpace.x1),
             SgChoiceRow(
-              label: 'مخصص',
+              label: tr('مخصص', 'Custom'),
               icon: Icons.person_pin_outlined,
               selected: _category == null,
               onTap: () => setState(() => _category = null),
@@ -310,18 +358,30 @@ class _AddDomainFormState extends State<_AddDomainForm> {
             const SizedBox(height: SgSpace.x2),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              title: const Text('يشمل كل النطاقات الفرعية'),
+              title: Text(
+                tr('يشمل كل النطاقات الفرعية', 'Include all subdomains'),
+              ),
               subtitle: Text(
                 _includeSubdomains
-                    ? 'سيُسمح بأي عنوان ينتهي بهذا النطاق، مثل shop.example.com.'
-                    : 'يُسمح بالنطاق نفسه وwww فقط، ولا تُفتح نطاقاته الفرعية.',
+                    ? tr(
+                        'سيُسمح بأي عنوان ينتهي بهذا النطاق، مثل shop.example.com.',
+                        'Any address ending with this domain will be allowed, such as shop.example.com.',
+                      )
+                    : tr(
+                        'يُسمح بالنطاق نفسه وwww فقط، ولا تُفتح نطاقاته الفرعية.',
+                        "Only the domain itself and www are allowed; its subdomains aren't opened.",
+                      ),
               ),
               value: _includeSubdomains,
               onChanged: (v) => setState(() => _includeSubdomains = v),
             ),
           ],
           const SizedBox(height: SgSpace.x4),
-          PrimaryButton(label: 'إضافة', loading: _busy, onPressed: _submit),
+          PrimaryButton(
+            label: tr('إضافة', 'Add'),
+            loading: _busy,
+            onPressed: _submit,
+          ),
         ],
       ),
     );

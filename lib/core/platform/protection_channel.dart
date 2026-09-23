@@ -80,6 +80,9 @@ class ProtectionChannel {
 
   Future<void> clearLogs() => _call<bool>('clearLogs');
 
+  Future<void> setUiLanguage(String language) =>
+      _call<bool>('setUiLanguage', {'language': language});
+
   Future<String?> getLogRetention() => _call<String>('getLogRetention');
 
   Future<String?> setLogRetention(String id) =>

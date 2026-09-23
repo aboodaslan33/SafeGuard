@@ -4,6 +4,7 @@ import '../../../app/app_dependencies.dart';
 import '../../../app/router/app_router.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../search/presentation/search_protection_screen.dart' show SgNote;
 
@@ -58,7 +59,7 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
   Future<void> _enableService() async {
     final accepted = await showSgBottomSheet<bool>(
       context,
-      title: 'تفعيل حماية التطبيقات',
+      title: tr('تفعيل حماية التطبيقات', 'to turn on app protection'),
       builder: (context) => const _AccessibilityDisclosure(),
     );
     if (accepted == null || !mounted) return;
@@ -70,8 +71,11 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
   Future<void> _add() async {
     final picked = await showSgBottomSheet<InstalledApp>(
       context,
-      title: 'اختر تطبيقًا لحمايته',
-      subtitle: 'لا تظهر هنا تطبيقات النظام والاتصال والإعدادات.',
+      title: tr('اختر تطبيقًا لحمايته', 'Choose an app to protect'),
+      subtitle: tr(
+        'لا تظهر هنا تطبيقات النظام والاتصال والإعدادات.',
+        "System, phone and settings apps aren't listed.",
+      ),
       builder: (_) => _AppPicker(
         engine: _engine,
         exclude: {
@@ -82,7 +86,15 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
     if (picked == null || !mounted) return;
     try {
       await _engine.addProtectedApp(picked.packageName);
-      if (mounted) showSgSnack(context, 'أصبح «${picked.label}» محميًا');
+      if (mounted) {
+        showSgSnack(
+          context,
+          tr(
+            'أصبح «${picked.label}» محميًا',
+            '“${picked.label}” is now protected',
+          ),
+        );
+      }
       await _refresh();
     } on AppFailure catch (f) {
       if (mounted) showSgSnack(context, f.message);
@@ -92,7 +104,10 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
   Future<void> _remove(ProtectedApp app) async {
     if (!await requirePin(
       context,
-      reason: 'لإزالة «${app.label}» من التطبيقات المحمية',
+      reason: tr(
+        'لإزالة «${app.label}» من التطبيقات المحمية',
+        'to remove “${app.label}” from protected apps',
+      ),
     )) {
       return;
     }
@@ -114,11 +129,14 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
         final apps = _apps;
         return SgPage(
           showBack: true,
-          title: 'حماية التطبيقات',
-          subtitle: 'منع فتح تطبيقات تختارها على هذا الجهاز.',
+          title: tr('حماية التطبيقات', 'App protection'),
+          subtitle: tr(
+            'منع فتح تطبيقات تختارها على هذا الجهاز.',
+            'Stop apps you choose from opening on this device.',
+          ),
           bottom: _engine.isSupported
               ? PrimaryButton(
-                  label: 'إضافة تطبيق',
+                  label: tr('إضافة تطبيق', 'Add app'),
                   icon: Icons.add_rounded,
                   onPressed: _add,
                 )
@@ -132,12 +150,12 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
             ),
             const SizedBox(height: SgSpace.x3),
             const _Capabilities(),
-            const SectionHeader(title: 'التطبيقات المحمية'),
+            SectionHeader(title: tr('التطبيقات المحمية', 'Protected apps')),
             if (_error != null)
               SizedBox(
                 height: 280,
                 child: ErrorState(
-                  title: 'تعذّر تحميل القائمة',
+                  title: tr('تعذّر تحميل القائمة', "Couldn't load the list"),
                   message: _error,
                   onRetry: _refresh,
                 ),
@@ -145,12 +163,15 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
             else if (apps == null)
               const SizedBox(height: 160, child: LoadingState())
             else if (apps.isEmpty)
-              const SizedBox(
+              SizedBox(
                 height: 260,
                 child: EmptyState(
                   icon: Icons.apps_rounded,
-                  title: 'لا توجد تطبيقات محمية',
-                  message: 'أضف تطبيقًا ليُمنع فتحه ما دامت الحماية نشطة.',
+                  title: tr('لا توجد تطبيقات محمية', 'No protected apps'),
+                  message: tr(
+                    'أضف تطبيقًا ليُمنع فتحه ما دامت الحماية نشطة.',
+                    'Add an app to stop it from opening while protection is active.',
+                  ),
                 ),
               )
             else
@@ -183,29 +204,44 @@ class _ServiceCard extends StatelessWidget {
     final (SgStatus pill, String label, String body) = switch (status) {
       AccessibilityStatus.enabled => (
         SgStatus.active,
-        'مفعّلة',
-        'خدمة حماية التطبيقات تعمل. تعرف اسم التطبيق المفتوح فقط.',
+        tr('مفعّلة', 'On'),
+        tr(
+          'خدمة حماية التطبيقات تعمل. تعرف اسم التطبيق المفتوح فقط.',
+          'The app protection service is running. It only knows the name of the app that opened.',
+        ),
       ),
       AccessibilityStatus.disabled => (
         SgStatus.paused,
-        'غير مفعّلة',
-        'لن تُحمى التطبيقات حتى تفعّل خدمة SafeGuard في إعدادات تسهيل الاستخدام.',
+        tr('غير مفعّلة', 'Off'),
+        tr(
+          'لن تُحمى التطبيقات حتى تفعّل خدمة SafeGuard في إعدادات تسهيل الاستخدام.',
+          "Apps won't be protected until you turn on the SafeGuard service in Accessibility settings.",
+        ),
       ),
       AccessibilityStatus.permissionDenied => (
         SgStatus.paused,
-        'مرفوضة',
-        'اخترت عدم تفعيل الخدمة، لذلك لا تُحمى التطبيقات. يمكنك تغيير ذلك في أي وقت.',
+        tr('مرفوضة', 'Declined'),
+        tr(
+          'اخترت عدم تفعيل الخدمة، لذلك لا تُحمى التطبيقات. يمكنك تغيير ذلك في أي وقت.',
+          "You chose not to turn on the service, so apps aren't protected. You can change this at any time.",
+        ),
       ),
       AccessibilityStatus.unavailable => (
         SgStatus.error,
-        'غير متاحة',
-        'هذا الجهاز أو الملف الشخصي لا يسمح بخدمات تسهيل الاستخدام من تطبيقات أخرى. '
-            'قد يمنع Android تفعيلها للتطبيقات المثبتة من خارج المتجر (إعداد مقيّد).',
+        tr('غير متاحة', 'Unavailable'),
+        tr(
+          'هذا الجهاز أو الملف الشخصي لا يسمح بخدمات تسهيل الاستخدام من تطبيقات أخرى. '
+              'قد يمنع Android تفعيلها للتطبيقات المثبتة من خارج المتجر (إعداد مقيّد).',
+          "This device or profile doesn't allow accessibility services from other apps. Android may block them for apps installed outside the store (restricted setting).",
+        ),
       ),
       AccessibilityStatus.unsupported => (
         SgStatus.unavailable,
-        'غير متاحة',
-        'حماية التطبيقات تعمل على أجهزة Android فقط.',
+        tr('غير متاحة', 'Unavailable'),
+        tr(
+          'حماية التطبيقات تعمل على أجهزة Android فقط.',
+          'App protection works on Android devices only.',
+        ),
       ),
     };
     final canEnable =
@@ -219,7 +255,7 @@ class _ServiceCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'خدمة حماية التطبيقات',
+                  tr('خدمة حماية التطبيقات', 'App protection service'),
                   style: context.text.titleMedium,
                 ),
               ),
@@ -231,14 +267,17 @@ class _ServiceCard extends StatelessWidget {
           if (canEnable) ...[
             const SizedBox(height: SgSpace.x4),
             SecondaryButton(
-              label: 'تفعيل الخدمة',
+              label: tr('تفعيل الخدمة', 'Turn on service'),
               icon: Icons.accessibility_new_rounded,
               onPressed: onEnable,
             ),
           ] else if (status == AccessibilityStatus.enabled) ...[
             const SizedBox(height: SgSpace.x3),
             SgTextButton(
-              label: 'إدارتها من إعدادات Android',
+              label: tr(
+                'إدارتها من إعدادات Android',
+                'Manage in Android settings',
+              ),
               onPressed: onOpenSettings,
             ),
           ],
@@ -259,10 +298,12 @@ class _Capabilities extends StatelessWidget {
       icon: Icons.info_outline_rounded,
       color: c.info,
       background: c.infoMuted,
-      text:
-          'عند فتح تطبيق محمي يعيدك SafeGuard إلى الشاشة الرئيسية ويعرض شاشة «تطبيق محمي». '
-          'لا يستطيع رؤية أو فلترة المحتوى داخل التطبيقات، ولا يمنع إزالة التطبيق أو '
-          'إيقاف الخدمة من إعدادات Android. تطبيقات النظام والاتصال والإعدادات لا يمكن حمايتها.',
+      text: tr(
+        'عند فتح تطبيق محمي يعيدك SafeGuard إلى الشاشة الرئيسية ويعرض شاشة «تطبيق محمي». '
+            'لا يستطيع رؤية أو فلترة المحتوى داخل التطبيقات، ولا يمنع إزالة التطبيق أو '
+            'إيقاف الخدمة من إعدادات Android. تطبيقات النظام والاتصال والإعدادات لا يمكن حمايتها.',
+        "When a protected app opens, SafeGuard returns you to the home screen and shows a “Protected app” screen. It can't see or filter content inside apps, and it doesn't prevent uninstalling the app or turning off the service in Android settings. System, phone and settings apps can't be protected.",
+      ),
     );
   }
 }
@@ -288,31 +329,43 @@ class _AccessibilityDisclosure extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'تستخدم حماية التطبيقات خدمة «تسهيل الاستخدام» (Accessibility) في Android '
-          'لمعرفة اسم التطبيق الذي فُتح، حتى تمنع فتح التطبيقات التي اخترتها.',
+          tr(
+            'تستخدم حماية التطبيقات خدمة «تسهيل الاستخدام» (Accessibility) في Android '
+                'لمعرفة اسم التطبيق الذي فُتح، حتى تمنع فتح التطبيقات التي اخترتها.',
+            "App protection uses Android's Accessibility service to learn the name of the app that opened, so it can stop the apps you chose from opening.",
+          ),
           style: context.text.bodyLarge,
         ),
         const SizedBox(height: SgSpace.x5),
         point(
           Icons.visibility_off_outlined,
-          'لا تقرأ محتوى الشاشة ولا ما تكتبه ولا رسائلك أو كلمات مرورك.',
+          tr(
+            'لا تقرأ محتوى الشاشة ولا ما تكتبه ولا رسائلك أو كلمات مرورك.',
+            "It doesn't read screen content, what you type, your messages or passwords.",
+          ),
         ),
         point(
           Icons.phone_android_rounded,
-          'لا يغادر أي شيء جهازك، ولا تُستخدم لأي غرض آخر.',
+          tr(
+            'لا يغادر أي شيء جهازك، ولا تُستخدم لأي غرض آخر.',
+            "Nothing leaves your device, and it isn't used for anything else.",
+          ),
         ),
         point(
           Icons.toggle_off_outlined,
-          'ستفعّلها بنفسك في إعدادات Android، ويمكنك إيقافها في أي وقت.',
+          tr(
+            'ستفعّلها بنفسك في إعدادات Android، ويمكنك إيقافها في أي وقت.',
+            'You turn it on yourself in Android settings and can turn it off at any time.',
+          ),
         ),
         const SizedBox(height: SgSpace.x4),
         PrimaryButton(
-          label: 'موافق، افتح الإعدادات',
+          label: tr('موافق، افتح الإعدادات', 'Agree, open settings'),
           onPressed: () => Navigator.of(context).pop(true),
         ),
         const SizedBox(height: SgSpace.x2),
         SgTextButton(
-          label: 'لا أوافق',
+          label: tr('لا أوافق', "I don't agree"),
           onPressed: () => Navigator.of(context).pop(false),
         ),
       ],
@@ -361,7 +414,7 @@ class _AppRow extends StatelessWidget {
             ),
           ),
           IconButton(
-            tooltip: 'إزالة',
+            tooltip: tr('إزالة', 'Remove'),
             icon: Icon(
               Icons.remove_circle_outline_rounded,
               color: c.textTertiary,
@@ -420,18 +473,18 @@ class _AppPickerState extends State<_AppPicker> {
       children: [
         TextField(
           onChanged: (v) => setState(() => _filter = v.trim()),
-          decoration: const InputDecoration(
-            hintText: 'بحث',
+          decoration: InputDecoration(
+            hintText: tr('بحث', 'Search'),
             prefixIcon: Icon(Icons.search_rounded),
           ),
         ),
         const SizedBox(height: SgSpace.x3),
         if (visible.isEmpty)
-          const SizedBox(
+          SizedBox(
             height: 120,
             child: EmptyState(
               icon: Icons.apps_rounded,
-              title: 'لا توجد تطبيقات',
+              title: tr('لا توجد تطبيقات', 'No apps'),
             ),
           )
         else

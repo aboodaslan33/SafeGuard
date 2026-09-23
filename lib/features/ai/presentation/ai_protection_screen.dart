@@ -4,6 +4,7 @@ import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_controller.dart';
 import '../../protection/presentation/protection_guard.dart';
@@ -55,17 +56,21 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
         final c = context.colors;
         return SgPage(
           showBack: true,
-          title: 'الحماية الذكية',
-          subtitle:
-              'تصنيف المحتوى بالذكاء الاصطناعي على جهازك، دون رفع أي شيء.',
+          title: tr('الحماية الذكية', 'AI protection'),
+          subtitle: tr(
+            'تصنيف المحتوى بالذكاء الاصطناعي على جهازك، دون رفع أي شيء.',
+            'On-device AI content classification. Nothing is uploaded.',
+          ),
           children: [
             const SizedBox(height: SgSpace.x6),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.auto_awesome_outlined,
-                  title: 'الحماية الذكية',
-                  subtitle: ai.enabled ? 'مفعّلة' : 'متوقفة',
+                  title: tr('الحماية الذكية', 'AI protection'),
+                  subtitle: ai.enabled
+                      ? tr('مفعّلة', 'On')
+                      : tr('متوقفة', 'Off'),
                   switchValue: ai.enabled,
                   onSwitchChanged: preset
                       ? null
@@ -79,9 +84,11 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                 icon: Icons.lock_outline_rounded,
                 color: c.info,
                 background: c.infoMuted,
-                text:
-                    'وضع الحماية «${state.mode == ProtectionMode.strict ? 'صارم' : 'عادي'}» '
-                    'يحدد إعدادات الحماية الذكية. لتعديلها اختر الوضع «مخصص».',
+                text: tr(
+                  'وضع الحماية «${state.mode == ProtectionMode.strict ? 'صارم' : 'عادي'}» '
+                      'يحدد إعدادات الحماية الذكية. لتعديلها اختر الوضع «مخصص».',
+                  "The “${state.mode == ProtectionMode.strict ? 'Strict' : 'Normal'}” protection mode sets AI protection. To change it, choose the “Custom” mode.",
+                ),
               ),
             ],
             const SizedBox(height: SgSpace.x3),
@@ -89,12 +96,14 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
               icon: Icons.info_outline_rounded,
               color: c.info,
               background: c.infoMuted,
-              text:
-                  'تعمل عند الطلب فقط: على عمليات البحث عبر SafeGuard بعد فحص '
-                  'القواعد، وعلى الصور التي تختار فحصها. لا تراقب الشاشة أو '
-                  'التطبيقات الأخرى.',
+              text: tr(
+                'تعمل عند الطلب فقط: على عمليات البحث عبر SafeGuard بعد فحص '
+                    'القواعد، وعلى الصور التي تختار فحصها. لا تراقب الشاشة أو '
+                    'التطبيقات الأخرى.',
+                "Runs on demand only: on searches through SafeGuard after the rules, and on images you choose to check. It doesn't watch the screen or other apps.",
+              ),
             ),
-            const SectionHeader(title: 'وضع الكشف'),
+            SectionHeader(title: tr('وضع الكشف', 'Detection mode')),
             SgGroupedCard(
               children: [
                 for (final mode in DetectionMode.values)
@@ -108,15 +117,18 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                 if (ai.mode == DetectionMode.custom && !preset)
                   SecuritySettingTile(
                     icon: Icons.tune_rounded,
-                    title: 'تعديل الحدود',
-                    subtitle: 'نسبة الثقة المطلوبة لكل فئة',
+                    title: tr('تعديل الحدود', 'Adjust thresholds'),
+                    subtitle: tr(
+                      'نسبة الثقة المطلوبة لكل فئة',
+                      'Confidence required per category',
+                    ),
                     onTap: ai.enabled
                         ? () => _editThresholds(protection, ai)
                         : null,
                   ),
               ],
             ),
-            const SectionHeader(title: 'الفئات'),
+            SectionHeader(title: tr('الفئات', 'Categories')),
             SgGroupedCard(
               children: [
                 for (final category in ProtectionCategory.networkFiltered)
@@ -130,24 +142,33 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
               ],
             ),
             const SizedBox(height: SgSpace.x3),
-            const _Hint(
-              'الفئات نفسها تُطبَّق على فلترة الشبكة والبحث والتصنيف الذكي.',
+            _Hint(
+              tr(
+                'الفئات نفسها تُطبَّق على فلترة الشبكة والبحث والتصنيف الذكي.',
+                'The same categories apply to network filtering, search and AI classification.',
+              ),
             ),
-            const SectionHeader(title: 'فحص صورة'),
+            SectionHeader(title: tr('فحص صورة', 'Check an image')),
             SgCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
                     ai.imageModelAvailable
-                        ? 'اختر صورة لفحصها على جهازك. لا تُحفظ الصورة.'
-                        : 'لا يوجد نموذج صور مثبّت في هذا الإصدار. يمكنك اختيار '
-                              'صورة للتحقق من صلاحيتها، لكن لن تُصنَّف.',
+                        ? tr(
+                            'اختر صورة لفحصها على جهازك. لا تُحفظ الصورة.',
+                            "Choose an image to check on your device. The image isn't saved.",
+                          )
+                        : tr(
+                            'لا يوجد نموذج صور مثبّت في هذا الإصدار. يمكنك اختيار '
+                                'صورة للتحقق من صلاحيتها، لكن لن تُصنَّف.',
+                            "No image model is installed in this version. You can choose an image to validate it, but it won't be classified.",
+                          ),
                     style: context.text.bodyMedium,
                   ),
                   const SizedBox(height: SgSpace.x4),
                   SecondaryButton(
-                    label: 'اختيار صورة',
+                    label: tr('اختيار صورة', 'Choose image'),
                     icon: Icons.image_search_rounded,
                     loading: _checking,
                     onPressed: ai.enabled && protection.engine.isSupported
@@ -157,22 +178,22 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                 ],
               ),
             ),
-            const SectionHeader(title: 'الإحصاءات'),
+            SectionHeader(title: tr('الإحصاءات', 'Statistics')),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.radar_rounded,
-                  title: 'اكتشافات',
+                  title: tr('اكتشافات', 'Detections'),
                   value: '${stats.detections}',
                 ),
                 SecuritySettingTile(
                   icon: Icons.block_rounded,
-                  title: 'حظر بالذكاء الاصطناعي',
+                  title: tr('حظر بالذكاء الاصطناعي', 'Blocked by AI'),
                   value: '${stats.blocks}',
                 ),
                 SecuritySettingTile(
                   icon: Icons.flag_outlined,
-                  title: 'بلاغات حظر خاطئ',
+                  title: tr('بلاغات حظر خاطئ', 'False-positive reports'),
                   value: '${stats.falsePositiveReports}',
                 ),
                 for (final category in ProtectionCategory.networkFiltered)
@@ -180,36 +201,51 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
                     SecuritySettingTile(
                       icon: category.icon,
                       title: category.title,
-                      value:
-                          '${stats.detectionsByCategory[category]} اكتشاف · '
-                          '${stats.blocksByCategory[category] ?? 0} حظر',
+                      value: tr(
+                        '${stats.detectionsByCategory[category]} اكتشاف · '
+                            '${stats.blocksByCategory[category] ?? 0} حظر',
+                        '${stats.detectionsByCategory[category]} detected · ${stats.blocksByCategory[category] ?? 0} blocked',
+                      ),
                     ),
               ],
             ),
             const SizedBox(height: SgSpace.x3),
-            const _Hint('تُحفظ الأعداد فقط، دون نص البحث أو الصور.'),
-            const SectionHeader(title: 'النماذج'),
+            _Hint(
+              tr(
+                'تُحفظ الأعداد فقط، دون نص البحث أو الصور.',
+                'Only counts are stored, without search text or images.',
+              ),
+            ),
+            SectionHeader(title: tr('النماذج', 'Models')),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.text_fields_rounded,
-                  title: 'نموذج النص',
-                  subtitle: 'على الجهاز · مُتحقَّق من سلامته',
+                  title: tr('نموذج النص', 'Text model'),
+                  subtitle: tr(
+                    'على الجهاز · مُتحقَّق من سلامته',
+                    'On device · integrity verified',
+                  ),
                   value: ai.textModelAvailable
-                      ? (ai.textModelId ?? 'متاح')
-                      : 'غير متاح',
+                      ? (ai.textModelId ?? tr('متاح', 'Available'))
+                      : tr('غير متاح', 'Unavailable'),
                 ),
                 SecuritySettingTile(
                   icon: Icons.image_outlined,
-                  title: 'نموذج الصور',
-                  value: ai.imageModelAvailable ? 'متاح' : 'غير مثبّت',
+                  title: tr('نموذج الصور', 'Image model'),
+                  value: ai.imageModelAvailable
+                      ? tr('متاح', 'Available')
+                      : tr('غير مثبّت', 'Not installed'),
                 ),
               ],
             ),
             const SizedBox(height: SgSpace.x3),
-            const _Hint(
-              'النموذج صغير ومحدود الدقة: قد يفوته محتوى مخالف وقد يخطئ في '
-              'محتوى سليم. النتائج غير المؤكدة لا تُحظر في الوضع العادي.',
+            _Hint(
+              tr(
+                'النموذج صغير ومحدود الدقة: قد يفوته محتوى مخالف وقد يخطئ في '
+                    'محتوى سليم. النتائج غير المؤكدة لا تُحظر في الوضع العادي.',
+                "The model is small with limited accuracy: it may miss harmful content and may flag harmless content. Uncertain results aren't blocked in Normal mode.",
+              ),
             ),
             const SizedBox(height: SgSpace.x6),
           ],
@@ -225,10 +261,16 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
   ) async {
     final loosens = current.isLoosenedBy(next);
     final reason = !next.enabled
-        ? 'لإيقاف الحماية الذكية'
+        ? tr('لإيقاف الحماية الذكية', 'to turn off AI protection')
         : loosens
-        ? 'لتخفيف إعدادات الحماية الذكية'
-        : 'لتعديل الحماية الذكية (إعدادات الحماية مقفلة)';
+        ? tr(
+            'لتخفيف إعدادات الحماية الذكية',
+            'to loosen AI protection settings',
+          )
+        : tr(
+            'لتعديل الحماية الذكية (إعدادات الحماية مقفلة)',
+            'to change AI protection (protection settings are locked)',
+          );
     if (!await ProtectionGuard.authorize(
       context,
       loosens: loosens,
@@ -248,10 +290,12 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
   ) async {
     final edited = await showSgBottomSheet<Map<ProtectionCategory, double>>(
       context,
-      title: 'حدود الثقة',
-      subtitle:
-          'يُحظر المحتوى عندما تبلغ ثقة النموذج هذا الحد أو أكثر. '
-          'الحد الأقل يحظر أكثر ويخطئ أكثر.',
+      title: tr('حدود الثقة', 'Confidence thresholds'),
+      subtitle: tr(
+        'يُحظر المحتوى عندما تبلغ ثقة النموذج هذا الحد أو أكثر. '
+            'الحد الأقل يحظر أكثر ويخطئ أكثر.',
+        "Content is blocked when the model's confidence reaches this threshold or higher. A lower threshold blocks more and makes more mistakes.",
+      ),
       builder: (context) => _ThresholdEditor(settings: current),
     );
     if (edited == null || !mounted) return;
@@ -273,7 +317,7 @@ class _AiProtectionScreenState extends State<AiProtectionScreen> {
     if (!mounted || check.status == ImageCheckStatus.cancelled) return;
     await showSgBottomSheet<void>(
       context,
-      title: 'نتيجة الفحص',
+      title: tr('نتيجة الفحص', 'Check result'),
       builder: (context) => _ImageResult(check: check),
     );
   }
@@ -295,9 +339,21 @@ class _ModeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (title, subtitle) = switch (mode) {
-      DetectionMode.normal => ('عادي', 'يحظر عند الثقة العالية فقط'),
-      DetectionMode.strict => ('صارم', 'حدود أقل: يحظر أكثر، وأخطاء أكثر'),
-      DetectionMode.custom => ('مخصص', 'تحدد حد الثقة لكل فئة'),
+      DetectionMode.normal => (
+        tr('عادي', 'Normal'),
+        tr('يحظر عند الثقة العالية فقط', 'Blocks at high confidence only'),
+      ),
+      DetectionMode.strict => (
+        tr('صارم', 'Strict'),
+        tr(
+          'حدود أقل: يحظر أكثر، وأخطاء أكثر',
+          'Lower thresholds: blocks more, more mistakes',
+        ),
+      ),
+      DetectionMode.custom => (
+        tr('مخصص', 'Custom'),
+        tr('تحدد حد الثقة لكل فئة', 'You set the threshold per category'),
+      ),
     };
     return SecuritySettingTile(
       icon: selected
@@ -337,7 +393,10 @@ class _ThresholdEditorState extends State<_ThresholdEditor> {
             children: [
               Expanded(child: Text(c.title, style: context.text.titleSmall)),
               Text(
-                '${(_values[c]! * 100).round()}٪',
+                tr(
+                  '${(_values[c]! * 100).round()}٪',
+                  '${(_values[c]! * 100).round()}%',
+                ),
                 style: context.text.titleSmall,
               ),
             ],
@@ -347,15 +406,20 @@ class _ThresholdEditorState extends State<_ThresholdEditor> {
             min: s.customMin,
             max: s.customMax,
             divisions: ((s.customMax - s.customMin) * 100).round(),
-            label: '${(_values[c]! * 100).round()}٪',
-            semanticFormatterCallback: (v) =>
-                '${c.title} ${(v * 100).round()}٪',
+            label: tr(
+              '${(_values[c]! * 100).round()}٪',
+              '${(_values[c]! * 100).round()}%',
+            ),
+            semanticFormatterCallback: (v) => tr(
+              '${c.title} ${(v * 100).round()}٪',
+              '${c.title} ${(v * 100).round()}%',
+            ),
             onChanged: (v) => setState(() => _values[c] = s.clampCustom(v)),
           ),
         ],
         const SizedBox(height: SgSpace.x3),
         PrimaryButton(
-          label: 'حفظ',
+          label: tr('حفظ', 'Save'),
           onPressed: () => Navigator.of(context).pop(Map.of(_values)),
         ),
       ],
@@ -396,7 +460,7 @@ class _ImageResultState extends State<_ImageResult> {
             !_reported) ...[
           const SizedBox(height: SgSpace.x4),
           SgTextButton(
-            label: 'إبلاغ عن حظر خاطئ',
+            label: tr('إبلاغ عن حظر خاطئ', 'Report a false positive'),
             onPressed: () async {
               final ok = await reportIncorrectBlock(
                 context,
@@ -415,39 +479,65 @@ class _ImageResultState extends State<_ImageResult> {
   static (String, String) _describe(ImageCheck c) {
     if (c.status == ImageCheckStatus.rejected) {
       return (
-        'لم تُفحص الصورة',
+        tr('لم تُفحص الصورة', 'Image not checked'),
         switch (c.error) {
-          'file_too_large' => 'الملف أكبر من الحد المسموح (15 ميغابايت).',
-          'dimensions_too_large' => 'أبعاد الصورة كبيرة جدًا.',
-          'unsupported_type' =>
+          'file_too_large' => tr(
+            'الملف أكبر من الحد المسموح (15 ميغابايت).',
+            'The file is larger than the allowed limit (15 MB).',
+          ),
+          'dimensions_too_large' => tr(
+            'أبعاد الصورة كبيرة جدًا.',
+            'The image dimensions are too large.',
+          ),
+          'unsupported_type' => tr(
             'نوع الملف غير مدعوم. الأنواع المدعومة: JPEG وPNG وWebP.',
-          'type_mismatch' => 'محتوى الملف لا يطابق نوعه المعلن.',
-          'unreadable' => 'تعذّرت قراءة الملف.',
-          _ => 'الملف تالف أو غير صالح.',
+            'Unsupported file type. Supported: JPEG, PNG and WebP.',
+          ),
+          'type_mismatch' => tr(
+            'محتوى الملف لا يطابق نوعه المعلن.',
+            "The file content doesn't match its declared type.",
+          ),
+          'unreadable' => tr('تعذّرت قراءة الملف.', "Couldn't read the file."),
+          _ => tr('الملف تالف أو غير صالح.', 'The file is damaged or invalid.'),
         },
       );
     }
     if (c.status == ImageCheckStatus.unavailable) {
       return (
-        'التصنيف غير متاح',
+        tr('التصنيف غير متاح', 'Classification unavailable'),
         c.error == 'no_model'
-            ? 'الصورة صالحة، لكن لا يوجد نموذج صور مثبّت في هذا الإصدار، '
-                  'لذلك لم تُصنَّف. لم يُحفظ شيء.'
-            : 'تعذّر التصنيف الآن. حاول لاحقًا.',
+            ? tr(
+                'الصورة صالحة، لكن لا يوجد نموذج صور مثبّت في هذا الإصدار، '
+                    'لذلك لم تُصنَّف. لم يُحفظ شيء.',
+                "The image is valid, but no image model is installed in this version, so it wasn't classified. Nothing was saved.",
+              )
+            : tr(
+                'تعذّر التصنيف الآن. حاول لاحقًا.',
+                "Classification isn't possible right now. Try later.",
+              ),
       );
     }
     return switch (c.verdict) {
       ContentVerdict.block => (
-        'سيُحظر هذا المحتوى',
-        'الفئة: ${c.category?.title ?? '—'} · الثقة ${(c.confidence * 100).round()}٪',
+        tr('سيُحظر هذا المحتوى', 'This content would be blocked'),
+        tr(
+          'الفئة: ${c.category?.title ?? '—'} · الثقة ${(c.confidence * 100).round()}٪',
+          "Category: ${c.category?.title ?? '—'} · confidence ${(c.confidence * 100).round()}%",
+        ),
       ),
       ContentVerdict.unknown => (
-        'غير مؤكد',
-        'النموذج غير متأكد، ولا يُحظر المحتوى غير المؤكد في هذا الوضع.',
+        tr('غير مؤكد', 'Uncertain'),
+        tr(
+          'النموذج غير متأكد، ولا يُحظر المحتوى غير المؤكد في هذا الوضع.',
+          "The model isn't sure, and uncertain content isn't blocked in this mode.",
+        ),
       ),
       ContentVerdict.allow => (
-        'لا مشكلة',
-        'لم يُكتشف محتوى من الفئات المفعّلة.',
+        tr('لا مشكلة', 'No issue'),
+        tr(
+          'لم يُكتشف محتوى من الفئات المفعّلة.',
+          'No content from the enabled categories was detected.',
+        ),
       ),
     };
   }
@@ -482,7 +572,10 @@ class _ScoreBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: SgSpace.x2),
-          Text('${(value * 100).round()}٪', style: context.text.bodySmall),
+          Text(
+            tr('${(value * 100).round()}٪', '${(value * 100).round()}%'),
+            style: context.text.bodySmall,
+          ),
         ],
       ),
     );

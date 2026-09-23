@@ -257,6 +257,12 @@ class ProtectionChannel(
                 }
                 "getBlockedLogs" -> manager.recentBlocks((call.argument<Int>("limit") ?: 100).coerceIn(1, 500)).map { it.toMap() }
                 "clearLogs" -> { manager.clearLogs(); true }
+                "setUiLanguage" -> {
+                    val value = call.argument<String>("language")
+                    if (value != "ar" && value != "en") throw bad("language")
+                    manager.config.uiLanguage = value
+                    true
+                }
                 "getLogRetention" -> manager.config.logRetention.id
                 "setLogRetention" -> {
                     val value = LogRetention.fromId(call.argument<String>("value")) ?: throw bad("value")

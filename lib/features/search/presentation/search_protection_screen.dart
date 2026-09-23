@@ -6,6 +6,7 @@ import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_controller.dart';
 import '../../protection/presentation/protection_guard.dart';
@@ -41,17 +42,21 @@ class SearchProtectionScreen extends StatelessWidget {
         final c = context.colors;
         return SgPage(
           showBack: true,
-          title: 'حماية البحث',
-          subtitle:
-              'البحث الآمن في محركات البحث، وفحص ما تبحث عنه عبر SafeGuard.',
+          title: tr('حماية البحث', 'Search protection'),
+          subtitle: tr(
+            'البحث الآمن في محركات البحث، وفحص ما تبحث عنه عبر SafeGuard.',
+            'SafeSearch on search engines, and checking what you search for through SafeGuard.',
+          ),
           children: [
             const SizedBox(height: SgSpace.x6),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.manage_search_rounded,
-                  title: 'حماية البحث',
-                  subtitle: s.enabled ? 'مفعّلة' : 'متوقفة',
+                  title: tr('حماية البحث', 'Search protection'),
+                  subtitle: s.enabled
+                      ? tr('مفعّلة', 'On')
+                      : tr('متوقفة', 'Off'),
                   switchValue: s.enabled,
                   onSwitchChanged: preset
                       ? null
@@ -70,9 +75,11 @@ class SearchProtectionScreen extends StatelessWidget {
                 icon: Icons.lock_outline_rounded,
                 color: c.info,
                 background: c.infoMuted,
-                text:
-                    'وضع الحماية «${state.mode == ProtectionMode.strict ? 'صارم' : 'عادي'}» '
-                    'يحدد هذه الإعدادات. لتعديلها اختر الوضع «مخصص» من الشاشة الرئيسية.',
+                text: tr(
+                  'وضع الحماية «${state.mode == ProtectionMode.strict ? 'صارم' : 'عادي'}» '
+                      'يحدد هذه الإعدادات. لتعديلها اختر الوضع «مخصص» من الشاشة الرئيسية.',
+                  "The “${state.mode == ProtectionMode.strict ? 'Strict' : 'Normal'}” protection mode sets these settings. To change them, choose Custom on the home screen.",
+                ),
               ),
             ],
             if (s.enabled && !running) ...[
@@ -81,12 +88,14 @@ class SearchProtectionScreen extends StatelessWidget {
                 icon: Icons.info_outline_rounded,
                 color: c.info,
                 background: c.infoMuted,
-                text:
-                    'البحث الآمن يُفرض عبر اتصال VPN المحلي، وهو غير نشط الآن. '
-                    'شغّل الحماية من الشاشة الرئيسية.',
+                text: tr(
+                  'البحث الآمن يُفرض عبر اتصال VPN المحلي، وهو غير نشط الآن. '
+                      'شغّل الحماية من الشاشة الرئيسية.',
+                  "SafeSearch is enforced through the local VPN connection, which isn't active now. Start protection from the home screen.",
+                ),
               ),
             ],
-            const SectionHeader(title: 'البحث الآمن (SafeSearch)'),
+            SectionHeader(title: tr('البحث الآمن (SafeSearch)', 'SafeSearch')),
             SgGroupedCard(
               children: [
                 _engineTile(
@@ -125,10 +134,13 @@ class SearchProtectionScreen extends StatelessWidget {
             ),
             const SizedBox(height: SgSpace.x3),
             _Hint(
-              'يعمل عندما يستخدم المتصفح DNS النظام. ميزة «DNS الآمن» في Chrome '
-              'و«DNS الخاص» في Android بمزوّد محدد تتجاوزه، وكذلك محركات البحث الأخرى.',
+              tr(
+                'يعمل عندما يستخدم المتصفح DNS النظام. ميزة «DNS الآمن» في Chrome '
+                    'و«DNS الخاص» في Android بمزوّد محدد تتجاوزه، وكذلك محركات البحث الأخرى.',
+                "Works when the browser uses the system DNS. Chrome's “Secure DNS” and Android's “Private DNS” with a specific provider bypass it, as do other search engines.",
+              ),
             ),
-            const SectionHeader(title: 'الفئات'),
+            SectionHeader(title: tr('الفئات', 'Categories')),
             SgGroupedCard(
               children: [
                 for (final category in ProtectionCategory.networkFiltered)
@@ -142,8 +154,15 @@ class SearchProtectionScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: SgSpace.x3),
-            const _Hint('الفئات نفسها تُطبَّق على فلترة الشبكة وفحص البحث.'),
-            const SectionHeader(title: 'بحث عبر SafeGuard'),
+            _Hint(
+              tr(
+                'الفئات نفسها تُطبَّق على فلترة الشبكة وفحص البحث.',
+                'The same categories apply to network filtering and search checks.',
+              ),
+            ),
+            SectionHeader(
+              title: tr('بحث عبر SafeGuard', 'Search through SafeGuard'),
+            ),
             _SafeSearchBox(enabled: state.enabled && s.enabled),
           ],
         );
@@ -172,9 +191,9 @@ class SearchProtectionScreen extends StatelessWidget {
   }
 
   static String _youtubeLabel(YouTubeMode m) => switch (m) {
-    YouTubeMode.off => 'متوقف',
-    YouTubeMode.moderate => 'مقيّد (معتدل)',
-    YouTubeMode.strict => 'مقيّد (صارم)',
+    YouTubeMode.off => tr('متوقف', 'Off'),
+    YouTubeMode.moderate => tr('مقيّد (معتدل)', 'Restricted (moderate)'),
+    YouTubeMode.strict => tr('مقيّد (صارم)', 'Restricted (strict)'),
   };
 
   Future<void> _pickYouTube(
@@ -184,8 +203,11 @@ class SearchProtectionScreen extends StatelessWidget {
   ) async {
     final picked = await showSgBottomSheet<YouTubeMode>(
       context,
-      title: 'الوضع المقيّد في YouTube',
-      subtitle: 'يُفرض عبر DNS على تطبيق YouTube والمتصفح.',
+      title: tr('الوضع المقيّد في YouTube', 'YouTube Restricted Mode'),
+      subtitle: tr(
+        'يُفرض عبر DNS على تطبيق YouTube والمتصفح.',
+        'Enforced through DNS for the YouTube app and the browser.',
+      ),
       builder: (context) => Column(
         children: [
           for (final m in YouTubeMode.values.reversed)
@@ -214,10 +236,13 @@ class SearchProtectionScreen extends StatelessWidget {
   ) async {
     final loosens = current.isLoosenedBy(next);
     final reason = !next.enabled
-        ? 'لإيقاف حماية البحث'
+        ? tr('لإيقاف حماية البحث', 'to turn off search protection')
         : loosens
-        ? 'لتخفيف إعدادات البحث الآمن'
-        : 'لتعديل إعدادات البحث (إعدادات الحماية مقفلة)';
+        ? tr('لتخفيف إعدادات البحث الآمن', 'to loosen SafeSearch settings')
+        : tr(
+            'لتعديل إعدادات البحث (إعدادات الحماية مقفلة)',
+            'to change search settings (protection settings are locked)',
+          );
     if (!await ProtectionGuard.authorize(
       context,
       loosens: loosens,
@@ -275,7 +300,13 @@ class _SafeSearchBoxState extends State<_SafeSearchBox> {
         );
         if (mounted) await AppScope.of(context).protection.refreshStats();
       } else if (!check.opened) {
-        showSgSnack(context, 'لا يوجد متصفح لفتح النتائج.');
+        showSgSnack(
+          context,
+          tr(
+            'لا يوجد متصفح لفتح النتائج.',
+            'No browser available to open the results.',
+          ),
+        );
       }
     } on AppFailure catch (f) {
       if (mounted) showSgSnack(context, f.message);
@@ -298,8 +329,8 @@ class _SafeSearchBoxState extends State<_SafeSearchBox> {
             autocorrect: false,
             enableSuggestions: false,
             onSubmitted: (_) => _submit(),
-            decoration: const InputDecoration(
-              hintText: 'ابحث بأمان…',
+            decoration: InputDecoration(
+              hintText: tr('ابحث بأمان…', 'Search safely…'),
               counterText: '',
               prefixIcon: Icon(Icons.search_rounded),
             ),
@@ -326,16 +357,19 @@ class _SafeSearchBoxState extends State<_SafeSearchBox> {
           ),
           const SizedBox(height: SgSpace.x4),
           PrimaryButton(
-            label: 'بحث',
+            label: tr('بحث', 'Search'),
             icon: Icons.search_rounded,
             loading: _busy,
             onPressed: widget.enabled ? _submit : null,
           ),
           const SizedBox(height: SgSpace.x3),
           Text(
-            'يُفحص البحث عند الإرسال فقط، على جهازك: القواعد أولًا ثم الحماية '
-            'الذكية. لا يُحفظ نص البحث ولا يُسجَّل؛ عند الحظر يُسجَّل رقم '
-            'القاعدة أو النموذج والفئة فقط.',
+            tr(
+              'يُفحص البحث عند الإرسال فقط، على جهازك: القواعد أولًا ثم الحماية '
+                  'الذكية. لا يُحفظ نص البحث ولا يُسجَّل؛ عند الحظر يُسجَّل رقم '
+                  'القاعدة أو النموذج والفئة فقط.',
+              "Searches are checked only when you submit them, on your device: rules first, then AI protection. Search text isn't saved or logged; when blocked, only the rule or model number and the category are recorded.",
+            ),
             style: context.text.bodySmall,
           ),
         ],

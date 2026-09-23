@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../core/i18n/i18n.dart';
 
 /// First run: one screen that states what SafeGuard does, how it treats the
 /// user's data, and where its limits are — then straight into PIN setup.
@@ -21,11 +22,17 @@ class OnboardingScreen extends StatelessWidget {
           children: [
             const ShieldMark(size: 44),
             const SizedBox(height: SgSpace.x8),
-            Text('حمايتك تبدأ\nمن جهازك', style: context.text.displaySmall),
+            Text(
+              tr('حمايتك تبدأ\nمن جهازك', 'Protection starts\non your device'),
+              style: context.text.displaySmall,
+            ),
             const SizedBox(height: SgSpace.x3),
             Text(
-              'SafeGuard يحجب المحتوى غير المرغوب فيه قبل أن يصل إليك، '
-              'وتبقى إعداداتك وبياناتك على هذا الجهاز فقط.',
+              tr(
+                'SafeGuard يحجب المحتوى غير المرغوب فيه قبل أن يصل إليك، '
+                    'وتبقى إعداداتك وبياناتك على هذا الجهاز فقط.',
+                'SafeGuard blocks unwanted content before it reaches you, and your settings and data stay on this device only.',
+              ),
               style: context.text.bodyLarge!.copyWith(color: c.textSecondary),
             ),
           ],
@@ -36,33 +43,42 @@ class OnboardingScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           PrimaryButton(
-            label: 'إعداد رمز PIN',
+            label: tr('إعداد رمز PIN', 'Set up a PIN'),
             onPressed: () => context.push(Routes.createPin),
           ),
           const SizedBox(height: SgSpace.x3),
           Text(
-            'خطوة واحدة، أقل من دقيقة.',
+            tr('خطوة واحدة، أقل من دقيقة.', 'One step, under a minute.'),
             textAlign: TextAlign.center,
             style: context.text.bodySmall!.copyWith(color: c.textTertiary),
           ),
         ],
       ),
-      children: const [
+      children: [
         SizedBox(height: SgSpace.x8),
         _Principle(
           icon: Icons.phone_android_rounded,
-          title: 'يعمل على جهازك',
-          body: 'بلا حساب ولا خوادم. التفضيلات تُحفظ محليًا، والرمز مشفّر.',
+          title: tr('يعمل على جهازك', 'Runs on your device'),
+          body: tr(
+            'بلا حساب ولا خوادم. التفضيلات تُحفظ محليًا، والرمز مشفّر.',
+            'No account, no servers. Preferences are stored locally and the PIN is encrypted.',
+          ),
         ),
         _Principle(
           icon: Icons.pin_outlined,
-          title: 'محمي برمز PIN',
-          body: 'لا يمكن إيقاف الحماية أو تخفيفها دون إدخال رمزك.',
+          title: tr('محمي برمز PIN', 'PIN protected'),
+          body: tr(
+            'لا يمكن إيقاف الحماية أو تخفيفها دون إدخال رمزك.',
+            "Protection can't be turned off or loosened without your PIN.",
+          ),
         ),
         _Principle(
           icon: Icons.visibility_outlined,
-          title: 'واضح بشأن حدوده',
-          body: 'الفلترة تتم على مستوى الشبكة. نخبرك دائمًا بما يُحجب فعليًا وما لا يمكن حجبه.',
+          title: tr('واضح بشأن حدوده', 'Honest about its limits'),
+          body: tr(
+            'الفلترة تتم على مستوى الشبكة. نخبرك دائمًا بما يُحجب فعليًا وما لا يمكن حجبه.',
+            "Filtering happens at the network level. We always tell you what is actually blocked and what can't be.",
+          ),
         ),
       ],
     );

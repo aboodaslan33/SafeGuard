@@ -1,3 +1,5 @@
+import '../../../core/i18n/i18n.dart';
+
 enum ThemePreference { dark, light, system }
 
 class AppSettings {
@@ -6,6 +8,7 @@ class AppSettings {
     this.theme = ThemePreference.dark,
     this.appLockEnabled = true,
     this.protectionLocked = false,
+    this.language = AppLanguage.ar,
   });
 
   final bool onboardingCompleted;
@@ -18,17 +21,22 @@ class AppSettings {
   /// (not only loosening ones).
   final bool protectionLocked;
 
+  /// UI language: Arabic (RTL, default) or English (LTR).
+  final AppLanguage language;
+
   AppSettings copyWith({
     bool? onboardingCompleted,
     ThemePreference? theme,
     bool? appLockEnabled,
     bool? protectionLocked,
+    AppLanguage? language,
   }) {
     return AppSettings(
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       theme: theme ?? this.theme,
       appLockEnabled: appLockEnabled ?? this.appLockEnabled,
       protectionLocked: protectionLocked ?? this.protectionLocked,
+      language: language ?? this.language,
     );
   }
 
@@ -37,6 +45,7 @@ class AppSettings {
     'theme': theme.name,
     'appLockEnabled': appLockEnabled,
     'protectionLocked': protectionLocked,
+    'language': language.name,
   };
 
   /// Tolerant decoding: unknown or missing fields fall back to defaults so
@@ -49,6 +58,7 @@ class AppSettings {
       theme: ThemePreference.values.asNameMap()[json['theme']] ?? d.theme,
       appLockEnabled: json['appLockEnabled'] as bool? ?? d.appLockEnabled,
       protectionLocked: json['protectionLocked'] as bool? ?? d.protectionLocked,
+      language: AppLanguage.fromName(json['language']),
     );
   }
 
@@ -58,11 +68,17 @@ class AppSettings {
       other.onboardingCompleted == onboardingCompleted &&
       other.theme == theme &&
       other.appLockEnabled == appLockEnabled &&
-      other.protectionLocked == protectionLocked;
+      other.protectionLocked == protectionLocked &&
+      other.language == language;
 
   @override
-  int get hashCode =>
-      Object.hash(onboardingCompleted, theme, appLockEnabled, protectionLocked);
+  int get hashCode => Object.hash(
+    onboardingCompleted,
+    theme,
+    appLockEnabled,
+    protectionLocked,
+    language,
+  );
 }
 
 abstract interface class SettingsRepository {

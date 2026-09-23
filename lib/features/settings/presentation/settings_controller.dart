@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
+import '../../../core/i18n/i18n.dart';
 import '../domain/app_settings.dart';
 
 class SettingsController extends ChangeNotifier {
@@ -30,6 +31,9 @@ class SettingsController extends ChangeNotifier {
   Future<Result<void>> setTheme(ThemePreference theme) =>
       _update(_settings.copyWith(theme: theme));
 
+  Future<Result<void>> setLanguage(AppLanguage language) =>
+      _update(_settings.copyWith(language: language));
+
   Future<Result<void>> setAppLock(bool enabled) =>
       _update(_settings.copyWith(appLockEnabled: enabled));
 
@@ -38,9 +42,12 @@ class SettingsController extends ChangeNotifier {
       _update(_settings.copyWith(protectionLocked: locked));
 
   /// Called after all app data was wiped.
+  /// The chosen language survives: the user still reads the same language
+  /// on the first-run screens.
   void resetInMemory() {
-    _settings = const AppSettings();
+    _settings = AppSettings(language: _settings.language);
     notifyListeners();
+    _repository.save(_settings).ignore();
   }
 
   /// Optimistic update: UI reflects the change immediately and rolls back

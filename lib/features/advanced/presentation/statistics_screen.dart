@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_ui.dart';
 
@@ -53,15 +54,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     };
     return SgPage(
       showBack: true,
-      title: 'الإحصاءات',
-      subtitle: 'أعداد فقط، محفوظة على جهازك. يُحتفظ بالسجل 30 يومًا.',
+      title: tr('الإحصاءات', 'Statistics'),
+      subtitle: tr(
+        'أعداد فقط، محفوظة على جهازك. يُحتفظ بالسجل 30 يومًا.',
+        'Counts only, stored on your device. Retention follows your log setting.',
+      ),
       children: [
         const SizedBox(height: SgSpace.x6),
         SegmentedButton<_Period>(
-          segments: const [
-            ButtonSegment(value: _Period.today, label: Text('اليوم')),
-            ButtonSegment(value: _Period.week, label: Text('7 أيام')),
-            ButtonSegment(value: _Period.month, label: Text('30 يومًا')),
+          segments: [
+            ButtonSegment(
+              value: _Period.today,
+              label: Text(tr('اليوم', 'Today')),
+            ),
+            ButtonSegment(
+              value: _Period.week,
+              label: Text(tr('7 أيام', '7 days')),
+            ),
+            ButtonSegment(
+              value: _Period.month,
+              label: Text(tr('30 يومًا', '30 days')),
+            ),
           ],
           selected: {_period},
           showSelectedIcon: false,
@@ -72,7 +85,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           SizedBox(
             height: 280,
             child: ErrorState(
-              title: 'تعذّر تحميل الإحصاءات',
+              title: tr('تعذّر تحميل الإحصاءات', "Couldn't load statistics"),
               message: _error,
               onRetry: _load,
             ),
@@ -84,42 +97,48 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             children: [
               SecuritySettingTile(
                 icon: Icons.shield_outlined,
-                title: 'إجمالي المحجوب',
+                title: tr('إجمالي المحجوب', 'Total blocked'),
                 value: '${w.total}',
               ),
               SecuritySettingTile(
                 icon: Icons.dns_outlined,
-                title: 'نطاقات محجوبة',
+                title: tr('نطاقات محجوبة', 'Blocked domains'),
                 value: '${w.source(EventSourceKind.dns)}',
               ),
               SecuritySettingTile(
                 icon: Icons.manage_search_rounded,
-                title: 'عمليات بحث محجوبة',
-                subtitle: 'بالقواعد والكلمات المحظورة',
+                title: tr('عمليات بحث محجوبة', 'Blocked searches'),
+                subtitle: tr(
+                  'بالقواعد والكلمات المحظورة',
+                  'By rules and blocked keywords',
+                ),
                 value: '${w.source(EventSourceKind.search)}',
               ),
               SecuritySettingTile(
                 icon: Icons.auto_awesome_outlined,
-                title: 'حظر بالذكاء الاصطناعي',
+                title: tr('حظر بالذكاء الاصطناعي', 'Blocked by AI'),
                 value: '${w.source(EventSourceKind.ai)}',
               ),
               SecuritySettingTile(
                 icon: Icons.apps_rounded,
-                title: 'فتح تطبيقات محمية',
+                title: tr('فتح تطبيقات محمية', 'Protected app launches'),
                 value: '${w.source(EventSourceKind.app)}',
               ),
               SecuritySettingTile(
                 icon: Icons.flag_outlined,
-                title: 'بلاغات حظر خاطئ',
+                title: tr('بلاغات حظر خاطئ', 'False-positive reports'),
                 value: '${w.falsePositiveReports}',
               ),
             ],
           ),
-          const SectionHeader(title: 'حسب الفئة'),
+          SectionHeader(title: tr('حسب الفئة', 'By category')),
           SgCard(
             child: w.total == 0
                 ? Text(
-                    'لا يوجد حظر في هذه الفترة.',
+                    tr(
+                      'لا يوجد حظر في هذه الفترة.',
+                      'Nothing blocked in this period.',
+                    ),
                     style: context.text.bodyMedium,
                   )
                 : Column(
@@ -131,7 +150,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           total: w.total,
                         ),
                       _Bar(
-                        label: 'مخصص',
+                        label: tr('مخصص', 'Custom'),
                         value: w.customCategoryCount,
                         total: w.total,
                       ),

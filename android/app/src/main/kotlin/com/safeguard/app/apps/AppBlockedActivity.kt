@@ -11,6 +11,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.safeguard.app.protection.ProtectionManager
 
 /**
  * Shown when a protected app is opened. A regular activity (not an
@@ -21,23 +22,34 @@ class AppBlockedActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val label = intent.getStringExtra(EXTRA_LABEL)?.take(80) ?: "هذا التطبيق"
+        // Follows the language chosen in SafeGuard (synced from Flutter).
+        val en = ProtectionManager.get(this).config.uiLanguage == "en"
+        fun tr(ar: String, english: String) = if (en) english else ar
+        val label = intent.getStringExtra(EXTRA_LABEL)?.take(80) ?: tr("هذا التطبيق", "this app")
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            layoutDirection = View.LAYOUT_DIRECTION_RTL
+            layoutDirection = if (en) View.LAYOUT_DIRECTION_LTR else View.LAYOUT_DIRECTION_RTL
             setBackgroundColor(BACKGROUND)
             setPadding(dp(24), dp(24), dp(24), dp(24))
         }
         root.addView(text("🛡", 44f, ACCENT))
-        root.addView(text("هذا التطبيق محمي", 22f, TEXT_PRIMARY, top = 16))
+        root.addView(text(tr("هذا التطبيق محمي", "This app is protected"), 22f, TEXT_PRIMARY, top = 16))
         root.addView(
-            text("أضفت «$label» إلى التطبيقات المحمية في SafeGuard، لذلك لا يمكن فتحه الآن.", 15f, TEXT_SECONDARY, top = 8),
+            text(
+                tr(
+                    "أضفت «$label» إلى التطبيقات المحمية في SafeGuard، لذلك لا يمكن فتحه الآن.",
+                    "You added “$label” to protected apps in SafeGuard, so it can't be opened now.",
+                ),
+                15f,
+                TEXT_SECONDARY,
+                top = 8,
+            ),
         )
         root.addView(
             Button(this).apply {
-                text = "العودة إلى الشاشة الرئيسية"
+                text = tr("العودة إلى الشاشة الرئيسية", "Back to home screen")
                 setTextColor(ON_ACCENT)
                 isAllCaps = false
                 background = GradientDrawable().apply {

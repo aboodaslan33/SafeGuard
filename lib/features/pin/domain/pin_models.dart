@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 
 /// Rules for PIN format and brute-force throttling.
 abstract final class PinPolicy {
@@ -28,11 +29,19 @@ abstract final class PinPolicy {
   static ValidationFailure? validate(String pin) {
     if (!RegExp(r'^\d+$').hasMatch(pin) ||
         !allowedLengths.contains(pin.length)) {
-      return const ValidationFailure('الرمز يجب أن يتكوّن من 4 أو 6 أرقام');
+      return ValidationFailure(
+        tr(
+          'الرمز يجب أن يتكوّن من 4 أو 6 أرقام',
+          'The PIN must have 4 or 6 digits',
+        ),
+      );
     }
     if (_isRepeated(pin) || _isSequential(pin)) {
-      return const ValidationFailure(
-        'هذا الرمز سهل التخمين. اختر أرقامًا غير متتالية أو مكررة.',
+      return ValidationFailure(
+        tr(
+          'هذا الرمز سهل التخمين. اختر أرقامًا غير متتالية أو مكررة.',
+          "This PIN is easy to guess. Choose digits that aren't sequential or repeated.",
+        ),
       );
     }
     return null;

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_guard.dart';
 import '../../protection/presentation/protection_ui.dart';
@@ -50,21 +51,29 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
     if (!await ProtectionGuard.authorize(
       context,
       loosens: false,
-      reason: 'لتعديل الكلمات المحظورة (إعدادات الحماية مقفلة)',
+      reason: tr(
+        'لتعديل الكلمات المحظورة (إعدادات الحماية مقفلة)',
+        'to edit blocked keywords (protection settings are locked)',
+      ),
     )) {
       return;
     }
     if (!mounted) return;
     final added = await showSgBottomSheet<CustomKeyword>(
       context,
-      title: 'كلمة محظورة',
-      subtitle:
-          'تُحظر عمليات البحث عبر SafeGuard التي تحتوي هذه الكلمة أو العبارة '
-          'ككلمة كاملة، لا كجزء من كلمة أخرى.',
+      title: tr('كلمة محظورة', 'Blocked keyword'),
+      subtitle: tr(
+        'تُحظر عمليات البحث عبر SafeGuard التي تحتوي هذه الكلمة أو العبارة '
+            'ككلمة كاملة، لا كجزء من كلمة أخرى.',
+        'Searches through SafeGuard that contain this word or phrase as a whole word (not as part of another word) are blocked.',
+      ),
       builder: (_) => _AddKeywordForm(engine: _engine),
     );
     if (added != null && mounted) {
-      showSgSnack(context, 'أُضيفت «${added.keyword}»');
+      showSgSnack(
+        context,
+        tr('أُضيفت «${added.keyword}»', 'Added “${added.keyword}”'),
+      );
       await _load();
     }
   }
@@ -73,7 +82,10 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
     if (!await ProtectionGuard.authorize(
       context,
       loosens: true,
-      reason: 'لإزالة «${k.keyword}» من الكلمات المحظورة',
+      reason: tr(
+        'لإزالة «${k.keyword}» من الكلمات المحظورة',
+        'to remove “${k.keyword}” from blocked keywords',
+      ),
     )) {
       return;
     }
@@ -90,11 +102,14 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
     final items = _items;
     return SgPage(
       showBack: true,
-      title: 'الكلمات المحظورة',
-      subtitle: 'تُطبَّق على البحث عبر SafeGuard، قبل القواعد والحماية الذكية.',
+      title: tr('الكلمات المحظورة', 'Blocked keywords'),
+      subtitle: tr(
+        'تُطبَّق على البحث عبر SafeGuard، قبل القواعد والحماية الذكية.',
+        'Applied to searches through SafeGuard, before rules and AI protection.',
+      ),
       bottom: _engine.isSupported
           ? PrimaryButton(
-              label: 'إضافة كلمة',
+              label: tr('إضافة كلمة', 'Add keyword'),
               icon: Icons.add_rounded,
               onPressed: _add,
             )
@@ -105,7 +120,7 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
           SizedBox(
             height: 320,
             child: ErrorState(
-              title: 'تعذّر تحميل القائمة',
+              title: tr('تعذّر تحميل القائمة', "Couldn't load the list"),
               message: _error,
               onRetry: _load,
             ),
@@ -113,12 +128,15 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
         else if (items == null)
           const SizedBox(height: 200, child: LoadingState())
         else if (items.isEmpty)
-          const SizedBox(
+          SizedBox(
             height: 320,
             child: EmptyState(
               icon: Icons.text_fields_rounded,
-              title: 'لا توجد كلمات محظورة',
-              message: 'أضف كلمة أو عبارة لحظر البحث عنها على هذا الجهاز.',
+              title: tr('لا توجد كلمات محظورة', 'No blocked keywords'),
+              message: tr(
+                'أضف كلمة أو عبارة لحظر البحث عنها على هذا الجهاز.',
+                'Add a word or phrase to block searching for it on this device.',
+              ),
             ),
           )
         else
@@ -132,8 +150,11 @@ class _KeywordsScreenState extends State<KeywordsScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: SgSpace.x1),
           child: Text(
-            'لا يقرأ SafeGuard ما تكتبه في التطبيقات الأخرى. الكلمات لا تُطابق '
-            'أجزاء الكلمات («ass» لا تحظر «class»)، ويجب أن تكون 3 أحرف على الأقل.',
+            tr(
+              'لا يقرأ SafeGuard ما تكتبه في التطبيقات الأخرى. الكلمات لا تُطابق '
+                  'أجزاء الكلمات («ass» لا تحظر «class»)، ويجب أن تكون 3 أحرف على الأقل.',
+              "SafeGuard doesn't read what you type in other apps. Keywords don't match parts of words (“ass” doesn't block “class”) and must be at least 3 letters.",
+            ),
             style: context.text.bodySmall!.copyWith(
               color: context.colors.textTertiary,
             ),
@@ -174,14 +195,14 @@ class _KeywordRow extends StatelessWidget {
                   style: context.text.titleMedium,
                 ),
                 Text(
-                  keyword.category?.title ?? 'مخصص',
+                  keyword.category?.title ?? tr('مخصص', 'Custom'),
                   style: context.text.bodySmall,
                 ),
               ],
             ),
           ),
           IconButton(
-            tooltip: 'إزالة',
+            tooltip: tr('إزالة', 'Remove'),
             icon: Icon(
               Icons.remove_circle_outline_rounded,
               color: context.colors.textTertiary,
@@ -218,7 +239,9 @@ class _AddKeywordFormState extends State<_AddKeywordForm> {
   Future<void> _submit() async {
     final text = _controller.text.trim();
     if (text.isEmpty) {
-      setState(() => _error = 'اكتب كلمة أو عبارة.');
+      setState(
+        () => _error = tr('اكتب كلمة أو عبارة.', 'Type a word or phrase.'),
+      );
       return;
     }
     setState(() {
@@ -254,16 +277,16 @@ class _AddKeywordFormState extends State<_AddKeywordForm> {
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _submit(),
             decoration: InputDecoration(
-              hintText: 'كلمة أو عبارة',
+              hintText: tr('كلمة أو عبارة', 'Word or phrase'),
               errorText: _error,
               errorMaxLines: 3,
               counterText: '',
             ),
           ),
           const SizedBox(height: SgSpace.x4),
-          Text('الفئة', style: context.text.titleSmall),
+          Text(tr('الفئة', 'Category'), style: context.text.titleSmall),
           SgChoiceRow(
-            label: 'مخصص',
+            label: tr('مخصص', 'Custom'),
             icon: Icons.person_pin_outlined,
             selected: _category == null,
             onTap: () => setState(() => _category = null),
@@ -276,7 +299,11 @@ class _AddKeywordFormState extends State<_AddKeywordForm> {
               onTap: () => setState(() => _category = c),
             ),
           const SizedBox(height: SgSpace.x4),
-          PrimaryButton(label: 'إضافة', loading: _busy, onPressed: _submit),
+          PrimaryButton(
+            label: tr('إضافة', 'Add'),
+            loading: _busy,
+            onPressed: _submit,
+          ),
         ],
       ),
     );

@@ -1,5 +1,6 @@
 import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../../core/utils/clock.dart';
 import 'pin_models.dart';
 
@@ -90,7 +91,9 @@ class PinService {
       final invalid = PinPolicy.validate(pin);
       if (invalid != null) throw invalid;
       if (pin != confirmation) {
-        throw const ValidationFailure('الرمزان غير متطابقين');
+        throw ValidationFailure(
+          tr('الرمزان غير متطابقين', "The PINs don't match"),
+        );
       }
       final credential = await _hasher.create(pin);
       await _repo.writeCredential(credential);
@@ -112,7 +115,9 @@ class PinService {
 
       final credential = await _repo.readCredential();
       if (credential == null) {
-        throw const ValidationFailure('لم يتم إعداد رمز PIN بعد');
+        throw ValidationFailure(
+          tr('لم يتم إعداد رمز PIN بعد', 'No PIN has been set up yet'),
+        );
       }
 
       if (await _hasher.matches(pin, credential)) {

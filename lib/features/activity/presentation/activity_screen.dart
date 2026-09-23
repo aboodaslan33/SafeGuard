@@ -6,6 +6,7 @@ import '../../../app/router/app_router.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_ui.dart';
 
@@ -46,13 +47,21 @@ class _ActivityScreenState extends State<ActivityScreen> {
   Future<void> _clear() async {
     final confirmed = await showSgConfirmDialog(
       context,
-      title: 'مسح سجل الحظر؟',
-      message: 'ستُحذف جميع الأحداث والإحصاءات المسجّلة على هذا الجهاز.',
-      confirmLabel: 'مسح',
+      title: tr('مسح سجل الحظر؟', 'Clear block log?'),
+      message: tr(
+        'ستُحذف جميع الأحداث والإحصاءات المسجّلة على هذا الجهاز.',
+        'All events and statistics recorded on this device will be deleted.',
+      ),
+      confirmLabel: tr('مسح', 'Clear'),
       destructive: true,
     );
     if (!confirmed || !mounted) return;
-    if (!await requirePin(context, reason: 'لمسح سجل الحظر')) return;
+    if (!await requirePin(
+      context,
+      reason: tr('لمسح سجل الحظر', 'to clear the block log'),
+    )) {
+      return;
+    }
     try {
       await _engine.clearLogs();
       if (!mounted) return;
@@ -68,15 +77,18 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final events = _events;
     return SgPage(
       showBack: true,
-      title: 'سجل الحظر',
-      subtitle: 'الوقت والفئة والنطاق فقط. لا يُسجَّل أي محتوى.',
+      title: tr('سجل الحظر', 'Block log'),
+      subtitle: tr(
+        'الوقت والفئة والنطاق فقط. لا يُسجَّل أي محتوى.',
+        'Time, category and domain only. No content is recorded.',
+      ),
       children: [
         const SizedBox(height: SgSpace.x6),
         if (_error != null)
           SizedBox(
             height: 320,
             child: ErrorState(
-              title: 'تعذّر تحميل السجل',
+              title: tr('تعذّر تحميل السجل', "Couldn't load the log"),
               message: _error,
               onRetry: _load,
             ),
@@ -84,12 +96,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
         else if (events == null)
           const SizedBox(height: 200, child: LoadingState())
         else if (events.isEmpty)
-          const SizedBox(
+          SizedBox(
             height: 320,
             child: EmptyState(
               icon: Icons.history_rounded,
-              title: 'لا يوجد شيء محجوب بعد',
-              message: 'عندما يحجب SafeGuard نطاقًا سيظهر هنا.',
+              title: tr('لا يوجد شيء محجوب بعد', 'Nothing blocked yet'),
+              message: tr(
+                'عندما يحجب SafeGuard نطاقًا سيظهر هنا.',
+                'When SafeGuard blocks a domain, it will appear here.',
+              ),
             ),
           )
         else ...[
@@ -98,7 +113,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
           ),
           const SizedBox(height: SgSpace.x4),
           SecondaryButton(
-            label: 'مسح السجل',
+            label: tr('مسح السجل', 'Clear log'),
             destructive: true,
             onPressed: _clear,
           ),
@@ -165,14 +180,20 @@ class _EventRow extends StatelessWidget {
                   Text(switch (event.source) {
                     EventSourceKind.manual
                         when event.ruleType == 'temporary_unlock' =>
-                      'إيقاف مؤقت للحماية',
-                    _ when event.isCustomCategory => 'مخصص',
-                    EventSourceKind.app => 'تطبيق محمي',
-                    EventSourceKind.search =>
+                      tr('إيقاف مؤقت للحماية', 'Protection paused'),
+                    _ when event.isCustomCategory => tr('مخصص', 'Custom'),
+                    EventSourceKind.app => tr('تطبيق محمي', 'Protected app'),
+                    EventSourceKind.search => tr(
                       'بحث · ${category?.title ?? 'فئة غير معروفة'}',
-                    EventSourceKind.ai =>
+                      "Search · ${category?.title ?? 'Unknown category'}",
+                    ),
+                    EventSourceKind.ai => tr(
                       'ذكاء اصطناعي · ${category?.title ?? 'فئة غير معروفة'}',
-                    _ => category?.title ?? 'فئة غير معروفة',
+                      "AI · ${category?.title ?? 'Unknown category'}",
+                    ),
+                    _ =>
+                      category?.title ??
+                          tr('فئة غير معروفة', 'Unknown category'),
                   }, style: context.text.titleMedium),
                   Text(
                     // Search/AI events carry a rule or model id + hash,

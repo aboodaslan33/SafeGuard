@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../i18n/i18n.dart';
 import '../theme/app_theme.dart';
 import '../tokens/sg_tokens.dart';
 import 'sg_buttons.dart';
@@ -120,7 +121,7 @@ class ErrorState extends StatelessWidget {
       action: onRetry == null
           ? null
           : SecondaryButton(
-              label: retryLabel ?? 'إعادة المحاولة',
+              label: retryLabel ?? tr('إعادة المحاولة', 'Try again'),
               onPressed: onRetry,
             ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/design_system/design_system.dart';
+import '../core/i18n/i18n.dart';
 import '../features/settings/domain/app_settings.dart';
 import 'app_dependencies.dart';
 import 'router/app_router.dart';
@@ -54,6 +55,8 @@ class _SafeGuardAppState extends State<SafeGuardApp> {
     super.dispose();
   }
 
+  AppLanguage? _language;
+
   @override
   Widget build(BuildContext context) {
     final settings = widget.dependencies.settings;
@@ -61,32 +64,49 @@ class _SafeGuardAppState extends State<SafeGuardApp> {
       dependencies: widget.dependencies,
       child: ListenableBuilder(
         listenable: settings,
-        builder: (context, _) => MaterialApp.router(
-          title: 'SafeGuard',
-          debugShowCheckedModeBanner: false,
-          routerConfig: _router,
-          locale: const Locale('ar'),
-          supportedLocales: const [Locale('ar')],
-          localizationsDelegates: GlobalMaterialLocalizations.delegates,
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          themeMode: switch (settings.settings.theme) {
-            ThemePreference.dark => ThemeMode.dark,
-            ThemePreference.light => ThemeMode.light,
-            ThemePreference.system => ThemeMode.system,
-          },
-          // Honour the user's font size up to a point where layouts still
-          // hold; beyond 1.3× rows and the keypad start to wrap badly.
-          builder: (context, child) {
-            final mq = MediaQuery.of(context);
-            return MediaQuery(
-              data: mq.copyWith(
-                textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
-              ),
-              child: child!,
-            );
-          },
-        ),
+        builder: (context, _) {
+          final language = settings.settings.language;
+          I18n.current = language;
+          if (_language != language) {
+            // Native screens (the "app protected" screen) follow along.
+            widget.dependencies.protection.engine
+                .setUiLanguage(language)
+                .catchError((Object _) {});
+          }
+          if (_language != null && _language != language) {
+            // Strings come from tr() in build methods: rebuild every page.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) I18n.rebuildAll(context);
+            });
+          }
+          _language = language;
+          return MaterialApp.router(
+            title: 'SafeGuard',
+            debugShowCheckedModeBanner: false,
+            routerConfig: _router,
+            locale: language.locale,
+            supportedLocales: [for (final l in AppLanguage.values) l.locale],
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: switch (settings.settings.theme) {
+              ThemePreference.dark => ThemeMode.dark,
+              ThemePreference.light => ThemeMode.light,
+              ThemePreference.system => ThemeMode.system,
+            },
+            // Honour the user's font size up to a point where layouts still
+            // hold; beyond 1.3× rows and the keypad start to wrap badly.
+            builder: (context, child) {
+              final mq = MediaQuery.of(context);
+              return MediaQuery(
+                data: mq.copyWith(
+                  textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
+                ),
+                child: child!,
+              );
+            },
+          );
+        },
       ),
     );
   }

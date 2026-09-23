@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../ai/presentation/report_false_positive.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_ui.dart';
@@ -35,7 +36,8 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final reason = category?.title ?? 'محتوى غير مناسب';
+    final reason =
+        category?.title ?? tr('محتوى غير مناسب', 'Inappropriate content');
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(
@@ -76,7 +78,7 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
         ),
         const SizedBox(height: SgSpace.x8),
         Text(
-          'تم حظر هذا المحتوى',
+          tr('تم حظر هذا المحتوى', 'This content was blocked'),
           textAlign: TextAlign.center,
           style: context.text.headlineSmall,
         ),
@@ -94,7 +96,7 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
           child: Text.rich(
             TextSpan(
               children: [
-                const TextSpan(text: 'سبب الحظر: '),
+                TextSpan(text: tr('سبب الحظر: ', 'Reason: ')),
                 TextSpan(
                   text: reason,
                   style: TextStyle(
@@ -110,7 +112,10 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
         ),
         const SizedBox(height: SgSpace.x5),
         Text(
-          'حُجبت هذه الصفحة وفق إعدادات الحماية على جهازك.',
+          tr(
+            'حُجبت هذه الصفحة وفق إعدادات الحماية على جهازك.',
+            'This page was blocked by the protection settings on your device.',
+          ),
           textAlign: TextAlign.center,
           style: context.text.bodyMedium!.copyWith(color: c.textTertiary),
         ),
@@ -128,7 +133,7 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
           SizedBox(
             width: double.infinity,
             child: PrimaryButton(
-              label: 'العودة',
+              label: tr('العودة', 'Back'),
               onPressed: () =>
                   context.canPop() ? context.pop() : context.go(Routes.home),
             ),
@@ -136,10 +141,13 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
           if (source != null && category != null) ...[
             const SizedBox(height: SgSpace.x2),
             if (_reported)
-              Text('تم الإبلاغ. شكرًا لك.', style: context.text.bodySmall)
+              Text(
+                tr('تم الإبلاغ. شكرًا لك.', 'Reported. Thank you.'),
+                style: context.text.bodySmall,
+              )
             else
               SgTextButton(
-                label: 'إبلاغ عن حظر خاطئ',
+                label: tr('إبلاغ عن حظر خاطئ', 'Report a false positive'),
                 onPressed: () async {
                   final ok = await reportIncorrectBlock(
                     context,

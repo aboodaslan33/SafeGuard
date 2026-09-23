@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../core/i18n/i18n.dart';
 
 /// Shown while local data loads. The router moves on by itself once
 /// [AppDependencies.status] becomes ready; this screen only renders the
@@ -34,7 +35,7 @@ class _SplashScreenState extends State<SplashScreen> {
         builder: (context, _) {
           if (deps.status == BootStatus.failed) {
             return ErrorState(
-              title: 'تعذّر تحميل إعداداتك',
+              title: tr('تعذّر تحميل إعداداتك', "Couldn't load your settings"),
               message: deps.failure?.message,
               onRetry: deps.initialize,
             );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../../core/platform/secure_screen.dart';
 
 /// Title + dots + feedback line + keypad. Shared by setup, lock and gate.
@@ -120,7 +121,10 @@ class _PinEntryPanelState extends State<PinEntryPanel> {
     final c = context.colors;
     final locked = _remainingLock;
     final feedback = locked != null
-        ? 'حاول مجددًا بعد ${_formatDuration(locked)}'
+        ? tr(
+            'حاول مجددًا بعد ${_formatDuration(locked)}',
+            'Try again in ${_formatDuration(locked)}',
+          )
         : _error;
 
     return LayoutBuilder(
@@ -224,22 +228,26 @@ class _PinEntryPanelState extends State<PinEntryPanel> {
 String _formatDuration(Duration d) {
   final m = d.inMinutes;
   final s = (d.inSeconds % 60).toString().padLeft(2, '0');
-  return m > 0 ? '$m:$s دقيقة' : '${d.inSeconds} ثانية';
+  return m > 0
+      ? tr('$m:$s دقيقة', '$m:$s min')
+      : tr('${d.inSeconds} ثانية', '${d.inSeconds} s');
 }
 
 /// Maps a verification failure to a sentence for the feedback line.
 String pinFailureMessage(AppFailure failure) {
   return switch (failure) {
-    PinMismatchFailure(:final remainingAttempts) =>
+    PinMismatchFailure(:final remainingAttempts) => tr(
       'الرمز غير صحيح. ${_attemptsLeft(remainingAttempts)}',
+      'Incorrect PIN. ${_attemptsLeft(remainingAttempts)}',
+    ),
     PinLockedFailure() => failure.message,
     _ => failure.message,
   };
 }
 
 String _attemptsLeft(int n) => switch (n) {
-  1 => 'تبقّت محاولة واحدة.',
-  2 => 'تبقّت محاولتان.',
-  _ when n >= 3 && n <= 10 => 'تبقّت $n محاولات.',
-  _ => 'تبقّت $n محاولة.',
+  1 => tr('تبقّت محاولة واحدة.', '1 attempt left.'),
+  2 => tr('تبقّت محاولتان.', '2 attempts left.'),
+  _ when n >= 3 && n <= 10 => tr('تبقّت $n محاولات.', '$n attempts left.'),
+  _ => tr('تبقّت $n محاولة.', '$n attempts left.'),
 };

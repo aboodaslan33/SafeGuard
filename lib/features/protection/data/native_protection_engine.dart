@@ -1,4 +1,5 @@
 import '../../../core/error/failures.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../../core/platform/protection_channel.dart';
 import '../domain/protection.dart';
 
@@ -110,6 +111,10 @@ class NativeProtectionEngine implements ProtectionEngine {
 
   @override
   Future<void> clearLogs() => _channel.clearLogs();
+
+  @override
+  Future<void> setUiLanguage(AppLanguage language) =>
+      _channel.setUiLanguage(language.name);
 
   @override
   Future<LogRetention> logRetention() async =>

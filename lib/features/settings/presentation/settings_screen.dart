@@ -6,6 +6,7 @@ import '../../../app/router/app_router.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/result.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../advanced/presentation/advanced_actions.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_ui.dart';
@@ -26,54 +27,71 @@ class SettingsScreen extends StatelessWidget {
         final protection = deps.protection.state;
         final engine = deps.protection.engine;
         return SgPage(
-          title: 'الإعدادات',
+          title: tr('الإعدادات', 'Settings'),
           children: [
-            const SectionHeader(title: 'الحماية'),
+            SectionHeader(title: tr('الحماية', 'Protection')),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.category_outlined,
-                  title: 'الفئات المحجوبة',
-                  value:
-                      '${protection.activeNetworkCount} من '
-                      '${ProtectionCategory.networkFiltered.length}',
+                  title: tr('الفئات المحجوبة', 'Blocked categories'),
+                  value: tr(
+                    '${protection.activeNetworkCount} من '
+                        '${ProtectionCategory.networkFiltered.length}',
+                    '${protection.activeNetworkCount} of ${ProtectionCategory.networkFiltered.length}',
+                  ),
                   onTap: () => context.go(Routes.home),
                 ),
                 SecuritySettingTile(
                   icon: Icons.block_rounded,
-                  title: 'النطاقات المحظورة',
-                  subtitle: 'حظر نطاقات تختارها بنفسك',
+                  title: tr('النطاقات المحظورة', 'Blocked domains'),
+                  subtitle: tr(
+                    'حظر نطاقات تختارها بنفسك',
+                    'Block domains you choose',
+                  ),
                   onTap: () => context.push(Routes.blocklist),
                 ),
                 SecuritySettingTile(
                   icon: Icons.verified_outlined,
-                  title: 'النطاقات المسموحة',
-                  subtitle: 'استثناءات محمية برمز PIN',
+                  title: tr('النطاقات المسموحة', 'Allowed domains'),
+                  subtitle: tr(
+                    'استثناءات محمية برمز PIN',
+                    'PIN-protected exceptions',
+                  ),
                   onTap: () => _openAllowlist(context),
                 ),
                 SecuritySettingTile(
                   icon: Icons.text_fields_rounded,
-                  title: 'الكلمات المحظورة',
-                  subtitle: 'كلمات تحظر البحث عبر SafeGuard',
+                  title: tr('الكلمات المحظورة', 'Blocked keywords'),
+                  subtitle: tr(
+                    'كلمات تحظر البحث عبر SafeGuard',
+                    'Words that block searches through SafeGuard',
+                  ),
                   onTap: () => context.push(Routes.keywords),
                 ),
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.history_rounded,
-                    title: 'سجل الحظر',
+                    title: tr('سجل الحظر', 'Block log'),
                     onTap: () => context.push(Routes.activity),
                   ),
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.bar_chart_rounded,
-                    title: 'الإحصاءات',
-                    subtitle: 'اليوم و7 أيام و30 يومًا',
+                    title: tr('الإحصاءات', 'Statistics'),
+                    subtitle: tr(
+                      'اليوم و7 أيام و30 يومًا',
+                      'Today, 7 days and 30 days',
+                    ),
                     onTap: () => context.push(Routes.statistics),
                   ),
                 SecuritySettingTile(
                   icon: Icons.shield_outlined,
-                  title: 'صفحة الحظر',
-                  subtitle: 'معاينة ما يظهر عند الحظر',
+                  title: tr('صفحة الحظر', 'Block page'),
+                  subtitle: tr(
+                    'معاينة ما يظهر عند الحظر',
+                    'Preview what appears when something is blocked',
+                  ),
                   onTap: () => context.push(
                     Uri(
                       path: Routes.blocked,
@@ -86,25 +104,31 @@ class SettingsScreen extends StatelessWidget {
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.restart_alt_rounded,
-                    title: 'VPN دائم التشغيل',
-                    subtitle: 'ليعمل SafeGuard تلقائيًا بعد إعادة تشغيل الجهاز',
+                    title: tr('VPN دائم التشغيل', 'Always-on VPN'),
+                    subtitle: tr(
+                      'ليعمل SafeGuard تلقائيًا بعد إعادة تشغيل الجهاز',
+                      'So SafeGuard starts automatically after the device restarts',
+                    ),
                     onTap: engine.openVpnSettings,
                   ),
               ],
             ),
-            const SectionHeader(title: 'الحماية المتقدمة'),
+            SectionHeader(title: tr('الحماية المتقدمة', 'Advanced protection')),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.tune_rounded,
-                  title: 'وضع الحماية',
+                  title: tr('وضع الحماية', 'Protection mode'),
                   value: modeLabel(protection.mode),
                   onTap: () => context.go(Routes.home),
                 ),
                 SecuritySettingTile(
                   icon: Icons.lock_person_outlined,
-                  title: 'قفل إعدادات الحماية',
-                  subtitle: 'أي تغيير في الفئات والوضع والقوائم والحماية الذكية يتطلب PIN',
+                  title: tr('قفل إعدادات الحماية', 'Protection settings lock'),
+                  subtitle: tr(
+                    'أي تغيير في الفئات والوضع والقوائم والحماية الذكية يتطلب PIN',
+                    'Any change to categories, mode, lists or AI protection requires the PIN',
+                  ),
                   switchValue: settings.protectionLocked,
                   onSwitchChanged: (v) =>
                       AdvancedActions.setProtectionLock(context, v),
@@ -112,125 +136,177 @@ class SettingsScreen extends StatelessWidget {
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.timer_outlined,
-                    title: 'إيقاف مؤقت للحماية',
+                    title: tr('إيقاف مؤقت للحماية', 'Pause protection'),
                     subtitle: deps.protection.isPaused
-                        ? 'تُستأنف بعد ${formatCountdown(deps.protection.pauseRemaining)}'
-                        : '5 أو 10 أو 30 دقيقة، برمز PIN',
+                        ? tr(
+                            'تُستأنف بعد ${formatCountdown(deps.protection.pauseRemaining)}',
+                            'Resumes in ${formatCountdown(deps.protection.pauseRemaining)}',
+                          )
+                        : tr(
+                            '5 أو 10 أو 30 دقيقة، برمز PIN',
+                            '5, 10 or 30 minutes, with the PIN',
+                          ),
                     onTap: deps.protection.isPaused
                         ? () => deps.protection.endPause()
                         : () => AdvancedActions.startTemporaryUnlock(context),
-                    value: deps.protection.isPaused ? 'استئناف الآن' : null,
+                    value: deps.protection.isPaused
+                        ? tr('استئناف الآن', 'Resume now')
+                        : null,
                   ),
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.health_and_safety_outlined,
-                    title: 'وضع الأمان',
+                    title: tr('وضع الأمان', 'Safe Mode'),
                     subtitle: deps.protection.healthReport.safeMode
-                        ? 'مفعّل: الفلترة متوقفة. اضغط لإعادة تفعيل الحماية'
-                        : 'إذا تسببت الحماية في انقطاع الإنترنت',
+                        ? tr(
+                            'مفعّل: الفلترة متوقفة. اضغط لإعادة تفعيل الحماية',
+                            'On: filtering is stopped. Tap to turn protection back on',
+                          )
+                        : tr(
+                            'إذا تسببت الحماية في انقطاع الإنترنت',
+                            'If protection broke your internet connection',
+                          ),
                     onTap: deps.protection.healthReport.safeMode
                         ? () => AdvancedActions.exitSafeMode(context)
                         : () => AdvancedActions.enterSafeMode(context),
                   ),
               ],
             ),
-            const SectionHeader(title: 'البحث والتطبيقات'),
+            SectionHeader(title: tr('البحث والتطبيقات', 'Search and apps')),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.manage_search_rounded,
-                  title: 'حماية البحث',
-                  subtitle: 'البحث الآمن وفحص البحث',
+                  title: tr('حماية البحث', 'Search protection'),
+                  subtitle: tr(
+                    'البحث الآمن وفحص البحث',
+                    'SafeSearch and search checks',
+                  ),
                   value: protection.isActive(ProtectionCategory.unsafeSearch)
-                      ? 'مفعّلة'
-                      : 'متوقفة',
+                      ? tr('مفعّلة', 'On')
+                      : tr('متوقفة', 'Off'),
                   onTap: () => context.push(Routes.searchProtection),
                 ),
                 SecuritySettingTile(
                   icon: Icons.auto_awesome_outlined,
-                  title: 'الحماية الذكية',
-                  subtitle: 'تصنيف المحتوى بالذكاء الاصطناعي على الجهاز',
+                  title: tr('الحماية الذكية', 'AI protection'),
+                  subtitle: tr(
+                    'تصنيف المحتوى بالذكاء الاصطناعي على الجهاز',
+                    'On-device AI content classification',
+                  ),
                   onTap: () => context.push(Routes.aiProtection),
                 ),
                 SecuritySettingTile(
                   icon: Icons.apps_rounded,
-                  title: 'حماية التطبيقات',
-                  subtitle: 'منع فتح تطبيقات تختارها',
+                  title: tr('حماية التطبيقات', 'App protection'),
+                  subtitle: tr(
+                    'منع فتح تطبيقات تختارها',
+                    'Stop apps you choose from opening',
+                  ),
                   onTap: () => context.push(Routes.appProtection),
                 ),
               ],
             ),
-            const SectionHeader(title: 'الأمان'),
+            SectionHeader(title: tr('الأمان', 'Security')),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.lock_outline_rounded,
-                  title: 'قفل التطبيق',
-                  subtitle: 'طلب الرمز عند فتح SafeGuard',
+                  title: tr('قفل التطبيق', 'App lock'),
+                  subtitle: tr(
+                    'طلب الرمز عند فتح SafeGuard',
+                    'Ask for the PIN when opening SafeGuard',
+                  ),
                   switchValue: settings.appLockEnabled,
                   onSwitchChanged: (v) => _setAppLock(context, v),
                 ),
                 SecuritySettingTile(
                   icon: Icons.password_rounded,
-                  title: 'تغيير رمز PIN',
-                  value: '${deps.security.pinLength} أرقام',
+                  title: tr('تغيير رمز PIN', 'Change PIN'),
+                  value: tr(
+                    '${deps.security.pinLength} أرقام',
+                    '${deps.security.pinLength} digits',
+                  ),
                   onTap: () => context.push(Routes.changePin),
                 ),
               ],
             ),
-            const SectionHeader(title: 'الخصوصية'),
+            SectionHeader(title: tr('الخصوصية', 'Privacy')),
             SgGroupedCard(
               children: [
-                const SecuritySettingTile(
+                SecuritySettingTile(
                   icon: Icons.phone_android_rounded,
-                  title: 'البيانات على جهازك فقط',
-                  subtitle:
-                      'لا حساب، لا خوادم، لا تحليلات. '
-                      'لا يغادر أي شيء هذا الجهاز.',
+                  title: tr(
+                    'البيانات على جهازك فقط',
+                    'Your data stays on your device',
+                  ),
+                  subtitle: tr(
+                    'لا حساب، لا خوادم، لا تحليلات. '
+                        'لا يغادر أي شيء هذا الجهاز.',
+                    'No account, no servers, no analytics. Nothing leaves this device.',
+                  ),
                 ),
                 if (engine.isSupported) const _LogRetentionTile(),
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.cleaning_services_outlined,
-                    title: 'مسح سجل الحماية',
-                    subtitle: 'السجل والإحصاءات والبلاغات',
+                    title: tr('مسح سجل الحماية', 'Clear protection log'),
+                    subtitle: tr(
+                      'السجل والإحصاءات والبلاغات',
+                      'Log, statistics and reports',
+                    ),
                     onTap: () => AdvancedActions.clearLogs(context),
                   ),
                 if (engine.isSupported)
                   SecuritySettingTile(
                     icon: Icons.ios_share_rounded,
-                    title: 'تصدير الإعدادات',
-                    subtitle: 'ملف JSON دون رمز PIN أو السجل',
+                    title: tr('تصدير الإعدادات', 'Export settings'),
+                    subtitle: tr(
+                      'ملف JSON دون رمز PIN أو السجل',
+                      'JSON file without the PIN or log',
+                    ),
                     onTap: () => AdvancedActions.exportSettings(context),
                   ),
                 SecuritySettingTile(
                   icon: Icons.settings_backup_restore_rounded,
-                  title: 'إعادة ضبط الحماية',
-                  subtitle: 'الإعدادات الافتراضية الآمنة؛ القوائم تبقى',
+                  title: tr('إعادة ضبط الحماية', 'Reset protection'),
+                  subtitle: tr(
+                    'الإعدادات الافتراضية الآمنة؛ القوائم تبقى',
+                    'Secure defaults; lists are kept',
+                  ),
                   onTap: () => AdvancedActions.resetProtection(context),
                 ),
                 SecuritySettingTile(
                   icon: Icons.delete_outline_rounded,
-                  title: 'حذف جميع البيانات',
-                  subtitle: 'يعيد SafeGuard إلى الإعداد الأولي',
+                  title: tr('حذف جميع البيانات', 'Delete all data'),
+                  subtitle: tr(
+                    'يعيد SafeGuard إلى الإعداد الأولي',
+                    'Returns SafeGuard to first-run setup',
+                  ),
                   destructive: true,
                   showChevron: false,
                   onTap: () => _eraseAll(context),
                 ),
               ],
             ),
-            const SectionHeader(title: 'النظام'),
+            SectionHeader(title: tr('النظام', 'System')),
             SgGroupedCard(
               children: [
                 SecuritySettingTile(
                   icon: Icons.contrast_rounded,
-                  title: 'المظهر',
+                  title: tr('المظهر', 'Appearance'),
                   value: _themeLabel(settings.theme),
                   onTap: () => _pickTheme(context, settings.theme),
                 ),
-                const SecuritySettingTile(
+                SecuritySettingTile(
+                  icon: Icons.translate_rounded,
+                  title: tr('اللغة', 'Language'),
+                  value: languageLabel(settings.language),
+                  onTap: () => pickLanguage(context),
+                ),
+                SecuritySettingTile(
                   icon: Icons.info_outline_rounded,
-                  title: 'الإصدار',
+                  title: tr('الإصدار', 'Version'),
                   value: appVersion,
                 ),
               ],
@@ -242,19 +318,28 @@ class SettingsScreen extends StatelessWidget {
   }
 
   static String _themeLabel(ThemePreference t) => switch (t) {
-    ThemePreference.dark => 'داكن',
-    ThemePreference.light => 'فاتح',
-    ThemePreference.system => 'حسب النظام',
+    ThemePreference.dark => tr('داكن', 'Dark'),
+    ThemePreference.light => tr('فاتح', 'Light'),
+    ThemePreference.system => tr('حسب النظام', 'System default'),
   };
 
   Future<void> _openAllowlist(BuildContext context) async {
-    if (!await requirePin(context, reason: 'لإدارة النطاقات المسموحة')) return;
+    if (!await requirePin(
+      context,
+      reason: tr('لإدارة النطاقات المسموحة', 'to manage allowed domains'),
+    )) {
+      return;
+    }
     if (context.mounted) await context.push(Routes.allowlist);
   }
 
   Future<void> _setAppLock(BuildContext context, bool enabled) async {
     final deps = AppScope.of(context);
-    if (!enabled && !await requirePin(context, reason: 'لإيقاف قفل التطبيق')) {
+    if (!enabled &&
+        !await requirePin(
+          context,
+          reason: tr('لإيقاف قفل التطبيق', 'to turn off app lock'),
+        )) {
       return;
     }
     final result = await deps.settings.setAppLock(enabled);
@@ -267,7 +352,7 @@ class SettingsScreen extends StatelessWidget {
     final settings = AppScope.of(context).settings;
     final picked = await showSgBottomSheet<ThemePreference>(
       context,
-      title: 'المظهر',
+      title: tr('المظهر', 'Appearance'),
       builder: (context) => Column(
         children: [
           for (final (value, icon) in const [
@@ -295,15 +380,22 @@ class SettingsScreen extends StatelessWidget {
     final deps = AppScope.of(context);
     final confirmed = await showSgConfirmDialog(
       context,
-      title: 'حذف جميع البيانات؟',
-      message:
-          'سيُحذف رمز PIN وجميع التفضيلات من هذا الجهاز، '
-          'وسيعود التطبيق إلى الإعداد الأولي. لا يمكن التراجع عن ذلك.',
-      confirmLabel: 'متابعة',
+      title: tr('حذف جميع البيانات؟', 'Delete all data?'),
+      message: tr(
+        'سيُحذف رمز PIN وجميع التفضيلات من هذا الجهاز، '
+            'وسيعود التطبيق إلى الإعداد الأولي. لا يمكن التراجع عن ذلك.',
+        "Your PIN and all preferences will be deleted from this device, and the app will return to first-run setup. This can't be undone.",
+      ),
+      confirmLabel: tr('متابعة', 'Continue'),
       destructive: true,
     );
     if (!confirmed || !context.mounted) return;
-    if (!await requirePin(context, reason: 'لحذف جميع البيانات')) return;
+    if (!await requirePin(
+      context,
+      reason: tr('لحذف جميع البيانات', 'to delete all data'),
+    )) {
+      return;
+    }
     final result = await deps.eraseAllData();
     if (result case Err(:final failure) when context.mounted) {
       showSgSnack(context, failure.message);
@@ -343,7 +435,7 @@ class _LogRetentionTileState extends State<_LogRetentionTile> {
     final current = _value ?? LogRetention.defaultValue;
     return SecuritySettingTile(
       icon: Icons.history_toggle_off_rounded,
-      title: 'مدة الاحتفاظ بالسجل',
+      title: tr('مدة الاحتفاظ بالسجل', 'Log retention'),
       value: _value?.label,
       onTap: () async {
         final applied = await AdvancedActions.chooseLogRetention(
@@ -353,5 +445,37 @@ class _LogRetentionTileState extends State<_LogRetentionTile> {
         if (applied != null && mounted) setState(() => _value = applied);
       },
     );
+  }
+}
+
+/// Each language is named in itself so it can be found whatever is shown.
+String languageLabel(AppLanguage l) => switch (l) {
+  AppLanguage.ar => 'العربية',
+  AppLanguage.en => 'English',
+};
+
+/// Language picker, also used on the welcome screen.
+Future<void> pickLanguage(BuildContext context) async {
+  final settings = AppScope.of(context).settings;
+  final current = settings.settings.language;
+  final picked = await showSgBottomSheet<AppLanguage>(
+    context,
+    title: tr('اللغة', 'Language'),
+    builder: (context) => Column(
+      children: [
+        for (final value in AppLanguage.values)
+          SgChoiceRow(
+            label: languageLabel(value),
+            icon: Icons.translate_rounded,
+            selected: value == current,
+            onTap: () => Navigator.of(context).pop(value),
+          ),
+      ],
+    ),
+  );
+  if (picked == null || picked == current) return;
+  final result = await settings.setLanguage(picked);
+  if (result case Err(:final failure) when context.mounted) {
+    showSgSnack(context, failure.message);
   }
 }

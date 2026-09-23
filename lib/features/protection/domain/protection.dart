@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../../core/i18n/i18n.dart';
 import '../../ai/domain/ai_models.dart';
 import 'advanced_models.dart';
 
@@ -276,13 +277,18 @@ class BlockEvent {
 /// How long the activity log is kept on the device (Phase 6).
 /// [never] means no per-event log is written at all.
 enum LogRetention {
-  days7('7d', '7 أيام'),
-  days30('30d', '30 يومًا'),
-  never('never', 'لا يُحفظ سجل');
+  days7('7d'),
+  days30('30d'),
+  never('never');
 
-  const LogRetention(this.id, this.label);
+  const LogRetention(this.id);
   final String id;
-  final String label;
+
+  String get label => switch (this) {
+    days7 => tr('7 أيام', '7 days'),
+    days30 => tr('30 يومًا', '30 days'),
+    never => tr('لا يُحفظ سجل', "Don't keep a log"),
+  };
 
   static const defaultValue = days30;
 
@@ -526,6 +532,9 @@ abstract interface class ProtectionEngine {
   Future<void> clearLogs();
   Future<ProtectionStats> statistics();
 
+  /// Language for the few native screens (the "app protected" screen).
+  Future<void> setUiLanguage(AppLanguage language);
+
   /// Activity-log retention; shortening it prunes existing entries.
   Future<LogRetention> logRetention();
   Future<LogRetention> setLogRetention(LogRetention value);
@@ -643,6 +652,8 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   Future<void> clearLogs() async {}
   @override
   Future<ProtectionStats> statistics() async => ProtectionStats.unavailable;
+  @override
+  Future<void> setUiLanguage(AppLanguage language) async {}
   @override
   Future<LogRetention> logRetention() async => LogRetention.defaultValue;
   @override

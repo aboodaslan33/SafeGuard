@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/app_dependencies.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../../core/utils/arabic_format.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_controller.dart';
@@ -44,85 +45,112 @@ class _StatusScreenState extends State<StatusScreen> {
         final supported = snap.isSupported;
 
         final (SgStatus vpnStatus, String vpnLabel) = switch (snap.vpnState) {
-          VpnState.running => (SgStatus.active, 'يعمل'),
-          VpnState.starting => (SgStatus.unavailable, 'يبدأ'),
-          VpnState.stopping => (SgStatus.unavailable, 'يتوقف'),
-          VpnState.stopped => (SgStatus.paused, 'متوقف'),
-          VpnState.permissionRequired => (SgStatus.error, 'بلا موافقة'),
-          VpnState.revoked => (SgStatus.error, 'مفصول'),
-          VpnState.error => (SgStatus.error, 'خطأ'),
-          VpnState.unsupported => (SgStatus.unavailable, 'غير متاح'),
+          VpnState.running => (SgStatus.active, tr('يعمل', 'Running')),
+          VpnState.starting => (SgStatus.unavailable, tr('يبدأ', 'Starting')),
+          VpnState.stopping => (SgStatus.unavailable, tr('يتوقف', 'Stopping')),
+          VpnState.stopped => (SgStatus.paused, tr('متوقف', 'Stopped')),
+          VpnState.permissionRequired => (
+            SgStatus.error,
+            tr('بلا موافقة', 'No consent'),
+          ),
+          VpnState.revoked => (SgStatus.error, tr('مفصول', 'Disconnected')),
+          VpnState.error => (SgStatus.error, tr('خطأ', 'Error')),
+          VpnState.unsupported => (
+            SgStatus.unavailable,
+            tr('غير متاح', 'Unavailable'),
+          ),
         };
 
         return SgPage(
-          title: 'الحالة',
-          subtitle: 'ما يعمل الآن على هذا الجهاز',
+          title: tr('الحالة', 'Status'),
+          subtitle: tr(
+            'ما يعمل الآن على هذا الجهاز',
+            "What's running on this device now",
+          ),
           children: [
             const SizedBox(height: SgSpace.x6),
             _Summary(health: protection.health, state: state),
             EngineWarnings(snapshot: snap),
-            const SectionHeader(title: 'طبقات الحماية'),
+            SectionHeader(title: tr('طبقات الحماية', 'Protection layers')),
             SgGroupedCard(
               children: [
                 _LayerRow(
                   icon: Icons.vpn_key_outlined,
-                  title: 'VPN محلي',
-                  subtitle: 'على الجهاز فقط، دون أي خادم',
+                  title: tr('VPN محلي', 'Local VPN'),
+                  subtitle: tr(
+                    'على الجهاز فقط، دون أي خادم',
+                    'On the device only, no server',
+                  ),
                   status: vpnStatus,
                   label: vpnLabel,
                 ),
                 _LayerRow(
                   icon: Icons.dns_outlined,
-                  title: 'فلتر DNS',
-                  subtitle: 'فحص أسماء النطاقات قبل الاتصال',
+                  title: tr('فلتر DNS', 'DNS filter'),
+                  subtitle: tr(
+                    'فحص أسماء النطاقات قبل الاتصال',
+                    'Checks domain names before connecting',
+                  ),
                   status: snap.dnsFilterActive
                       ? SgStatus.active
                       : supported
                       ? SgStatus.paused
                       : SgStatus.unavailable,
                   label: snap.dnsFilterActive
-                      ? 'يعمل'
+                      ? tr('يعمل', 'Running')
                       : supported
-                      ? 'متوقف'
-                      : 'غير متاح',
+                      ? tr('متوقف', 'Stopped')
+                      : tr('غير متاح', 'Unavailable'),
                 ),
                 _LayerRow(
                   icon: Icons.rule_rounded,
-                  title: 'القواعد',
+                  title: tr('القواعد', 'Rules'),
                   subtitle: supported
-                      ? '${ArabicFormat.count(snap.blockingRuleCount, 'قاعدة حظر', 'قاعدتا حظر', 'قواعد حظر')} · '
-                            '${state.activeNetworkCount} فئات مفعّلة'
-                      : '${state.activeNetworkCount} فئات مفعّلة',
+                      ? tr(
+                          '${ArabicFormat.count(snap.blockingRuleCount, 'قاعدة حظر', 'قاعدتا حظر', 'قواعد حظر')} · '
+                              '${state.activeNetworkCount} فئات مفعّلة',
+                          '${snap.blockingRuleCount} blocking rules · ${state.activeNetworkCount} categories on',
+                        )
+                      : tr(
+                          '${state.activeNetworkCount} فئات مفعّلة',
+                          '${state.activeNetworkCount} categories on',
+                        ),
                   status: !supported
                       ? SgStatus.unavailable
                       : snap.rulesReady
                       ? SgStatus.active
                       : SgStatus.paused,
                   label: !supported
-                      ? 'غير متاحة'
+                      ? tr('غير متاحة', 'Unavailable')
                       : snap.rulesReady
-                      ? 'محمّلة'
-                      : 'غير محمّلة',
+                      ? tr('محمّلة', 'Loaded')
+                      : tr('غير محمّلة', 'Not loaded'),
                 ),
                 _LayerRow(
                   icon: Icons.manage_search_rounded,
-                  title: 'حماية البحث',
-                  subtitle: 'البحث الآمن في Google وBing وYouTube',
+                  title: tr('حماية البحث', 'Search protection'),
+                  subtitle: tr(
+                    'البحث الآمن في Google وBing وYouTube',
+                    'SafeSearch on Google, Bing and YouTube',
+                  ),
                   status: !protection.searchProtectionEnabled
                       ? SgStatus.paused
                       : snap.isActive
                       ? SgStatus.active
                       : SgStatus.unavailable,
                   label: !protection.searchProtectionEnabled
-                      ? 'متوقفة'
+                      ? tr('متوقفة', 'Off')
                       : snap.isActive
-                      ? 'مفعّلة'
-                      : 'بانتظار VPN',
+                      ? tr('مفعّلة', 'On')
+                      : tr('بانتظار VPN', 'Waiting for VPN'),
                 ),
                 _LayerRow(
                   icon: Icons.apps_rounded,
-                  title: 'حماية التطبيقات',
-                  subtitle: 'عبر خدمة تسهيل الاستخدام',
+                  title: tr('حماية التطبيقات', 'App protection'),
+                  subtitle: tr(
+                    'عبر خدمة تسهيل الاستخدام',
+                    'Through the Accessibility service',
+                  ),
                   status: switch (protection.accessibility) {
                     AccessibilityStatus.enabled => SgStatus.active,
                     AccessibilityStatus.disabled ||
@@ -131,19 +159,31 @@ class _StatusScreenState extends State<StatusScreen> {
                     AccessibilityStatus.unsupported => SgStatus.unavailable,
                   },
                   label: switch (protection.accessibility) {
-                    AccessibilityStatus.enabled => 'مفعّلة',
-                    AccessibilityStatus.disabled => 'غير مفعّلة',
-                    AccessibilityStatus.permissionDenied => 'مرفوضة',
+                    AccessibilityStatus.enabled => tr('مفعّلة', 'On'),
+                    AccessibilityStatus.disabled => tr('غير مفعّلة', 'Off'),
+                    AccessibilityStatus.permissionDenied => tr(
+                      'مرفوضة',
+                      'Declined',
+                    ),
                     AccessibilityStatus.unavailable ||
-                    AccessibilityStatus.unsupported => 'غير متاحة',
+                    AccessibilityStatus.unsupported => tr(
+                      'غير متاحة',
+                      'Unavailable',
+                    ),
                   },
                 ),
                 _LayerRow(
                   icon: Icons.auto_awesome_outlined,
-                  title: 'الحماية الذكية',
+                  title: tr('الحماية الذكية', 'AI protection'),
                   subtitle: protection.aiSettings.imageModelAvailable
-                      ? 'تصنيف النص والصور على الجهاز'
-                      : 'تصنيف النص على الجهاز · لا نموذج صور',
+                      ? tr(
+                          'تصنيف النص والصور على الجهاز',
+                          'On-device text and image classification',
+                        )
+                      : tr(
+                          'تصنيف النص على الجهاز · لا نموذج صور',
+                          'On-device text classification · no image model',
+                        ),
                   status: !supported
                       ? SgStatus.unavailable
                       : !protection.aiSettings.enabled || !state.enabled
@@ -152,28 +192,31 @@ class _StatusScreenState extends State<StatusScreen> {
                       ? SgStatus.active
                       : SgStatus.error,
                   label: !supported
-                      ? 'غير متاحة'
+                      ? tr('غير متاحة', 'Unavailable')
                       : !protection.aiSettings.enabled || !state.enabled
-                      ? 'متوقفة'
+                      ? tr('متوقفة', 'Off')
                       : protection.aiSettings.textModelAvailable
-                      ? 'مفعّلة'
-                      : 'النموذج غير متاح',
+                      ? tr('مفعّلة', 'On')
+                      : tr('النموذج غير متاح', 'Model unavailable'),
                 ),
                 _LayerRow(
                   icon: Icons.lock_outline_rounded,
-                  title: 'قفل التطبيق',
-                  subtitle: 'رمز PIN عند فتح SafeGuard',
+                  title: tr('قفل التطبيق', 'App lock'),
+                  subtitle: tr(
+                    'رمز PIN عند فتح SafeGuard',
+                    'PIN when opening SafeGuard',
+                  ),
                   status: appLock ? SgStatus.active : SgStatus.paused,
-                  label: appLock ? 'مفعّل' : 'معطّل',
+                  label: appLock ? tr('مفعّل', 'On') : tr('معطّل', 'Off'),
                 ),
               ],
             ),
             SectionHeader(
-              title: 'المحتوى المحجوب',
+              title: tr('المحتوى المحجوب', 'Blocked content'),
               trailing: supported
                   ? TextButton(
                       onPressed: () => context.push(Routes.activity),
-                      child: const Text('السجل'),
+                      child: Text(tr('السجل', 'Log')),
                     )
                   : null,
             ),
@@ -187,31 +230,41 @@ class _StatusScreenState extends State<StatusScreen> {
               padding: const EdgeInsets.symmetric(horizontal: SgSpace.x1),
               child: Text(
                 stats.isAvailable
-                    ? 'تكرار الطلب للنطاق نفسه خلال 30 ثانية يُحتسب مرة واحدة. '
-                          'تُحسب على جهازك فقط ولا تُرسل إلى أي جهة.'
-                    : 'تظهر الإحصاءات عندما تعمل فلترة الشبكة. '
-                          'تُحسب على جهازك فقط ولا تُرسل إلى أي جهة.',
+                    ? tr(
+                        'تكرار الطلب للنطاق نفسه خلال 30 ثانية يُحتسب مرة واحدة. '
+                            'تُحسب على جهازك فقط ولا تُرسل إلى أي جهة.',
+                        'Repeated requests for the same domain within 30 seconds count once. Computed on your device only and never sent anywhere.',
+                      )
+                    : tr(
+                        'تظهر الإحصاءات عندما تعمل فلترة الشبكة. '
+                            'تُحسب على جهازك فقط ولا تُرسل إلى أي جهة.',
+                        'Statistics appear when network filtering is running. Computed on your device only and never sent anywhere.',
+                      ),
                 style: context.text.bodySmall!.copyWith(
                   color: context.colors.textTertiary,
                 ),
               ),
             ),
             if (supported) ...[
-              const SectionHeader(title: 'بعد إعادة تشغيل الجهاز'),
+              SectionHeader(
+                title: tr('بعد إعادة تشغيل الجهاز', 'After a device restart'),
+              ),
               SgGroupedCard(
                 children: [
                   SecuritySettingTile(
                     icon: Icons.restart_alt_rounded,
-                    title: 'VPN الدائم',
-                    subtitle:
-                        'فعّل «VPN دائم التشغيل» لـ SafeGuard في إعدادات Android '
-                        'ليعمل تلقائيًا بعد إعادة التشغيل.',
+                    title: tr('VPN الدائم', 'Always-on VPN'),
+                    subtitle: tr(
+                      'فعّل «VPN دائم التشغيل» لـ SafeGuard في إعدادات Android '
+                          'ليعمل تلقائيًا بعد إعادة التشغيل.',
+                      'Turn on “Always-on VPN” for SafeGuard in Android settings so it starts automatically after a restart.',
+                    ),
                     onTap: protection.engine.openVpnSettings,
                   ),
                 ],
               ),
             ],
-            const SectionHeader(title: 'حدود الحماية'),
+            SectionHeader(title: tr('حدود الحماية', 'Protection limits')),
             const _Limitations(),
           ],
         );
@@ -235,7 +288,10 @@ class _CategoryBreakdown extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('حسب الفئة · آخر 30 يومًا', style: context.text.labelSmall),
+          Text(
+            tr('حسب الفئة · آخر 30 يومًا', 'By category · last 30 days'),
+            style: context.text.labelSmall,
+          ),
           const SizedBox(height: SgSpace.x3),
           for (final e in entries)
             Padding(
@@ -292,13 +348,34 @@ class _Summary extends StatelessWidget {
     final c = context.colors;
     final updated = state.updatedAt;
     final (String title, Color tone) = switch (health) {
-      ProtectionHealth.active => ('الحماية نشطة', c.accent),
-      ProtectionHealth.transitioning => ('جارٍ التشغيل', c.info),
-      ProtectionHealth.inactive => ('الحماية غير نشطة', c.danger),
-      ProtectionHealth.paused => ('الحماية متوقفة', c.warning),
-      ProtectionHealth.suspended => ('الحماية متوقفة مؤقتًا', c.warning),
-      ProtectionHealth.partial => ('الحماية مفعّلة جزئيًا', c.warning),
-      ProtectionHealth.unsupported => ('الفلترة غير متاحة', c.info),
+      ProtectionHealth.active => (
+        tr('الحماية نشطة', 'Protection is active'),
+        c.accent,
+      ),
+      ProtectionHealth.transitioning => (
+        tr('جارٍ التشغيل', 'Starting'),
+        c.info,
+      ),
+      ProtectionHealth.inactive => (
+        tr('الحماية غير نشطة', 'Protection is inactive'),
+        c.danger,
+      ),
+      ProtectionHealth.paused => (
+        tr('الحماية متوقفة', 'Protection is off'),
+        c.warning,
+      ),
+      ProtectionHealth.suspended => (
+        tr('الحماية متوقفة مؤقتًا', 'Protection is paused'),
+        c.warning,
+      ),
+      ProtectionHealth.partial => (
+        tr('الحماية مفعّلة جزئيًا', 'Protection is partially on'),
+        c.warning,
+      ),
+      ProtectionHealth.unsupported => (
+        tr('الفلترة غير متاحة', 'Filtering unavailable'),
+        c.info,
+      ),
     };
     return SgCard(
       child: Row(
@@ -316,8 +393,11 @@ class _Summary extends StatelessWidget {
                 Text(title, style: context.text.titleLarge),
                 Text(
                   updated == null
-                      ? 'الإعدادات الافتراضية'
-                      : 'آخر تغيير للإعدادات ${ArabicFormat.relative(updated)}',
+                      ? tr('الإعدادات الافتراضية', 'Default settings')
+                      : tr(
+                          'آخر تغيير للإعدادات ${ArabicFormat.relative(updated)}',
+                          'Settings last changed ${ArabicFormat.relative(updated)}',
+                        ),
                   style: context.text.bodySmall,
                 ),
               ],
@@ -401,11 +481,14 @@ class _StatsRow extends StatelessWidget {
       child: IntrinsicHeight(
         child: Row(
           children: [
-            _Stat(label: 'اليوم', value: stats.today),
+            _Stat(label: tr('اليوم', 'Today'), value: stats.today),
             VerticalDivider(color: context.colors.border, width: 1),
-            _Stat(label: 'آخر 7 أيام', value: stats.last7Days),
+            _Stat(
+              label: tr('آخر 7 أيام', 'Last 7 days'),
+              value: stats.last7Days,
+            ),
             VerticalDivider(color: context.colors.border, width: 1),
-            _Stat(label: 'الإجمالي', value: stats.total),
+            _Stat(label: tr('الإجمالي', 'Total'), value: stats.total),
           ],
         ),
       ),
@@ -424,7 +507,10 @@ class _Stat extends StatelessWidget {
     final c = context.colors;
     return Expanded(
       child: Semantics(
-        label: '$label: ${value ?? 'غير متاح'}',
+        label: tr(
+          '$label: ${value ?? 'غير متاح'}',
+          "$label: ${value ?? 'unavailable'}",
+        ),
         excludeSemantics: true,
         child: Column(
           children: [
@@ -447,30 +533,72 @@ class _Stat extends StatelessWidget {
 class _Limitations extends StatelessWidget {
   const _Limitations();
 
-  static const _points = [
-    'Android لا يسمح لأي تطبيق بقراءة محتوى التطبيقات الأخرى. الحجب يتم على '
-        'مستوى أسماء النطاقات، لا على مستوى الصور أو المنشورات أو الصفحات.',
-    'المتصفحات والتطبيقات التي تستخدم DNS مشفّرًا خاصًا بها (DNS over HTTPS '
-        'أو DNS over TLS) أو خوادم DNS مثبتة في الكود قد تتجاوز الفلترة.',
-    'ميزة «DNS الخاص» في Android عند ضبطها على مزوّد محدد تتجاوز فلترة '
-        'SafeGuard.',
-    'يعمل تطبيق VPN واحد فقط في الوقت نفسه. تشغيل VPN آخر يوقف SafeGuard.',
-    'يستطيع مالك الجهاز فصل VPN أو إزالة التطبيق أو مسح بياناته من إعدادات Android.',
-    'فحص البحث يشمل ما تبحث عنه عبر SafeGuard فقط؛ لا يقرأ SafeGuard ما تكتبه في التطبيقات الأخرى.',
-    'حماية التطبيقات تمنع فتح التطبيق كاملًا، ولا تستطيع فلترة المحتوى داخله.',
-    'داخل إنستغرام وتيك توك وغيرها لا يستطيع SafeGuard فلترة المنشورات (تأتي من '
-        'نفس خوادم التطبيق). استخدم إعداد «المحتوى الحساس ← أقل» داخل إنستغرام، '
-        'أو احمِ التطبيق كاملًا من «حماية التطبيقات».',
-    'قوائم النطاقات المضمّنة (مقامرة، جنسي، مخدرات) كبيرة لكنها ليست كاملة، '
-        'وقد تحجب موقعًا سليمًا أحيانًا؛ أضفه إلى النطاقات المسموحة.',
-    'الحماية الذكية تعمل على الجهاز وعند الطلب فقط (بحث SafeGuard والصور التي '
-        'تختار فحصها). نموذج النص صغير ومحدود الدقة، ولا يوجد نموذج صور في هذا الإصدار.',
-    'لا يرسل SafeGuard إشعارات؛ انقطاع الحماية (فصل VPN، سحب الموافقة، إيقاف '
-        'خدمة التطبيقات) يظهر عند فتح التطبيق.',
-    'بعد إعادة تشغيل الجهاز قد يمنع النظام بدء الحماية تلقائيًا؛ الطريقة '
-        'الموثوقة هي «VPN دائم التشغيل» في إعدادات Android.',
-    'وضع الأمان والإيقاف المؤقت يوقفان الفلترة عمدًا، ويظهران هنا كـ«غير محمي».',
-    'SafeGuard طبقات حماية متعددة، ولا يضمن حجب 100% من المحتوى.',
+  static List<String> get _points => [
+    tr(
+      'Android لا يسمح لأي تطبيق بقراءة محتوى التطبيقات الأخرى. الحجب يتم على '
+          'مستوى أسماء النطاقات، لا على مستوى الصور أو المنشورات أو الصفحات.',
+      "Android doesn't let any app read other apps' content. Blocking happens at the domain-name level, not at the level of images, posts or pages.",
+    ),
+    tr(
+      'المتصفحات والتطبيقات التي تستخدم DNS مشفّرًا خاصًا بها (DNS over HTTPS '
+          'أو DNS over TLS) أو خوادم DNS مثبتة في الكود قد تتجاوز الفلترة.',
+      'Browsers and apps that use their own encrypted DNS (DNS over HTTPS or DNS over TLS) or hard-coded DNS servers may bypass filtering.',
+    ),
+    tr(
+      'ميزة «DNS الخاص» في Android عند ضبطها على مزوّد محدد تتجاوز فلترة '
+          'SafeGuard.',
+      "Android's “Private DNS”, when set to a specific provider, bypasses SafeGuard's filtering.",
+    ),
+    tr(
+      'يعمل تطبيق VPN واحد فقط في الوقت نفسه. تشغيل VPN آخر يوقف SafeGuard.',
+      'Only one VPN app runs at a time. Starting another VPN stops SafeGuard.',
+    ),
+    tr(
+      'يستطيع مالك الجهاز فصل VPN أو إزالة التطبيق أو مسح بياناته من إعدادات Android.',
+      'The device owner can disconnect the VPN, uninstall the app or clear its data from Android settings.',
+    ),
+    tr(
+      'فحص البحث يشمل ما تبحث عنه عبر SafeGuard فقط؛ لا يقرأ SafeGuard ما تكتبه في التطبيقات الأخرى.',
+      "Search checks cover only what you search for through SafeGuard; SafeGuard doesn't read what you type in other apps.",
+    ),
+    tr(
+      'حماية التطبيقات تمنع فتح التطبيق كاملًا، ولا تستطيع فلترة المحتوى داخله.',
+      "App protection stops the whole app from opening; it can't filter content inside it.",
+    ),
+    tr(
+      'داخل إنستغرام وتيك توك وغيرها لا يستطيع SafeGuard فلترة المنشورات (تأتي من '
+          'نفس خوادم التطبيق). استخدم إعداد «المحتوى الحساس ← أقل» داخل إنستغرام، '
+          'أو احمِ التطبيق كاملًا من «حماية التطبيقات».',
+      "Inside Instagram, TikTok and similar apps, SafeGuard can't filter posts (they come from the app's own servers). Use Instagram's “Sensitive content → Less” setting, or protect the whole app in App protection.",
+    ),
+    tr(
+      'قوائم النطاقات المضمّنة (مقامرة، جنسي، مخدرات) كبيرة لكنها ليست كاملة، '
+          'وقد تحجب موقعًا سليمًا أحيانًا؛ أضفه إلى النطاقات المسموحة.',
+      'The bundled domain lists (gambling, sexual, drugs) are large but not complete, and may occasionally block a harmless site; add it to the allowed domains.',
+    ),
+    tr(
+      'الحماية الذكية تعمل على الجهاز وعند الطلب فقط (بحث SafeGuard والصور التي '
+          'تختار فحصها). نموذج النص صغير ومحدود الدقة، ولا يوجد نموذج صور في هذا الإصدار.',
+      "AI protection runs on the device and on demand only (SafeGuard search and images you choose to check). The text model is small with limited accuracy, and there's no image model in this version.",
+    ),
+    tr(
+      'لا يرسل SafeGuard إشعارات؛ انقطاع الحماية (فصل VPN، سحب الموافقة، إيقاف '
+          'خدمة التطبيقات) يظهر عند فتح التطبيق.',
+      "SafeGuard doesn't send notifications; protection interruptions (VPN disconnected, consent revoked, app service turned off) are shown when you open the app.",
+    ),
+    tr(
+      'بعد إعادة تشغيل الجهاز قد يمنع النظام بدء الحماية تلقائيًا؛ الطريقة '
+          'الموثوقة هي «VPN دائم التشغيل» في إعدادات Android.',
+      'After a device restart the system may prevent protection from starting automatically; the reliable way is “Always-on VPN” in Android settings.',
+    ),
+    tr(
+      'وضع الأمان والإيقاف المؤقت يوقفان الفلترة عمدًا، ويظهران هنا كـ«غير محمي».',
+      'Safe Mode and pause stop filtering on purpose, and appear here as “Not protected”.',
+    ),
+    tr(
+      'SafeGuard طبقات حماية متعددة، ولا يضمن حجب 100% من المحتوى.',
+      "SafeGuard is a multi-layer protection system and doesn't guarantee blocking 100% of content.",
+    ),
   ];
 
   @override

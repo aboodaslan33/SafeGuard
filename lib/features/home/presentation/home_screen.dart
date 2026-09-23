@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_controller.dart';
 import '../../protection/presentation/protection_ui.dart';
@@ -32,7 +33,10 @@ class HomeScreen extends StatelessWidget {
                 const SafeGuardWordmark(),
                 const SizedBox(height: SgSpace.x1),
                 Text(
-                  'حمايتك تبدأ من جهازك',
+                  tr(
+                    'حمايتك تبدأ من جهازك',
+                    'Protection starts on your device',
+                  ),
                   style: context.text.bodyMedium!.copyWith(
                     color: c.textTertiary,
                   ),
@@ -61,10 +65,10 @@ class HomeScreen extends StatelessWidget {
             ),
             EngineWarnings(snapshot: protection.snapshot),
             if (protection.engine.isSupported) ...[
-              const SectionHeader(title: 'لوحة الحماية'),
+              SectionHeader(title: tr('لوحة الحماية', 'Protection dashboard')),
               DashboardPanel(protection: protection),
             ],
-            const SectionHeader(title: 'وضع الحماية'),
+            SectionHeader(title: tr('وضع الحماية', 'Protection mode')),
             ModeSelector(
               mode: state.mode,
               onChanged: state.enabled
@@ -72,14 +76,17 @@ class HomeScreen extends StatelessWidget {
                   : null,
             ),
             SectionHeader(
-              title: 'الفئات المحجوبة',
+              title: tr('الفئات المحجوبة', 'Blocked categories'),
               trailing: Text(
                 !state.enabled
-                    ? 'متوقفة مؤقتًا'
+                    ? tr('متوقفة مؤقتًا', 'Paused')
                     : preset
-                    ? 'يحددها الوضع'
-                    : '${state.activeNetworkCount} من '
-                          '${ProtectionCategory.networkFiltered.length}',
+                    ? tr('يحددها الوضع', 'Set by the mode')
+                    : tr(
+                        '${state.activeNetworkCount} من '
+                            '${ProtectionCategory.networkFiltered.length}',
+                        '${state.activeNetworkCount} of ${ProtectionCategory.networkFiltered.length}',
+                      ),
                 style: context.text.labelSmall,
               ),
             ),
@@ -101,9 +108,15 @@ class HomeScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: SgSpace.x1),
               child: Text(
                 preset
-                    ? 'في الوضعين «عادي» و«صارم» تُحجب كل الفئات. لاختيار الفئات '
-                          'بنفسك اختر «مخصص» (يتطلب رمز PIN).'
-                    : 'تعطيل أي فئة أو إيقاف الحماية يتطلب رمز PIN.',
+                    ? tr(
+                        'في الوضعين «عادي» و«صارم» تُحجب كل الفئات. لاختيار الفئات '
+                            'بنفسك اختر «مخصص» (يتطلب رمز PIN).',
+                        'In Normal and Strict modes every category is blocked. To choose categories yourself, choose Custom (requires the PIN).',
+                      )
+                    : tr(
+                        'تعطيل أي فئة أو إيقاف الحماية يتطلب رمز PIN.',
+                        'Turning off any category or stopping protection requires the PIN.',
+                      ),
                 style: context.text.bodySmall!.copyWith(color: c.textTertiary),
               ),
             ),

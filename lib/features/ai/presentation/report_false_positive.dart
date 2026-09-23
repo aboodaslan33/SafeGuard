@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/app_dependencies.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/error/result.dart';
+import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 
 /// "Report incorrect block". Explains exactly what is recorded, then stores
@@ -16,11 +17,13 @@ Future<bool> reportIncorrectBlock(
 }) async {
   final confirmed = await showSgConfirmDialog(
     context,
-    title: 'الإبلاغ عن حظر خاطئ',
-    message:
-        'يُسجَّل على جهازك فقط: نوع الفحص والفئة ونسبة الثقة والوقت. '
-        'لا يُحفظ المحتوى نفسه ولا يُرسل إلى أي مكان.',
-    confirmLabel: 'إبلاغ',
+    title: tr('الإبلاغ عن حظر خاطئ', 'Report a false positive'),
+    message: tr(
+      'يُسجَّل على جهازك فقط: نوع الفحص والفئة ونسبة الثقة والوقت. '
+          'لا يُحفظ المحتوى نفسه ولا يُرسل إلى أي مكان.',
+      "Recorded on your device only: check type, category, confidence and time. The content itself isn't saved or sent anywhere.",
+    ),
+    confirmLabel: tr('إبلاغ', 'Report'),
   );
   if (!confirmed || !context.mounted) return false;
   final result = await AppScope.of(context).protection.reportFalsePositive(
@@ -30,7 +33,10 @@ Future<bool> reportIncorrectBlock(
   );
   if (!context.mounted) return result.isOk;
   showSgSnack(context, switch (result) {
-    Ok() => 'شكرًا، سُجّل البلاغ على جهازك.',
+    Ok() => tr(
+      'شكرًا، سُجّل البلاغ على جهازك.',
+      'Thanks, the report was recorded on your device.',
+    ),
     Err(:final failure) => failure.message,
   });
   return result.isOk;

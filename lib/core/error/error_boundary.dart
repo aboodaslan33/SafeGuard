@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../design_system/design_system.dart';
+import '../i18n/i18n.dart';
 import 'app_logger.dart';
 
 /// Installs global handlers for errors that escape feature code.
@@ -37,8 +38,8 @@ class _BrokenWidgetPlaceholder extends StatelessWidget {
       padding: const EdgeInsets.all(SgSpace.x4),
       alignment: Alignment.center,
       child: Text(
-        'تعذّر عرض هذا الجزء',
-        textDirection: TextDirection.rtl,
+        tr('تعذّر عرض هذا الجزء', "This part couldn't be displayed"),
+        textDirection: I18n.current.direction,
         style: TextStyle(
           color: colors.textTertiary,
           fontSize: 13,
