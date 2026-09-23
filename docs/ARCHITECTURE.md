@@ -249,3 +249,64 @@ Boot: BootReceiver → settings → Safe Mode → consent → start; outcome rec
 | `StatisticsService.detailed()` | `engine/stats/Statistics.kt` |
 | DB v4 | `rules.include_subdomains`, `custom_keywords` |
 | Flutter `ProtectionGuard` (PIN policy), `AdvancedActions`, `SettingsExport` | `lib/features/protection/presentation/`, `lib/features/advanced/` |
+
+## Phase 6–8 additions
+
+### Security and privacy (Phase 6)
+- The event/cache HMAC key is a non-exportable Keystore key
+  (`KeystoreHmacKey` → `MacProvider`).
+- The PIN lockout is anchored to `elapsedRealtime` + boot count.
+- Log retention (`LogRetention`). R8 and signing from `key.properties`.
+
+### Product surface (Phase 7)
+- `core/i18n`: `tr(ar, en)` at call sites. The language setting rebuilds
+  the tree; native screens read `ui_language`.
+- Onboarding (8 pages) → PIN → **setup wizard** (router gate
+  `setupPending`).
+- **Setup assistant:** pure `evaluateSetup(SetupFacts)` plus a UI.
+- **Diagnostics:** `DiagnosticReport` whitelist and sanitiser.
+- Flavours: `dev` / `staging` / `prod` (`default-flavor: prod`), exposed
+  as `AppInfo`.
+
+### Maintainability and operations (Phase 8)
+
+```
+engine/updates    UpdateManifest (strict schema) · UpdateSignatureVerifier (ECDSA P-256)
+                  UpdateStore (stage → verify → atomic activate → rollback → cleanup)
+                  UpdateValidators (sgbl list / text model + probe)      [no transport]
+engine/explain    Explanation codes · DecisionExplainer · DecisionTrace (content-free ring buffer)
+engine/health     HealthMonitorPolicy (repairs + notifications) · Backoff
+engine/backup     UserConfigBackup (lists, keywords, apps → private file)
+protection/       ProtectionAlerts (single "degraded" notification)
+                  ProtectionManager.monitorTick() ← SafeGuardVpnService (15 min, network change)
+lib/core/observability   CrashReporter (LocalCrashReporter) · Telemetry (LocalTelemetry, opt-in)
+lib/core/entitlements    Plan / ProtectionFeature (never gated) / EntitlementSource
+lib/features/feedback    FeedbackDraft (exact preview) · FeedbackScreen · AnalyticsScreen
+```
+
+**Health loop:**
+
+```
+VPN running ─every 15 min / network change─▶ monitorTick()
+  health() ─▶ HealthMonitorPolicy.repairs()
+                ├─ AI model broken  → textAdapter.resetFailure()  (backoff)
+                ├─ DB failing       → re-check, clear failure flag (backoff)
+                └─ lists missing    → reload bundled lists         (backoff)
+  re-check health() ─▶ notifications() ─▶ ProtectionAlerts.show / clear
+VPN revoked / recovery exhausted ─▶ alertStopped() (immediate)
+```
+
+**Errors and observability:**
+`AppLogger.error(tag, …)` → `AppDependencies.observeErrors()` → telemetry
+count (only if opted in) + crash record (for crash tags). The error
+message is never stored.
+
+**Explanations end to end:**
+native decision → `DecisionExplainer` code → event map `explanation` /
+search result `explanation` → Dart `DecisionExplanation` → localized
+reason (log row, block screen, trace). A parity test checks that the Dart
+and Kotlin ids match.
+
+See also: `ARCHITECTURE_REVIEW.md` (debt and next refactors),
+`UPDATE_ARCHITECTURE.md`, `DATABASE_MIGRATIONS.md`, `PRIVACY.md`,
+`THREAT_MODEL.md`, `../SECURITY.md`.

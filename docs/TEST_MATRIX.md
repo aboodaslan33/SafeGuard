@@ -12,7 +12,7 @@ are **not** device results.
 The only real-device results so far come from the project owner on
 2026-09-23 (docs/DEVICE_TEST_LOG.md). They were run on an **Infinix
 X6528, Android 13 (API 33), debug build** of commit `ea835db` (Phase 5).
-**Nothing from Phase 6 or 7 has been run on a device.**
+**Nothing from Phases 6–8 has been run on a device.**
 
 ## Devices to cover
 
@@ -64,6 +64,14 @@ X6528, Android 13 (API 33), debug build** of commit `ea835db` (Phase 5).
 | M34 | Privacy | Log retention 7 d / none; clear log; delete all data | Data removed | NOT EXECUTED | `phase6_test`, `Phase6Test` |
 | M35 | Diagnostics | Copy diagnostic information | No domains/queries/app names | NOT EXECUTED | `phase7_test` |
 | M36 | Instagram / TikTok | In-app content | Not filterable (documented) | **N/A** (limitation, D5) | — |
+| M38 | Alerts | Allow notifications; start another VPN | "Protection stopped" notification, generic text | NOT EXECUTED | `HealthMonitorTest`, `phase8_test` (PIN to turn off) |
+| M39 | Monitor | Break AI model / DB (debug build) while VPN runs | Repaired with backoff, or reported; no loop | NOT EXECUTED | `HealthMonitorTest` |
+| M40 | Monitor | Leave phone idle 8 h with VPN on | Battery impact negligible (Doze); no wakeups from SafeGuard | NOT EXECUTED | — |
+| M41 | Explanations | Block by list / user rule / keyword / AI | Correct reason on block screen and log | NOT EXECUTED | `Phase8Test`, `phase8_test` (parity) |
+| M42 | Feedback | Each report type, with and without diagnostics | Preview == copied/saved text; no domains | NOT EXECUTED | `phase8_test` |
+| M43 | Crash reports | Force a crash (debug) → Analytics and reports | Record with type + frames, no message | NOT EXECUTED | `phase8_test` |
+| M44 | Backup restore | Corrupt DB (debug) with user lists | Lists, keywords, apps restored | NOT EXECUTED | `UserConfigBackupTest`; `MigrationTest` (CI) |
+| M45 | Upgrade | Install 1.6.0, add rules, update to 1.7.0 | Rules, keywords, settings kept | NOT EXECUTED | `MigrationTest` (CI, v1→v4) |
 | M37 | Robolectric | `cd android && ./gradlew test` | SQLite store tests pass | BLOCKED here (no Android SDK / Google Maven in this environment); the owner can run it | — |
 
 ## Recording a run

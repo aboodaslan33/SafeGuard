@@ -46,6 +46,11 @@ import com.safeguard.app.engine.apps.AccessibilityStateResolver
 import com.safeguard.app.engine.apps.AppAction
 import com.safeguard.app.engine.apps.AppDecision
 import com.safeguard.app.engine.apps.AppProtection
+import com.safeguard.app.engine.apps.ProtectedApp
+import com.safeguard.app.engine.backup.KeywordEntry
+import com.safeguard.app.engine.backup.UserConfig
+import com.safeguard.app.engine.backup.UserConfigBackup
+import com.safeguard.app.engine.backup.UserRuleEntry
 import com.safeguard.app.engine.domain.DomainName
 import com.safeguard.app.engine.explain.DecisionTrace
 import com.safeguard.app.engine.health.HealthInputs
@@ -97,6 +102,7 @@ import com.safeguard.app.engine.status.VpnState
 import com.safeguard.app.vpn.NetworkMonitor
 import com.safeguard.app.vpn.SafeGuardVpnService
 import com.safeguard.app.vpn.UpstreamNetwork
+import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
@@ -208,6 +214,7 @@ class ProtectionManager private constructor(private val context: Context) {
     init {
         logger.applyRetention()
         seedBuiltInRules()
+        if (database.createdFresh) restoreUserConfig()
         refreshRuleCounts()
         // ~10 MB of lists: map and verify off the main thread, then enable.
         Thread({
@@ -521,21 +528,25 @@ class ProtectionManager private constructor(private val context: Context) {
 
     // ---- Custom keywords -------------------------------------------------
 
-    fun addKeyword(raw: String, category: Category) = keywords.add(raw, category)
+    fun addKeyword(raw: String, category: Category) = keywords.add(raw, category).also { backupUserConfig() }
 
-    fun removeKeyword(id: Long) = keywords.remove(id)
+    fun removeKeyword(id: Long) = keywords.remove(id).also { backupUserConfig() }
 
     // ---- User rules (blocklist / allowlist) ----------------------------
 
     fun addUserRule(input: String, action: RuleAction, category: Category, includeSubdomains: Boolean = true): Rule {
         val rule = userRules.add(input, action, category, includeSubdomains)
         onRulesChanged()
+        backupUserConfig()
         return rule
     }
 
     fun removeUserRule(domain: String, action: RuleAction): Boolean {
         val removed = userRules.remove(domain, action)
-        if (removed) onRulesChanged()
+        if (removed) {
+            onRulesChanged()
+            backupUserConfig()
+        }
         return removed
     }
 
@@ -604,9 +615,9 @@ class ProtectionManager private constructor(private val context: Context) {
 
     fun protectedApps() = appProtection.list()
 
-    fun addProtectedApp(pkg: String) = appProtection.add(pkg)
+    fun addProtectedApp(pkg: String) = appProtection.add(pkg).also { backupUserConfig() }
 
-    fun removeProtectedApp(pkg: String) = appProtection.remove(pkg)
+    fun removeProtectedApp(pkg: String) = appProtection.remove(pkg).also { backupUserConfig() }
 
     /** Called by the accessibility service on a foreground window change. */
     fun onForegroundApp(pkg: String?): AppDecision {
@@ -706,6 +717,7 @@ class ProtectionManager private constructor(private val context: Context) {
 
     /** Called when the user erases all app data from Flutter. */
     fun eraseAll() {
+        backupFile.delete() // must not come back after "delete all data"
         stop()
         events.clear()
         aiStats.clear()
@@ -726,6 +738,55 @@ class ProtectionManager private constructor(private val context: Context) {
     )
 
     // ---- Internals -----------------------------------------------------
+
+    // ---- User configuration backup (Phase 8) ---------------------------
+
+    /** Private, never backed up to the cloud (noBackupFilesDir). */
+    private val backupFile get() = File(context.noBackupFilesDir, "user-config.bak")
+
+    /** Writes the user's lists, keywords and protected apps (atomic replace). */
+    private fun backupUserConfig() {
+        try {
+            val config = UserConfig(
+                rules = rules.list(RuleSource.USER, null, 5000, 0).map {
+                    UserRuleEntry(it.domain, it.action, it.category, it.includeSubdomains)
+                },
+                keywords = keywords.list().map { KeywordEntry(it.phrase, it.category) },
+                protectedApps = protectedApps.list().map { it.packageName },
+            )
+            val tmp = File(backupFile.path + ".tmp")
+            tmp.writeText(UserConfigBackup.encode(config))
+            if (!tmp.renameTo(backupFile)) {
+                backupFile.delete()
+                tmp.renameTo(backupFile)
+            }
+        } catch (e: Exception) {
+            Log.w("SafeGuard", "config backup failed: ${e.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * After the database was (re)created: bring back the user's own
+     * configuration. Each entry is re-validated; nothing is restored over
+     * existing user data.
+     */
+    private fun restoreUserConfig() {
+        try {
+            if (!backupFile.isFile || rules.count(RuleSource.USER) > 0) return
+            val config = UserConfigBackup.decode(backupFile.readText()) ?: return
+            val now = System.currentTimeMillis()
+            rules.upsertAll(
+                config.rules.map {
+                    Rule(it.domain, it.category, it.action, source = RuleSource.USER, updatedAt = now, includeSubdomains = it.includeSubdomains)
+                },
+            )
+            for (k in config.keywords) runCatching { keywords.add(k.phrase, k.category) }
+            for (a in config.protectedApps) runCatching { protectedApps.add(ProtectedApp(a, now)) }
+            engine.invalidate()
+        } catch (e: Exception) {
+            Log.w("SafeGuard", "config restore failed: ${e.javaClass.simpleName}")
+        }
+    }
 
     private fun onRulesChanged() {
         engine.invalidate()

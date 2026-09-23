@@ -18,7 +18,16 @@ class SafeGuardDatabase(context: Context) :
         db.enableWriteAheadLogging() // concurrent reads from the DNS thread
     }
 
+    /**
+     * True when the schema was created in this process — a first install,
+     * or a rebuild after corruption / downgrade. The manager then restores
+     * the user's own configuration from its private backup.
+     */
+    @Volatile var createdFresh = false
+        private set
+
     override fun onCreate(db: SQLiteDatabase) {
+        createdFresh = true
         db.execSQL(
             """
             CREATE TABLE rules (

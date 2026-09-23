@@ -1,6 +1,6 @@
 # Threat model
 
-Scope: SafeGuard 1.6.0 on an Android device the owner controls. No server
+Scope: SafeGuard 1.7.0 on an Android device the owner controls. No server
 side exists.
 
 ## Assets
@@ -26,6 +26,17 @@ side exists.
 | T7 | Supply-chain / update attacker | Push malicious rules or a model | No remote updates exist; bundled assets are SHA-256-pinned; future updates designed with signatures (UPDATE_ARCHITECTURE.md) | Compromise of the build machine or signing key (standard release hygiene) |
 | T8 | Crash-inducing inputs (malformed DNS packets, huge inputs) | Crash the VPN → no filtering | Bounds-checked DNS parser, pointer-hop limit, input length limits on the channel, loop failure → bounded recovery, DB errors fail closed (Phase 7) | Unknown parser bugs; no fuzzing campaign has been run |
 | T9 | Privacy leak through diagnostics or logs | Exfiltrate browsing data | Diagnostics whitelist + token sanitiser; Android logs constant messages only (test-enforced); Flutter logs off in release | The user can paste diagnostics anywhere (by design, nothing personal is in them) |
+
+## Phase 8 additions
+
+| # | Surface | Risk | Mitigation | Residual |
+|---|---|---|---|---|
+| T10 | Update packages (future) | Malicious or corrupted rules/model; rollback to an old, weaker package; stale package forever | Pinned ECDSA keys (two for rotation), strict manifest schema, SHA-256 payload binding, full parse + probe before activation, monotonic versions, `expiresAt`, re-verification at load, APK fallback (`UpdateStore`, 15 tests) | No transport or keys yet. Key custody is a process matter (SECURITY.md) |
+| T11 | Config backup file | Reading it reveals lists; tampering injects rules | App-private `noBackupFilesDir` (sandbox, never cloud-backed); every line re-validated on restore; restore only after a DB rebuild and only if no user rules exist; deleted by "Delete all data" | Rooted device can read it (same as the DB) |
+| T12 | Crash reports, telemetry, feedback, decision trace | Leak of URLs, queries, tokens through error messages or free text | Messages never stored (type + app frames only); telemetry is a closed enum, off by default; trace has no subject field; feedback shows an exact preview and warns on links/emails/numbers; nothing is transmitted by the app | The user may paste the text anywhere (by design) |
+| T13 | Notifications | Revealing browsing on the lock screen | The alert text is generic ("protection stopped / partial"). No domains, apps or queries | Visible on lock screen per system settings |
+| T14 | Health monitor / recovery | Battery drain or restart loops | Backoff 1 → 4 → 16 min … 4 h, ≤ 6 attempts/day per component; VPN recovery ≤ 3 per 10 min; checks only while the VPN runs, Handler delays stretch under Doze | Not yet measured on a phone |
+| T15 | Monetisation (future) | Protection disabled by a billing failure or spoofed entitlement | Protection features never gated (test-enforced); billing would require server-side verification | — |
 
 ## Trust boundaries
 

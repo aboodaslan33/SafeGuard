@@ -1,0 +1,91 @@
+# Continuous integration. Runs on every push and pull request.
+# No secrets are used here; release signing lives in release.yml.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.5"
+
+jobs:
+  flutter:
+    name: Flutter (format, analyze, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test
+      - name: Static analysis
+        run: flutter analyze
+      - name: Unit + widget tests
+        run: flutter test
+      - name: Dependency report (informational)
+        run: flutter pub outdated || true
+
+  android:
+    name: Android / Kotlin (engine, Robolectric, lint, debug build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Kotlin unit tests (JVM engine + Robolectric SQLite)
+        working-directory: android
+        run: ./gradlew --no-daemon testProdDebugUnitTest
+      - name: Android lint
+        working-directory: android
+        run: ./gradlew --no-daemon lintProdDebug
+      - name: Debug build (all flavours)
+        run: |
+          flutter build apk --debug --flavor dev
+          flutter build apk --debug --flavor prod
+      - name: Release build without signing key (R8 check only)
+        # No key.properties → signed with the runner's debug key; this
+        # artefact is never published. It proves R8 + resources build.
+        run: flutter build apk --release --flavor prod
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: |
+            android/app/build/reports/
+            android/app/build/test-results/
+          retention-days: 7
+
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

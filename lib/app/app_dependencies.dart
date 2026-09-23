@@ -151,6 +151,10 @@ class AppDependencies extends ChangeNotifier {
       await _preferences.clear();
     }, onError: (e, s) => StorageFailure(cause: e, stackTrace: s));
     if (result.isOk) {
+      // Stored values are gone; reload so in-memory flags match (telemetry
+      // back to its default: off).
+      await crashes.load();
+      await telemetry.load();
       settings.resetInMemory();
       protection.resetInMemory();
       security.resetInMemory();

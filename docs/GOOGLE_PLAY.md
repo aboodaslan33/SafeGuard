@@ -1,7 +1,7 @@
 # Google Play submission: technical material
 
 Drafts for the Play Console forms and policy declarations. They describe
-what the code in this repository does (version 1.6.0+7). Re-check them
+what the code in this repository does (version 1.7.0+8). Re-check them
 against the final build before submitting. **Nothing here has been
 reviewed by Google**, and approval is not guaranteed: VpnService and
 Accessibility apps get extra review.
@@ -84,11 +84,12 @@ reports this as "unavailable" instead of failing silently.
 | `INTERNET` | Forward allowed DNS queries | DNS filtering | No |
 | `ACCESS_NETWORK_STATE` | Current network's DNS servers, online/offline | DNS filtering, health | No |
 | `RECEIVE_BOOT_COMPLETED` | Restart protection after a reboot if it was on | Continuity | Possible, but weakens protection |
+| `POST_NOTIFICATIONS` (runtime, Android 13+, optional) | One generic alert when protection stops or degrades | Alerts (Phase 8) | Yes: the alert is optional; without it, interruptions show when the app is opened |
 | `BIND_VPN_SERVICE` (service) | Only the system can bind the VPN service | VPN | No |
 | `BIND_ACCESSIBILITY_SERVICE` (service) | Only the system can bind the service | App protection | No (the feature itself is optional) |
 | `<queries>` LAUNCHER / HOME / VIEW https | List launchable apps to choose from; open search results in a browser | App protection, search | Used instead of `QUERY_ALL_PACKAGES` |
 
-Not requested: `QUERY_ALL_PACKAGES`, `POST_NOTIFICATIONS`,
+Not requested: `QUERY_ALL_PACKAGES`,
 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (the app opens the system list and
 the user decides), storage, camera, contacts, location, SMS, call log,
 `SYSTEM_ALERT_WINDOW`, `PACKAGE_USAGE_STATS`, device admin.

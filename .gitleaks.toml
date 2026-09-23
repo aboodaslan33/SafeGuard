@@ -1,0 +1,12 @@
+# Secret scanning config (CI: gitleaks). Extends the default rules.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-secrets"
+paths = [
+  # Pinned SHA-256 digests of bundled assets are public checksums.
+  '''android/app/src/main/kotlin/com/safeguard/app/engine/rules/BundledLists\.kt''',
+  '''android/app/src/main/kotlin/com/safeguard/app/engine/ai/model/ModelRegistry\.kt''',
+  '''docs/.*\.md''',
+]
