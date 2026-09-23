@@ -17,6 +17,7 @@ import com.safeguard.app.protection.ProtectionManager
 import java.lang.ref.WeakReference
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -45,6 +46,7 @@ class ContentShieldService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { Thread(it, "sg-shield").apply { isDaemon = true } }
     private val busy = AtomicBoolean(false)
+    @Volatile private var destroyed = false
     @Volatile private var foreground: String? = null
     private var retried = false
 
@@ -92,13 +94,17 @@ class ContentShieldService : AccessibilityService() {
             Nodes.recycleRoot(root)
         }
         if (text.isBlank() || !busy.compareAndSet(false, true)) return
-        worker.execute {
-            try {
-                val outcome = engine.onText(pkg, text)
-                if (outcome is ShieldOutcome.Blocked) main.post { block(outcome) }
-            } finally {
-                busy.set(false)
+        try {
+            worker.execute {
+                try {
+                    val outcome = engine.onText(pkg, text)
+                    if (outcome is ShieldOutcome.Blocked) main.post { block(outcome) }
+                } finally {
+                    busy.set(false)
+                }
             }
+        } catch (e: RejectedExecutionException) {
+            busy.set(false) // service is shutting down
         }
     }
 
@@ -110,7 +116,7 @@ class ContentShieldService : AccessibilityService() {
     }
 
     private fun block(outcome: ShieldOutcome.Blocked) {
-        if (!manager.onShieldBlock(outcome.event)) return
+        if (destroyed || !manager.onShieldBlock(outcome.event)) return
         performGlobalAction(GLOBAL_ACTION_HOME)
         startActivity(
             Intent(this, AppBlockedActivity::class.java)
@@ -142,6 +148,7 @@ class ContentShieldService : AccessibilityService() {
         serviceInfo = info
         if (!active) {
             main.removeCallbacks(snapshot)
+            foreground = null
             manager.shield.onForeground(null)
         }
     }
@@ -149,6 +156,7 @@ class ContentShieldService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        destroyed = true
         main.removeCallbacks(snapshot)
         worker.shutdownNow()
         instance = null

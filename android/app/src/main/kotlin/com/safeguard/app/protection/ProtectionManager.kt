@@ -197,7 +197,7 @@ class ProtectionManager private constructor(private val context: Context) {
     private val shieldText = GuardedContentClassifier(
         AdapterContentClassifier(listOf(textAdapter)),
         macs = hmacKey,
-        budget = InferenceBudget(mapOf(ContentKind.TEXT to 40, ContentKind.IMAGE to 0)),
+        budget = InferenceBudget(mapOf(ContentKind.TEXT to 60, ContentKind.IMAGE to 0)),
         capacity = 64,
     )
 

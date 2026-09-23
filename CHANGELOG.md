@@ -9,6 +9,50 @@ Every release lists **Migration notes** (data / settings changes),
 Play a rollback is always a *new* release with a higher `versionCode`
 carrying the previous code (see docs/RELEASE.md).
 
+## [1.8.0+9] — Final AI phase: AI Content Shield
+
+### Added
+- **AI Content Shield** (optional, off by default): on-device checking of
+  text shown in supported apps (Instagram, TikTok, YouTube, Reddit,
+  Chrome, Firefox) through a separate, package-restricted accessibility
+  service. The existing policy engine decides; a block sends the user home
+  and shows the "content blocked" screen (category only).
+- AI labels SAFE, SUGGESTIVE, SEXUAL, NUDITY, VIOLENCE, GORE, GAMBLING,
+  DRUGS, DANGEROUS, UNKNOWN; every result carries label, model confidence
+  and model version. SUGGESTIVE counts only in STRICT mode.
+- Temporal confirmation (one uncertain sample never blocks), sampling
+  gate, inference watchdog, separate text budget.
+- Image pipeline and model-pack format (`sg-image-pack/1`, SHA-256
+  pinned). **No image model is bundled** and no runtime is compiled in:
+  image/video checks are unavailable and the UI says so.
+- AI Content Shield screen: real state (never "active" without image AI),
+  model status, supported apps with limitations and "not tested on a
+  device yet", categories and mode, privacy summary. PIN to turn it or an
+  app off.
+- docs/AI_CONTENT_SHIELD.md (model evaluation, measurements, limits),
+  docs/FINAL_AI_TESTING.md (manual plan, not executed).
+
+### Changed
+- The AI protection screen links to the shield and no longer says AI
+  never looks at other apps.
+
+### Migration notes
+- No database change (shield blocks use the existing event columns; rule
+  type `ai_shield:<kind>:<label>:<model>`). New preferences
+  `shield_enabled` (default false), `shield_disabled_apps`,
+  `shield_disclosure_declined`.
+
+### Security notes
+- New accessibility service with window-content access, limited to six
+  package ids at the system level; no new permission. Input and password
+  fields are never read; no storage, logging, network, screenshots or
+  overlays in the shield path (enforced by `ShieldSourceAuditTest`).
+
+### Rollback
+- Release 1.7.0 code as a higher `versionCode`. The shield preferences are
+  ignored by 1.7.0; Android keeps the unused accessibility entry until the
+  app no longer declares it (it disappears with the rollback build).
+
 ## [1.7.0+8] — Phase 8: maintainability, monitoring, updates
 
 ### Added

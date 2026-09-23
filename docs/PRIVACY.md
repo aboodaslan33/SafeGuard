@@ -11,7 +11,8 @@ analytics SDK, crash SDK, advertising or tracking.
 | VPN / DNS | Domain names the device looks up (e.g. `example.com`) and the query type | Page content, full URLs, cookies, passwords, messages, HTTPS/QUIC traffic, which app asked |
 | Search protection | Text typed into **SafeGuard's own** search screen, in memory only | What you type in other apps or browsers |
 | App protection (optional) | Package name of the app in the foreground | Screen content, text input, notifications |
-| AI | Search text above (in memory); images you pick yourself (in memory, not saved) | Anything else; it doesn't watch the screen |
+| AI | Search text above (in memory); images you pick yourself (in memory, not saved) | Anything else |
+| AI Content Shield (optional, off by default, 1.8.0) | Text **shown** on screen in the supported apps you left on (Instagram, TikTok, YouTube, Reddit, Chrome, Firefox), classified in memory on the device and discarded. This includes messages *displayed* in those apps | What you type (input fields), password fields, any other app, images/video (no image model), screenshots (none are taken) |
 
 ## What is stored (on the device only)
 
@@ -26,6 +27,7 @@ analytics SDK, crash SDK, advertising or tracking.
 | Telemetry (opt-in, **off by default**) | Daily counts of fixed error types. No identifiers | 30 days | Same screen; turning it off deletes the counts |
 | Decision trace (off by default) | Verdict, reason, category, pipeline stages. No domain or text | Memory only, last 50 | Diagnostics toggle; cleared when turned off |
 | AI feedback | Category, source, rounded confidence, time | Cleared with the log | Clear log |
+| AI Content Shield blocks | In the protection log: time, app package, category, confidence rounded to 10 %, model version. **No text, image or hash of either** | Follows the log | Same as the log; shield off in its screen (PIN) |
 
 **Never collected:** passwords, PIN (only its hash), private messages,
 photos, contacts, screenshots, screen or audio recordings, full browsing

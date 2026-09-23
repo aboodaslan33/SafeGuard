@@ -1,4 +1,4 @@
-# Final project audit — SafeGuard 1.7.0+8 (end of Phase 8)
+# Final project audit — SafeGuard 1.8.0+9 (after the final AI phase)
 
 Every statement is labelled:
 
@@ -236,3 +236,44 @@ Phase 2).
    publisher keys held offline.
 6. Fuzz the DNS parser in CI.
 7. Only then run a closed beta, then a production staged rollout.
+
+## 13. AI Content Shield (final AI phase, 1.8.0+9)
+
+Details: docs/AI_CONTENT_SHIELD.md. Manual plan: docs/FINAL_AI_TESTING.md.
+
+| Item | Status |
+|---|---|
+| Engine: labels, policy integration through the existing decision engine, temporal confirmation, sampling gate, watchdog, status resolver, model-pack parser, image classifier failure states, visible-text privacy filter | VERIFIED (JVM: `ShieldPolicyTest`, `ContentShieldTest`; 32 tests) |
+| Real text model on page-style text (66 hand-written EN/AR sentences) | VERIFIED as measured: 0/40 safe blocked (NORMAL and STRICT), 13/21 risky blocked in NORMAL, 16/21 in STRICT (`ShieldTextEvalTest`). Small set: **not** a real-world accuracy figure |
+| Text inference latency | 0.58 ms median on a desktop JVM. **NOT MEASURED on a phone** |
+| Privacy guarantees in code (no logging/storage/network/capture/overlay in the shield path; config lists exactly the supported apps; no new permission) | VERIFIED (`ShieldSourceAuditTest`) |
+| Dart ↔ Kotlin ids, parsing, screen states, disclosure, PIN on loosening, English/Arabic, layout | VERIFIED (`content_shield_test`, `i18n_test`, `layout_test`) |
+| Android service compiles against android.jar (harness) | VERIFIED |
+| Android build, lint, Robolectric, R8 release build with the shield | See the CI row in §1 |
+| Shield on a real device (any app) | **NOT VERIFIED:** every scenario in FINAL_AI_TESTING.md is NOT EXECUTED |
+| Image / video classification | **NOT IMPLEMENTED as working AI:** no image model bundled, no runtime compiled in; pipeline tested only with a fixed-output test double. The UI reports it as unavailable |
+| Screen capture (MediaProjection) | NOT IMPLEMENTED (designed; waits for an image model) |
+| Play approval of a second accessibility service with window-content access | NOT VERIFIED (declaration drafted, video not recorded) |
+
+KNOWN LIMITATIONS:
+- **Text only:** photos, video, reels and stories are not checked.
+- **Coverage depends on the app:** apps may expose little text, use secure
+  surfaces or change their UI at any time.
+- **Blocking behaviour:** a block sends the user home; it can't hide a
+  single post.
+- **Private messages:** those displayed in supported apps are processed in
+  memory like any text.
+- **The user can disable it:** the device owner can turn the service off in
+  Android settings.
+- **Model quality:** the text model misses many risky texts (about 4 in 10
+  on the measured set in NORMAL).
+
+Issues found and fixed during this phase:
+- **Temporal confirmer (design flaw):** a safe sample followed by a risky
+  one produced a diluted "OK" result instead of "pending". The gate would
+  then skip the unchanged risky screen for good. Found by a unit test and
+  fixed.
+- **Shield text budget below the gate's maximum rate:** continuous
+  scrolling would have produced UNKNOWN results. Fixed.
+- **Service robustness:** a block could fire after the service was
+  destroyed; `execute` after shutdown would throw. Both fixed.

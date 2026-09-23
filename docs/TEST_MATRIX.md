@@ -72,7 +72,8 @@ X6528, Android 13 (API 33), debug build** of commit `ea835db` (Phase 5).
 | M43 | Crash reports | Force a crash (debug) → Analytics and reports | Record with type + frames, no message | NOT EXECUTED | `phase8_test` |
 | M44 | Backup restore | Corrupt DB (debug) with user lists | Lists, keywords, apps restored | NOT EXECUTED | `UserConfigBackupTest`; `MigrationTest` (CI) |
 | M45 | Upgrade | Install 1.6.0, add rules, update to 1.7.0 | Rules, keywords, settings kept | NOT EXECUTED | `MigrationTest` (CI, v1→v4) |
-| M37 | Robolectric | `cd android && ./gradlew test` | SQLite store tests pass | BLOCKED here (no Android SDK / Google Maven in this environment); the owner can run it | — |
+| M46 | AI Content Shield | Every scenario in docs/FINAL_AI_TESTING.md (A1–X1, B1–B18) | As listed there | NOT EXECUTED | `ContentShieldTest`, `ShieldPolicyTest`, `ShieldTextEvalTest`, `ShieldSourceAuditTest`, `content_shield_test` |
+| M37 | Robolectric | `cd android && ./gradlew test` | SQLite store tests pass | Not a device test: runs on GitHub Actions (`testProdDebugUnitTest`), green since Phase 8; not runnable in this environment (no Android SDK) | CI |
 
 ## Recording a run
 

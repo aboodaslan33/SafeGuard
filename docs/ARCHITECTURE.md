@@ -310,3 +310,25 @@ and Kotlin ids match.
 See also: `ARCHITECTURE_REVIEW.md` (debt and next refactors),
 `UPDATE_ARCHITECTURE.md`, `DATABASE_MIGRATIONS.md`, `PRIVACY.md`,
 `THREAT_MODEL.md`, `../SECURITY.md`.
+
+## Final AI phase: AI Content Shield (1.8.0)
+
+Details, model evaluation and measurements: `docs/AI_CONTENT_SHIELD.md`.
+
+```
+engine/shield (pure Kotlin)
+  AiLabel · AiClassification {label, confidence, modelVersion}
+  ShieldScores → ClassificationResult ─▶ ProtectionDecisionEngine (unchanged authority)
+  TemporalConfirmer · FrameGate · FrameHash · InferenceWatchdog
+  VisibleTextExtractor (NodeView) · SupportedApps · ShieldSettings · ShieldStatusResolver
+  ImageModelPack (sg-image-pack/1) · ShieldImageClassifier · BuiltInImagePacks (empty)
+  ContentShieldEngine (orchestration)
+shield/ContentShieldService   2nd accessibility service, packageNames = supported apps
+apps/AppBlockedActivity       + content variant (category only)
+ProtectionManager             shield wiring, status, settings, metadata-only log
+lib/features/shield           ContentShieldScreen (/ai-shield)
+```
+
+The shield adds evidence; it never bypasses the policy engine. It is off
+by default; text AI is real (sg-text-1), and image AI is unavailable
+because no model is bundled.

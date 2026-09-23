@@ -1,7 +1,7 @@
 # Release checklist
 
 `[x]` means done **and** backed by the evidence named. `[ ]` means not
-done or not verified. State as of version 1.7.0+8, end of Phase 8.
+done or not verified. State as of version 1.8.0+9 (final AI phase).
 **The app is not ready for production release**: the unticked boxes,
 especially the real-device ones, are open.
 
@@ -25,7 +25,10 @@ especially the real-device ones, are open.
 - [x] **Store materials ready (drafts):** docs/STORE_LISTING.md (Arabic + English). **Still needed:** screenshots, feature graphic, support contact, publisher review.
 - [ ] **Crash handling verified:** fail-safe paths are implemented and unit-tested (DB errors, log write errors, VPN recovery races). Not verified on a device (M31–M33).
 - [ ] **Performance tested:** JVM microbenchmarks only (docs/PERFORMANCE.md). Phone startup, memory, CPU and battery are NOT MEASURED.
-- [ ] **Real-device testing completed:** 3 PASS rows out of 45 (TEST_MATRIX).
+- [ ] **Real-device testing completed:** 3 PASS rows out of 46 (TEST_MATRIX).
+- [ ] **AI Content Shield tested on a device:** every scenario in docs/FINAL_AI_TESTING.md is NOT EXECUTED.
+- [ ] **AI Content Shield Play declaration** (second accessibility service with window-content access) submitted with a video (docs/GOOGLE_PLAY.md §2b).
+- [ ] **Image model:** none bundled; image/video checks unavailable (docs/AI_CONTENT_SHIELD.md §4). Not a blocker for release, but the store listing must not claim image or video filtering.
 
 ## Phase 8 operations
 

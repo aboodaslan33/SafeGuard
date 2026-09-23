@@ -1,7 +1,7 @@
 # Google Play submission: technical material
 
 Drafts for the Play Console forms and policy declarations. They describe
-what the code in this repository does (version 1.7.0+8). Re-check them
+what the code in this repository does (version 1.8.0+9). Re-check them
 against the final build before submitting. **Nothing here has been
 reviewed by Google**, and approval is not guaranteed: VpnService and
 Accessibility apps get extra review.
@@ -77,6 +77,41 @@ Note on sideloaded builds (Android 13+): Android restricts accessibility
 for apps not installed from a store ("restricted settings"). The app
 reports this as "unavailable" instead of failing silently.
 
+## 2b. Accessibility API declaration: AI Content Shield (1.8.0)
+
+A **second, separate** accessibility service
+(`shield/ContentShieldService`, config `res/xml/content_shield_config.xml`)
+with `canRetrieveWindowContent=true`. It is optional, off by default, and
+turned on by the user after its own in-app prominent disclosure
+(`content_shield_screen.dart`, `_ShieldDisclosure`). Play reviews content
+retrieval by non-accessibility-tool apps strictly; this needs the
+declaration and a video, and **approval is not guaranteed**.
+
+Declaration text (draft):
+
+> SafeGuard's optional "AI Content Shield" lets the device owner filter
+> harmful content (sexual content, violence, gambling, drugs, dangerous
+> content) shown inside a fixed list of apps: Instagram, TikTok,
+> YouTube, Reddit, Chrome and Firefox. The service is restricted to those
+> package names. It reads the text those apps display on screen and
+> classifies it **on the device** with SafeGuard's bundled model; when
+> the user's protection settings say the content should be blocked, it
+> performs "Home" and shows SafeGuard's own "content blocked" screen. It
+> never reads text input fields or password fields, never stores or
+> transmits screen text, takes no screenshots, draws no overlays, and
+> performs no gesture other than "Home". Only block metadata (time, app,
+> category, rounded confidence, model version) is kept in the local log.
+> The user turns it on in Android's Accessibility settings after an
+> in-app disclosure, and can turn it off there at any time.
+
+Facts behind the text: `packageNames` in the config (test keeps it equal
+to `SupportedApps`), `VisibleTextExtractor` (skips editable/password),
+`ShieldSourceAuditTest` (no logging, storage, network, capture or overlay
+APIs in the shield path), `ContentShieldService.block` (Home + activity).
+
+Video (not recorded): disclosure → enable in settings → open Chrome on a
+page with blocked text → home + "content blocked" screen → log entry.
+
 ## 3. Permissions
 
 | Permission | Why | Feature | Removable? |
@@ -89,7 +124,11 @@ reports this as "unavailable" instead of failing silently.
 | `BIND_ACCESSIBILITY_SERVICE` (service) | Only the system can bind the service | App protection | No (the feature itself is optional) |
 | `<queries>` LAUNCHER / HOME / VIEW https | List launchable apps to choose from; open search results in a browser | App protection, search | Used instead of `QUERY_ALL_PACKAGES` |
 
-Not requested: `QUERY_ALL_PACKAGES`,
+The AI Content Shield (1.8.0) adds **no permission**: it is a second
+`BIND_ACCESSIBILITY_SERVICE` service, bound only by the system.
+
+Not requested: `QUERY_ALL_PACKAGES`, MediaProjection /
+`FOREGROUND_SERVICE_MEDIA_PROJECTION` (no screen capture in this version),
 `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (the app opens the system list and
 the user decides), storage, camera, contacts, location, SMS, call log,
 `SYSTEM_ALERT_WINDOW`, `PACKAGE_USAGE_STATS`, device admin.
@@ -101,7 +140,7 @@ the user decides), storage, camera, contacts, location, SMS, call log,
 | Does the app collect or share user data? | **No data collected or shared** (Play's definition: data transmitted off the device) | No analytics, crash reporting, accounts or servers |
 | Is data encrypted in transit? | Not applicable (nothing is transmitted by the app, except DNS forwarding on the user's behalf, which is the network's normal DNS) | — |
 | Can users request deletion? | Yes, in-app: Clear log, Delete all data; or Android "Clear data" | Settings → Privacy |
-| Data processed only on the device | Web browsing (domain names checked on-device), app activity (foreground package name for protected apps), search text typed into SafeGuard's search screen — processed in memory; only blocked domains / protected app names / 32-bit search hashes are stored locally | Play lets you declare on-device processing as not collected |
+| Data processed only on the device | Web browsing (domain names checked on-device), app activity (foreground package name for protected apps), search text typed into SafeGuard's search screen, and (AI Content Shield, if the user turns it on) text displayed in the six supported apps — processed in memory; only blocked domains / protected app names / 32-bit search hashes are stored locally | Play lets you declare on-device processing as not collected |
 
 Play's guidance on "ephemeral on-device processing" should be re-read
 before submitting: the DNS forwarding step sends the domain name to the

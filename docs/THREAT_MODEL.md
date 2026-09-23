@@ -38,6 +38,15 @@ side exists.
 | T14 | Health monitor / recovery | Battery drain or restart loops | Backoff 1 → 4 → 16 min … 4 h, ≤ 6 attempts/day per component; VPN recovery ≤ 3 per 10 min; checks only while the VPN runs, Handler delays stretch under Doze | Not yet measured on a phone |
 | T15 | Monetisation (future) | Protection disabled by a billing failure or spoofed entitlement | Protection features never gated (test-enforced); billing would require server-side verification | — |
 
+## Final AI phase additions (AI Content Shield, 1.8.0)
+
+| # | Surface | Risk | Mitigation | Residual |
+|---|---|---|---|---|
+| T16 | Reading on-screen text in other apps | Over-collection: messages, passwords, codes read or kept | Separate accessibility service limited by the system to supported packages; input and password fields never read; codes, numbers, e-mails and links dropped; text classified in memory and discarded; source-audit test forbids logging, storage, network, capture in the shield path | Messages displayed in supported apps are processed (in memory); a rooted device or OS exploit defeats the sandbox |
+| T17 | Shield as a bypass target | User disables the service or an app to see content | Turning the shield or an app off needs the PIN; status shows "service is off" honestly | The Android settings owner can always disable the service (by design, no device-owner mode) |
+| T18 | Wrong blocks / missed content | Blocking safe content (false positives) or claiming protection that isn't there | Policy engine thresholds, two-sample confirmation, category toggles, UNKNOWN never blocks; UI never shows "active" while image AI is missing; every app labelled "not tested on a device" | Small text model misses many risky texts; images/video not checked at all (docs/AI_CONTENT_SHIELD.md §8) |
+| T19 | Future image model supply chain | Malicious or corrupted model | Pinned pack (SHA-256, size, strict manifest), only data formats, no downloaded code, load failures → UNAVAILABLE | No model ships yet |
+
 ## Trust boundaries
 
 1. **Android OS ↔ SafeGuard:** trusted. SafeGuard relies on the sandbox,
