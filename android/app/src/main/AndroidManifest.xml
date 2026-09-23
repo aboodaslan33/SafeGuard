@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!--
       Permissions, and why each is needed:
       - INTERNET: forward *allowed* DNS queries to the network's own resolver.
@@ -100,7 +101,9 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTask"
             android:taskAffinity="com.safeguard.app.blocked"
-            android:theme="@style/NormalTheme" />
+            android:enableOnBackInvokedCallback="true"
+            android:theme="@style/NormalTheme"
+            tools:targetApi="33" />
         <receiver
             android:name=".vpn.BootReceiver"
             android:exported="true">

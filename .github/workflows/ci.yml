@@ -63,7 +63,11 @@ jobs:
         run: ./gradlew --no-daemon testProdDebugUnitTest
       - name: Android lint
         working-directory: android
-        run: ./gradlew --no-daemon lintProdDebug
+        run: |
+          ./gradlew --no-daemon lintProdDebug || {
+            cat ../build/app/intermediates/lint_intermediate_text_report/prodDebug/lintReportProdDebug/lint-results-prodDebug.txt
+            exit 1
+          }
       - name: Debug build (all flavours)
         run: |
           flutter build apk --debug --flavor dev
@@ -77,8 +81,8 @@ jobs:
         with:
           name: android-test-reports
           path: |
-            android/app/build/reports/
-            android/app/build/test-results/
+            build/app/reports/
+            build/app/test-results/
           retention-days: 7
 
   secrets:

@@ -1,9 +1,11 @@
 package com.safeguard.app.apps
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -11,6 +13,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.window.OnBackInvokedDispatcher
 import com.safeguard.app.protection.ProtectionManager
 
 /**
@@ -61,8 +64,16 @@ class AppBlockedActivity : Activity() {
             LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)).apply { topMargin = dp(32) },
         )
         setContentView(root)
+        // Back always leads home, never back into the protected app. On
+        // API 33+ with predictive back (default from Android 16) a back
+        // gesture doesn't call onBackPressed, so register a callback.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { goHome() }
+        }
     }
 
+    // Older Android versions (and API 33 without predictive back).
+    @SuppressLint("GestureBackNavigation")
     @Deprecated("Back always leads home, never back into the protected app.")
     override fun onBackPressed() = goHome()
 
