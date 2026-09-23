@@ -102,6 +102,7 @@ import com.safeguard.app.engine.shield.ContentShieldEngine
 import com.safeguard.app.engine.shield.ImageModelPack
 import com.safeguard.app.engine.shield.ImageModelState
 import com.safeguard.app.engine.shield.ImageRuntimeKind
+import com.safeguard.app.engine.shield.PackImageModelRuntime
 import com.safeguard.app.engine.shield.ShieldEvent
 import com.safeguard.app.engine.shield.ShieldImageClassifier
 import com.safeguard.app.engine.shield.ShieldStatus
@@ -170,11 +171,22 @@ class ProtectionManager private constructor(private val context: Context) {
 
     /**
      * Local adapters only. The text model loads lazily from APK assets after
-     * its size and SHA-256 are verified; no image model ships in this
-     * version (the image adapter validates input and reports NO_MODEL). No
-     * cloud adapter is registered.
+     * its size and SHA-256 are verified. "Check an image" uses the same
+     * pinned image model as the Content Shield ([PackImageModelRuntime]),
+     * opened per check after its SHA-256 is verified. No cloud adapter is
+     * registered.
      */
-    private val imageAdapter = LocalImageClassifierAdapter("local-image", BitmapImageDecoder(), { null })
+    private val checkImageRuntime: PackImageModelRuntime? = BuiltInImagePacks.all.firstOrNull()?.let { pack ->
+        PackImageModelRuntime(pack) {
+            val model = mapAsset(pack)
+            if (model == null || model.capacity().toLong() != pack.sizeBytes || !ShieldImageClassifier.sha256Matches(model, pack.sha256)) {
+                null
+            } else {
+                LiteRtImageRuntime.factory.open(pack, model)
+            }
+        }
+    }
+    private val imageAdapter = LocalImageClassifierAdapter("local-image", BitmapImageDecoder(), { checkImageRuntime })
 
     private val textAdapter = LocalTextClassifierAdapter(BuiltInModels.TEXT_V1.id, {
         TextModel.parse(ModelLoader { path -> context.assets.open(path) }.load(BuiltInModels.TEXT_V1))

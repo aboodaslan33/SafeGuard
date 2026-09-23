@@ -730,7 +730,11 @@ class ProtectionChannel(
                 "text" to BuiltInModels.TEXT_V1.let {
                     mapOf("id" to it.id, "version" to it.version, "available" to manager.isAiAvailable(ContentKind.TEXT))
                 },
-                "image" to mapOf("id" to null, "version" to null, "available" to manager.isAiAvailable(ContentKind.IMAGE)),
+                "image" to mapOf(
+                    "id" to BuiltInImagePacks.all.firstOrNull()?.id,
+                    "version" to BuiltInImagePacks.all.firstOrNull()?.version,
+                    "available" to manager.isAiAvailable(ContentKind.IMAGE),
+                ),
             ),
         )
     }

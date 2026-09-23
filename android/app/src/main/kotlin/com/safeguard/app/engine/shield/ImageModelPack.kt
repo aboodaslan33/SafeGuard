@@ -328,3 +328,38 @@ class ShieldImageClassifier(
         }
     }
 }
+
+/**
+ * The pinned pack as a Phase 4 [com.safeguard.app.engine.ai.image.ImageModelRuntime],
+ * so "Check an image" uses the same verified model as the shield.
+ *
+ * Output: one probability per policy category (softmax classes of the same
+ * category are added; SUGGESTIVE isn't counted here — it only blocks
+ * through the shield in STRICT mode). The interpreter is opened for each
+ * check and closed right after: image checks are rare, user-initiated
+ * actions, so no model stays in memory for them.
+ */
+class PackImageModelRuntime(
+    private val pack: ImageModelPack,
+    /** Opens a runtime for the verified model; null if unavailable. */
+    private val open: () -> ImageInferenceRuntime?,
+) : com.safeguard.app.engine.ai.image.ImageModelRuntime {
+    override val modelId: String get() = pack.modelVersion
+    override val input get() = pack.input
+    override val labels: List<com.safeguard.app.engine.rules.Category> =
+        pack.labels.filter { it != AiLabel.SUGGESTIVE }.map { it.category }.distinct()
+
+    override fun run(tensor: FloatArray): FloatArray {
+        val rt = open() ?: throw IllegalStateException("image model unavailable")
+        val raw = rt.use { it.run(tensor) }
+        val probs = ShieldImageClassifier.probabilities(raw, pack) ?: throw IllegalStateException("bad model output")
+        val out = FloatArray(labels.size)
+        pack.labels.forEachIndexed { i, l ->
+            val idx = labels.indexOf(l.category)
+            if (l != AiLabel.SUGGESTIVE && idx >= 0) out[idx] += probs[i].toFloat()
+        }
+        return out
+    }
+
+    override fun close() = Unit
+}

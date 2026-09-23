@@ -218,6 +218,25 @@ class ContentShieldTest {
         assertEquals(ImageModelState.NOT_LOADED, c.state)
     }
 
+    @Test fun checkImageUsesThePackAndClosesTheRuntimeEachTime() {
+        val gm = BuiltInImagePacks.GANTMAN_NSFW_MNV2
+        val opened = mutableListOf<FixedRuntime>()
+        // drawings, hentai, neutral, porn, sexy
+        val bridge = PackImageModelRuntime(gm) { FixedRuntime(floatArrayOf(0.05f, 0.30f, 0.05f, 0.50f, 0.10f)).also { opened += it } }
+        assertEquals(listOf(Category.SAFE, Category.SEXUAL), bridge.labels)
+        assertEquals("gantman-nsfw-mnv2@110", bridge.modelId)
+        val out = bridge.run(FloatArray(gm.input.tensorLength))
+        assertEquals(0.10f, out[0], 1e-5f) // drawings + neutral
+        assertEquals(0.80f, out[1], 1e-5f) // hentai + porn; "sexy" not counted here
+        assertTrue("runtime closed after the check", opened.single().closed)
+        val missing = PackImageModelRuntime(gm) { null }
+        try {
+            missing.run(FloatArray(gm.input.tensorLength))
+            fail("no model must not produce a result")
+        } catch (e: IllegalStateException) {
+        }
+    }
+
     @Test fun escalationGoesSkipBackHomeAndResets() {
         val e = BlockEscalation(windowMs = 8_000)
         assertEquals(BlockAction.SKIP, e.next(instagram, 0))
