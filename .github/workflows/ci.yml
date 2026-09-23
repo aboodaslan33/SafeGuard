@@ -77,12 +77,12 @@ jobs:
         # artefact is never published. It proves R8 + resources build.
         run: flutter build apk --release --flavor prod
       - name: Upload the release APK (debug-signed, for device testing only)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: safeguard-prod-release-apk
           path: build/app/outputs/flutter-apk/app-prod-release.apk
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: android-test-reports
