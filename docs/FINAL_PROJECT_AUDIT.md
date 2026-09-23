@@ -249,7 +249,7 @@ Details: docs/AI_CONTENT_SHIELD.md. Manual plan: docs/FINAL_AI_TESTING.md.
 | Privacy guarantees in code (no logging/storage/network/capture/overlay in the shield path; config lists exactly the supported apps; no new permission) | VERIFIED (`ShieldSourceAuditTest`) |
 | Dart ↔ Kotlin ids, parsing, screen states, disclosure, PIN on loosening, English/Arabic, layout | VERIFIED (`content_shield_test`, `i18n_test`, `layout_test`) |
 | Android service compiles against android.jar (harness) | VERIFIED |
-| Android build, lint, Robolectric, R8 release build with the shield | See the CI row in §1 |
+| Android build, lint, Robolectric, R8 release build with the shield | VERIFIED on CI: run 35908219787 on `e21f480`, all jobs green (Flutter tests, Kotlin + Robolectric tests, lint, debug APKs, unsigned release APK with R8, gitleaks) |
 | Shield on a real device (any app) | **NOT VERIFIED:** every scenario in FINAL_AI_TESTING.md is NOT EXECUTED |
 | Image / video classification | **NOT IMPLEMENTED as working AI:** no image model bundled, no runtime compiled in; pipeline tested only with a fixed-output test double. The UI reports it as unavailable |
 | Screen capture (MediaProjection) | NOT IMPLEMENTED (designed; waits for an image model) |
