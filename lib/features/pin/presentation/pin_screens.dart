@@ -85,7 +85,10 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
           // Router redirect continues into the setup wizard once saved.
           deps.settings.setupPending = true;
           final saved = await deps.settings.completeOnboarding();
-          if (saved case Err(:final failure)) return failure.message;
+          if (saved case Err(:final failure)) {
+            deps.settings.setupPending = false;
+            return failure.message;
+          }
         }
         return null;
     }

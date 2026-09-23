@@ -47,6 +47,33 @@ flutter build apk --release         # للتثبيت المباشر
 3. تأكد أن `adb logcat -s SafeGuard` لا يُظهر نطاقات أو نصوصًا.
 4. إن فشل شيء في الإصدار فقط، فالسبب غالبًا R8. أرسل رسالة الخطأ لتُضاف قاعدة `-keep` محددة.
 
-## 5. Build flavors
+## 5. نسخ البناء (Flavors)
 
-لم تُضف. التطبيق بلا خوادم، فلا فرق بين dev وprod. تُضاف عند إضافة خادم (انظر `PHASE_6_SECURITY.md` §10).
+| النسخة | الحزمة | الاسم | الاستخدام |
+|---|---|---|---|
+| `prod` (الافتراضية) | `com.safeguard.app` | SafeGuard | Google Play بكل مساراته (داخلي، تجريبي مغلق/مفتوح، إنتاج) |
+| `staging` | `com.safeguard.app.staging` | SafeGuard Beta | اختبار داخلي بتثبيت مباشر، بجانب نسخة الإنتاج |
+| `dev` | `com.safeguard.app.dev` | SafeGuard Dev | التطوير |
+
+```powershell
+flutter run                                   # prod (default-flavor في pubspec)
+flutter run --flavor dev
+flutter build apk --release --flavor staging  # للمختبرين بالتثبيت المباشر
+flutter build appbundle --release             # prod للرفع إلى Play
+```
+
+- لا فرق في الخوادم أو المفاتيح بين النسخ، لأن التطبيق لا يتصل بأي خادم.
+- بيانات الاختبار (قواعد تجريبية) تُزرع فقط في بناء **debug** لأي نسخة. نسخة release لا تحتويها.
+- `MockClassifier` موجود في `src/test` فقط.
+
+## 6. مسار الإصدار
+
+1. **اختبار داخلي** (Play Internal testing، حتى 100 مختبر): نسخة `prod`.
+   اتبع `TEST_MATRIX.md` وسجّل النتائج في `DEVICE_TEST_LOG.md`.
+2. **اختبار مغلق** (Closed testing): مجموعة مختبرين حقيقيين، أسبوعان على
+   الأقل. المختبرون يرسلون «الإعدادات ← التشخيص ← نسخ» مع كل مشكلة.
+3. **اختبار مفتوح** (اختياري): فقط بعد أن تصبح نتائج المصفوفة PASS للحالات الأساسية.
+4. **الإنتاج:** بعد اكتمال `RELEASE_CHECKLIST.md`.
+
+رقم الإصدار: زِد `version` في `pubspec.yaml` و`AppInfo` في `lib/app/app_info.dart`
+معًا (اختبار آلي يتحقق من تطابقهما).
