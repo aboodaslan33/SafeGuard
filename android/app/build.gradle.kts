@@ -30,6 +30,12 @@ android {
         versionName = flutter.versionName
     }
 
+    // Bundled domain lists are memory-mapped from the APK; they must be stored
+    // uncompressed (they are random hashes and wouldn't compress anyway).
+    androidResources {
+        noCompress += "sgbl"
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

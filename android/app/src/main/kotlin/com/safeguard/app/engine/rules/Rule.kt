@@ -46,7 +46,10 @@ enum class RuleSource(val id: String) {
     REMOTE("remote"),
 
     /** Debug-only fixtures for manual testing on a device. */
-    TEST("test");
+    TEST("test"),
+
+    /** Bundled category lists (compact hashed assets, see DomainLists). */
+    BUNDLED_LIST("bundled_list");
 
     companion object {
         fun fromId(id: String?): RuleSource? = entries.firstOrNull { it.id == id }

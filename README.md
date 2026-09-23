@@ -17,14 +17,16 @@ SafeGuard تطبيق Flutter + Kotlin يهدف إلى حجب المحتوى غي
 >
 > ⚠️ **لم يُختبر أي شيء على جهاز Android حقيقي بعد**، ولم يُبنَ APK: بيئة
 > التطوير بلا Android SDK (مصدره محجوب بسياسة الشبكة). المنطق مختبر آليًا
-> (Flutter 142، Kotlin 217) وطبقة Android مُتحقق من ترجمتها فقط. انظر
+> (Flutter 142، Kotlin 225) وطبقة Android مُتحقق من ترجمتها فقط. انظر
 > [`docs/PHASE_2_REAL_DEVICE_TEST.md`](docs/PHASE_2_REAL_DEVICE_TEST.md) و
 > [`docs/PHASE_3_TESTING.md`](docs/PHASE_3_TESTING.md) و
 > [`docs/PHASE_4_AI.md`](docs/PHASE_4_AI.md) و
 > [`docs/PHASE_5_REPORT.md`](docs/PHASE_5_REPORT.md).
 >
-> ⚠️ **لا توجد قوائم فئات مضمّنة في نسخة الإصدار** لفلترة النطاقات (نسخة debug
-> فيها نطاقات اختبار فقط). فحص البحث يعتمد على معجم قواعد صغير ومحايد.
+> **قوائم مضمّنة:** نحو 1.32 مليون نطاق (مقامرة 342 ألفًا، محتوى جنسي 953 ألفًا،
+> مخدرات 26 ألفًا) من The Block List Project (رخصة Unlicense/MIT). قوائم تجمّع
+> آليًا وقد تحتوي أخطاء؛ استخدم قائمة السماح عند حظر خاطئ. التفاصيل:
+> [`docs/LISTS.md`](docs/LISTS.md). لا توجد قوائم للعنف والمحتوى الدموي والخطِر.
 
 ---
 
@@ -430,7 +432,7 @@ flutter build apk --release # يوقَّع بمفتاح debug مؤقتًا (ان
 | المجموعة | العدد | الحالة |
 |---|---|---|
 | Flutter (`flutter test`) | 142 | ✅ (منها 20 للمرحلة 3 و21 للمرحلة 4 و28 للمرحلة 5) |
-| Kotlin JUnit (المحرك) | 217 | ✅ (منها 45 للمرحلة 3 و83 للمرحلة 4 و44 للمرحلة 5)، شُغّلت عبر أداة JVM لأن `./gradlew test` يحتاج Android SDK |
+| Kotlin JUnit (المحرك) | 225 | ✅ (منها 45 للمرحلة 3 و83 للمرحلة 4 و44 للمرحلة 5 و8 للقوائم المضمّنة)، شُغّلت عبر أداة JVM لأن `./gradlew test` يحتاج Android SDK |
 | `flutter analyze` | — | ✅ لا مشاكل |
 | ترجمة طبقة Android أمام API 36 | — | ✅ |
 | Robolectric SQLite | — | ❌ لم يُشغَّل (Google Maven محجوب) |

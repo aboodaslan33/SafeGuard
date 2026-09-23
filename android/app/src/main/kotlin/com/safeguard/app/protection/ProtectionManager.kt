@@ -12,6 +12,14 @@ import android.app.PendingIntent
 import android.net.VpnService
 import android.util.Log
 import com.safeguard.app.MainActivity
+import com.safeguard.app.engine.rules.BundledListStore
+import com.safeguard.app.engine.rules.BundledLists
+import com.safeguard.app.engine.rules.CompositeRuleStore
+import com.safeguard.app.engine.rules.HashedDomainList
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.security.MessageDigest
 import com.safeguard.app.data.SqliteCustomKeywordStore
 import com.safeguard.app.engine.health.HealthInputs
 import com.safeguard.app.engine.health.HealthReport
@@ -93,7 +101,10 @@ class ProtectionManager private constructor(private val context: Context) {
     val config = ProtectionConfigStore(context)
     private val database = SafeGuardDatabase(context)
     val rules = SqliteRuleStore(database)
-    val engine = RuleEngine(rules)
+    @Volatile private var bundledLists: List<HashedDomainList> = emptyList()
+
+    /** SQLite rules + the bundled category lists (loaded in the background). */
+    val engine = RuleEngine(CompositeRuleStore(rules, BundledListStore { bundledLists }))
     private val events = SqliteBlockEventStore(database)
     private val logExecutor = Executors.newSingleThreadExecutor { Thread(it, "sg-block-log").apply { isDaemon = true } }
     val logger = BlockLogger(events, logExecutor)
@@ -159,6 +170,12 @@ class ProtectionManager private constructor(private val context: Context) {
     init {
         seedBuiltInRules()
         refreshRuleCounts()
+        // ~10 MB of lists: map and verify off the main thread, then enable.
+        Thread({
+            bundledLists = loadBundledLists()
+            engine.invalidate()
+            refreshRuleCounts()
+        }, "sg-lists").apply { isDaemon = true }.start()
         status.update { it.copy(protectionEnabled = config.enabled, enabledCategories = config.effectiveCategories.size) }
         // Interruption ("tamper") detection: VPN transitions the user didn't ask for.
         var previous = status.current.vpnState
@@ -527,8 +544,37 @@ class ProtectionManager private constructor(private val context: Context) {
     }
 
     private fun refreshRuleCounts() {
+        val listed = bundledLists.sumOf { it.size }
         status.update {
-            it.copy(rulesReady = true, ruleCount = rules.count(), blockingRuleCount = rules.countBlocking())
+            it.copy(rulesReady = true, ruleCount = rules.count() + listed, blockingRuleCount = rules.countBlocking() + listed)
+        }
+    }
+
+    /**
+     * Maps each bundled list asset (uncompressed in the APK, so no heap
+     * copy), checks its pinned size and SHA-256, and validates it. A list
+     * that fails any check is skipped — never partially used.
+     */
+    private fun loadBundledLists(): List<HashedDomainList> = BundledLists.specs.mapNotNull { spec ->
+        try {
+            val buffer: ByteBuffer = try {
+                context.assets.openFd(spec.assetPath).use { fd ->
+                    FileInputStream(fd.fileDescriptor).channel.use { ch ->
+                        ch.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
+                    }
+                }
+            } catch (e: java.io.IOException) {
+                // Asset stored compressed: fall back to reading it into memory.
+                ByteBuffer.wrap(context.assets.open(spec.assetPath).use { it.readBytes() })
+            }
+            if (buffer.capacity().toLong() != spec.sizeBytes) throw IllegalStateException("size mismatch")
+            val digest = MessageDigest.getInstance("SHA-256").apply { update(buffer.duplicate()) }.digest()
+                .joinToString("") { "%02x".format(it) }
+            if (digest != spec.sha256) throw IllegalStateException("checksum mismatch")
+            HashedDomainList.parse(buffer).takeIf { it.size == spec.entries && it.category == spec.category }
+        } catch (e: Exception) {
+            Log.e("SafeGuard", "bundled list ${spec.assetPath} unusable: ${e.javaClass.simpleName}")
+            null
         }
     }
 
