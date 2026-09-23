@@ -56,7 +56,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
-import java.time.ZoneOffset
+import java.util.TimeZone
 
 class ProtectionModesTest {
     private val user = UserSettings(
@@ -527,7 +527,7 @@ class DetailedStatisticsTest {
         add(now - 3 * day, EventSource.DNS, Category.SEXUAL)
         add(now - 20 * day, EventSource.AI, Category.DRUGS)
 
-        val stats = StatisticsService(store, clock = { now }, zone = { ZoneOffset.UTC }, reportsSince = { since -> if (since <= now - 7 * day) 2 else 1 })
+        val stats = StatisticsService(store, clock = { now }, zone = { TimeZone.getTimeZone("UTC") }, reportsSince = { since -> if (since <= now - 7 * day) 2 else 1 })
             .detailed()
         assertEquals(3, stats.today.total)
         assertEquals(mapOf(EventSource.DNS to 1, EventSource.SEARCH to 1, EventSource.AI to 1), stats.today.bySource)

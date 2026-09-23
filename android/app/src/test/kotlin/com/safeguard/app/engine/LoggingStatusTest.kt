@@ -18,8 +18,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.TimeZone
 
 class LoggingStatusTest {
     private val direct = java.util.concurrent.Executor { it.run() }
@@ -75,13 +75,26 @@ class LoggingStatusTest {
         store.insert(BlockEvent(now - 13 * hour, "c.test", Category.GAMBLING)) // yesterday
         store.insert(BlockEvent(now - 6 * 24 * hour, "d.test", Category.DRUGS)) // this week
         store.insert(BlockEvent(now - 10 * 24 * hour, "e.test", Category.VIOLENCE)) // older
-        val stats = StatisticsService(store, { now }, { zone as ZoneId }).compute()
+        val stats = StatisticsService(store, { now }, { TimeZone.getTimeZone("UTC") }).compute()
         assertEquals(2, stats.today)
         assertEquals(4, stats.last7Days)
         assertEquals(5L, stats.total)
         assertEquals(2, stats.byCategory[Category.SEXUAL])
         assertEquals(1, stats.byCategory[Category.VIOLENCE])
         assertNull(stats.byCategory[Category.GORE])
+    }
+
+    @Test
+    fun statisticsTodayUsesLocalMidnightOfTheGivenZone() {
+        // 2026-09-22 01:30 in Riyadh (UTC+3) = 2026-09-21 22:30 UTC.
+        val riyadh = TimeZone.getTimeZone("Asia/Riyadh")
+        val now = LocalDateTime.of(2026, 9, 21, 22, 30).toInstant(ZoneOffset.UTC).toEpochMilli()
+        val minute = 60_000L
+        val store = InMemoryBlockEventStore()
+        store.insert(BlockEvent(now - 60 * minute, "a.test", Category.SEXUAL)) // 00:30 local: today
+        store.insert(BlockEvent(now - 120 * minute, "b.test", Category.SEXUAL)) // 23:30 local yesterday
+        assertEquals(1, StatisticsService(store, { now }, { riyadh }).compute().today)
+        assertEquals(2, StatisticsService(store, { now }, { TimeZone.getTimeZone("UTC") }).compute().today)
     }
 
     @Test
