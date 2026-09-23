@@ -2,6 +2,7 @@ package com.safeguard.app.engine.rules
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Large category blocklists in a compact, read-only form.
@@ -140,7 +141,29 @@ class BundledListStore(private val lists: () -> List<HashedDomainList>) {
 }
 
 /** [primary] (SQLite) plus the read-only bundled lists for lookups. */
-class CompositeRuleStore(private val primary: RuleStore, private val bundled: BundledListStore) : RuleStore by primary {
-    override fun findEnabled(domains: Collection<String>): List<Rule> =
-        primary.findEnabled(domains) + bundled.find(domains)
+class CompositeRuleStore(
+    private val primary: RuleStore,
+    private val bundled: BundledListStore,
+    private val onPrimaryFailure: (RuntimeException) -> Unit = {},
+) : RuleStore by primary {
+    private val failures = AtomicLong()
+
+    /** Lookups where the primary (SQLite) store failed; results then aren't cached. */
+    val primaryFailures: Long get() = failures.get()
+
+    /**
+     * A database error must not take the DNS path down: the bundled lists
+     * keep blocking. User rules (including the allowlist) are unavailable
+     * until the database recovers, so this fails closed, not open.
+     */
+    override fun findEnabled(domains: Collection<String>): List<Rule> {
+        val user = try {
+            primary.findEnabled(domains)
+        } catch (e: RuntimeException) {
+            failures.incrementAndGet()
+            onPrimaryFailure(e)
+            emptyList()
+        }
+        return user + bundled.find(domains)
+    }
 }

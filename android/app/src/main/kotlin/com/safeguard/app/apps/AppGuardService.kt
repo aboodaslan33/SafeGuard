@@ -32,6 +32,9 @@ class AppGuardService : AccessibilityService() {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
+        // Any other app in front ends the de-dupe window, so relaunching a
+        // protected app right after "home" is caught again.
+        if (pkg != lastBlocked) lastBlocked = null
 
         val decision = manager.onForegroundApp(pkg)
         if (decision.action != AppAction.BLOCK_APP) return

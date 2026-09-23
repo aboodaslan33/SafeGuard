@@ -1,6 +1,7 @@
 package com.safeguard.app.engine.rules
 
 import com.safeguard.app.engine.domain.DomainName
+import java.util.concurrent.atomic.AtomicLong
 
 /** What to do with a domain that no rule and no classifier knows. */
 enum class UnknownDomainPolicy {
@@ -132,13 +133,25 @@ class RuleEngine(
         }
     }
 
+    /** Bumped by [invalidate]; a lookup started before it isn't cached. */
+    private val generation = AtomicLong()
+
     /** Call after any rule change. */
-    fun invalidate() = cache.clear()
+    fun invalidate() {
+        generation.incrementAndGet()
+        cache.clear()
+    }
 
     private fun matchesFor(domain: String): List<Rule> {
         cache.get(domain)?.let { return it }
+        val gen = generation.get()
+        val composite = store as? CompositeRuleStore
+        val failuresBefore = composite?.primaryFailures ?: 0
         val found = store.findEnabled(DomainName.matchCandidates(domain))
-        cache.put(domain, found)
+        // Don't cache a partial answer (database error) or one computed
+        // against rules that changed meanwhile (e.g. lists finished loading).
+        val degraded = composite != null && composite.primaryFailures != failuresBefore
+        if (!degraded && generation.get() == gen) cache.put(domain, found)
         return found
     }
 

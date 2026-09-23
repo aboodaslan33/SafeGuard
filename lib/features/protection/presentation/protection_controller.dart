@@ -399,15 +399,20 @@ class ProtectionController extends ChangeNotifier {
       _ai = await _engine.aiSettings();
       _aiStats = await _engine.aiStatistics();
       _snapshot = await _engine.status();
+      final before = await _engine.health();
+      // Safe Mode and a pause stop filtering on purpose: never undo them
+      // just because the app was opened.
       final shouldResume =
           resume &&
           _state.enabled &&
+          !before.safeMode &&
+          !before.paused &&
           _snapshot.vpnState == VpnState.stopped &&
           !_snapshot.otherVpnActive &&
           await _engine.hasVpnPermission();
       if (shouldResume) await _engine.start();
       await refreshStats();
-      _applyHealth(await _engine.health());
+      _applyHealth(shouldResume ? await _engine.health() : before);
     } catch (e, s) {
       AppLogger.error('engine', e, s);
     }

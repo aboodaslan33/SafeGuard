@@ -123,7 +123,13 @@ class ProtectionChannel(
     private var pendingPermission: MethodChannel.Result? = null
     private var pendingImage: MethodChannel.Result? = null
     private var pendingExport: Pair<MethodChannel.Result, String>? = null
-    private val statusListener: (ProtectionStatus) -> Unit = { s -> main.post { sink?.success(s.toMap()) } }
+    /**
+     * Status changes come from several threads; posting the snapshot each
+     * one saw could deliver them out of order. Instead every change posts a
+     * read of the *current* status on the main thread, so the last event
+     * Flutter receives is always the latest state.
+     */
+    private val statusListener: (ProtectionStatus) -> Unit = { _ -> main.post { sink?.success(manager.status.current.toMap()) } }
 
     init {
         methods.setMethodCallHandler(this)
@@ -135,6 +141,13 @@ class ProtectionChannel(
         events.setStreamHandler(null)
         manager.status.removeListener(statusListener)
         io.shutdown()
+        // The activity is going away: don't leave Dart futures waiting forever.
+        pendingPermission?.error("DETACHED", null, null)
+        pendingImage?.error("DETACHED", null, null)
+        pendingExport?.first?.error("DETACHED", null, null)
+        pendingPermission = null
+        pendingImage = null
+        pendingExport = null
     }
 
     /** Forwarded from MainActivity.onActivityResult. */
@@ -182,8 +195,7 @@ class ProtectionChannel(
         manager.status.addListener(statusListener)
         io.execute {
             manager.refreshEnvironment()
-            val snapshot = manager.status.current.toMap()
-            main.post { this.sink?.success(snapshot) }
+            main.post { this.sink?.success(manager.status.current.toMap()) }
         }
     }
 

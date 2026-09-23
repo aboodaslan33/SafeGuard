@@ -47,7 +47,15 @@ class SafeGuardVpnService : VpnService() {
     private var forwarder: DnsForwarder? = null
     private var monitor: NetworkMonitor? = null
 
+    /** Set by onRevoke(): another VPN owns the slot; never fight for it. */
+    @Volatile private var revoked = false
+
+    /** Posts recovery work; cleared whenever the session changes. */
+    private val main = Handler(Looper.getMainLooper())
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A pending automatic recovery belongs to the previous session.
+        main.removeCallbacksAndMessages(null)
         return when (intent?.action) {
             ACTION_STOP -> {
                 shutdown()
@@ -70,6 +78,9 @@ class SafeGuardVpnService : VpnService() {
                     stopSelf()
                     return START_NOT_STICKY
                 }
+                // An explicit (re)start by the user or the system ends the
+                // "revoked" state of the previous session.
+                revoked = false
                 establish()
                 START_STICKY
             }
@@ -202,15 +213,19 @@ class SafeGuardVpnService : VpnService() {
             Log.e(TAG, "filter loop crashed: ${e.javaClass.simpleName}")
             failure = "filter loop: ${e.javaClass.simpleName}"
         }
-        if (!stopRequested) {
+        // Only the current session may recover: a stop, a revoke or a newer
+        // session (after a slow shutdown) makes this failure stale.
+        if (!stopRequested && !revoked && tun === fd) {
             // The loop died on its own. Leaving the tun up would route every
             // DNS query into a dead interface (the device loses name
             // resolution while the UI says "active"): tear down, then try a
             // bounded, backed-off recovery (RecoveryPolicy). If recovery is
             // not allowed or exhausted, report the failure honestly.
             val reason = failure ?: "filter loop stopped"
-            val main = Handler(Looper.getMainLooper())
             main.post {
+                // onRevoke runs on a binder thread and may land after the
+                // loop saw the interface drop: re-check on the main thread.
+                if (tun !== fd || revoked) return@post
                 shutdown()
                 val delay = manager.recovery.nextDelay(manager.recoveryFacts(VpnState.ERROR), System.currentTimeMillis())
                 if (delay == null) {
@@ -220,6 +235,7 @@ class SafeGuardVpnService : VpnService() {
                 }
                 manager.status.starting()
                 main.postDelayed({
+                    if (revoked || tun != null) return@postDelayed // superseded
                     manager.recovery.recordAttempt(System.currentTimeMillis())
                     if (!manager.config.enabled || manager.config.safeMode) {
                         manager.status.stopped()
@@ -234,9 +250,9 @@ class SafeGuardVpnService : VpnService() {
     }
 
     @Synchronized
-    private fun shutdown() {
+    private fun shutdown(reportStopping: Boolean = true) {
         stopRequested = true
-        manager.status.stopping()
+        if (reportStopping) manager.status.stopping()
         interruptPipe?.let { pipe ->
             try {
                 Os.write(pipe[1], byteArrayOf(1), 0, 1)
@@ -275,13 +291,18 @@ class SafeGuardVpnService : VpnService() {
 
     /** Another VPN was activated, or the user disconnected us in Settings. */
     override fun onRevoke() {
-        shutdown()
+        revoked = true
+        main.removeCallbacksAndMessages(null)
+        // REVOKED straight from RUNNING, so the interruption is recorded
+        // (a detour through STOPPING would hide it from the detector).
         manager.status.revoked()
+        shutdown(reportStopping = false)
         manager.refreshEnvironment()
         super.onRevoke() // stops the service
     }
 
     override fun onDestroy() {
+        main.removeCallbacksAndMessages(null)
         val wasRunning = tun != null
         shutdown()
         if (wasRunning) manager.status.stopped()

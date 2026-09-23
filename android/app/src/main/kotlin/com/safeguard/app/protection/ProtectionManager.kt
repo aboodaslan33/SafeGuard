@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityManager
 import android.content.pm.ApplicationInfo
 import android.app.PendingIntent
 import android.net.VpnService
+import android.os.SystemClock
 import android.util.Log
 import com.safeguard.app.MainActivity
 import com.safeguard.app.engine.rules.BundledListStore
@@ -105,7 +106,23 @@ class ProtectionManager private constructor(private val context: Context) {
     @Volatile private var bundledLists: List<HashedDomainList> = emptyList()
 
     /** SQLite rules + the bundled category lists (loaded in the background). */
-    val engine = RuleEngine(CompositeRuleStore(rules, BundledListStore { bundledLists }))
+    val engine = RuleEngine(CompositeRuleStore(rules, BundledListStore { bundledLists }, ::onDatabaseFailure))
+
+    /** Last time a rule lookup hit a database error (0 = never). */
+    @Volatile private var lastDatabaseFailureAt = 0L
+
+    /** Set once the bundled lists finished loading (or failed to). */
+    @Volatile private var listsLoaded = false
+
+    private fun onDatabaseFailure(e: RuntimeException) {
+        val now = System.currentTimeMillis()
+        if (now - lastDatabaseFailureAt > 60_000) Log.w("SafeGuard", "rule lookup failed: ${e.javaClass.simpleName}")
+        lastDatabaseFailureAt = now
+    }
+
+    /** The database opened and no lookup failed in the last 5 minutes. */
+    private fun databaseOk(): Boolean =
+        database.isHealthy() && System.currentTimeMillis() - lastDatabaseFailureAt > 5 * 60_000
     private val events = SqliteBlockEventStore(database)
     private val logExecutor = Executors.newSingleThreadExecutor { Thread(it, "sg-block-log").apply { isDaemon = true } }
     val logger = BlockLogger(events, logExecutor, retention = { config.logRetention })
@@ -177,21 +194,27 @@ class ProtectionManager private constructor(private val context: Context) {
         // ~10 MB of lists: map and verify off the main thread, then enable.
         Thread({
             bundledLists = loadBundledLists()
+            listsLoaded = true
             engine.invalidate()
             refreshRuleCounts()
         }, "sg-lists").apply { isDaemon = true }.start()
         status.update { it.copy(protectionEnabled = config.enabled, enabledCategories = config.effectiveCategories.size) }
         // Interruption ("tamper") detection: VPN transitions the user didn't ask for.
+        // Listeners run on whichever thread changed the status: serialise.
         var previous = status.current.vpnState
+        val incidentLock = Any()
         status.addListener { s ->
-            val incident = IncidentDetector.onVpnTransition(
-                previous,
-                s.vpnState,
-                userWantsProtection = config.enabled && !config.safeMode,
-                now = System.currentTimeMillis(),
-            )
-            previous = s.vpnState
-            if (incident != null) config.addIncident(incident)
+            synchronized(incidentLock) {
+                if (s.vpnState == previous) return@synchronized
+                val incident = IncidentDetector.onVpnTransition(
+                    previous,
+                    s.vpnState,
+                    userWantsProtection = config.enabled && !config.safeMode,
+                    now = System.currentTimeMillis(),
+                )
+                previous = s.vpnState
+                if (incident != null) config.addIncident(incident)
+            }
         }
     }
 
@@ -314,7 +337,7 @@ class ProtectionManager private constructor(private val context: Context) {
     fun health(): HealthReport {
         refreshEnvironment()
         val a11y = accessibilityState()
-        val appCount = protectedApps.list().size
+        val appCount = runCatching { protectedApps.list().size }.getOrDefault(0)
         val a11yOn = a11y == AccessibilityState.ENABLED
         IncidentDetector.onAccessibilityChange(config.accessibilityWasEnabled, a11yOn, appCount, System.currentTimeMillis())
             ?.let { config.addIncident(it) }
@@ -334,13 +357,13 @@ class ProtectionManager private constructor(private val context: Context) {
                 upstreamFailing = s.vpnState == VpnState.RUNNING && upstreamHealth.isFailing(System.currentTimeMillis()),
                 rulesReady = s.rulesReady,
                 blockingRuleCount = s.blockingRuleCount,
-                customKeywordCount = keywords.list().size,
+                customKeywordCount = runCatching { keywords.list().size }.getOrDefault(0),
                 searchEnabled = config.searchEffectivelyEnabled,
                 aiEnabled = config.effectiveAi.enabled,
                 aiTextModelAvailable = contentClassifier.isAvailable(ContentKind.TEXT),
                 protectedAppCount = appCount,
                 accessibility = a11y,
-                databaseOk = database.isHealthy(),
+                databaseOk = databaseOk(),
             ),
         )
     }
@@ -493,7 +516,20 @@ class ProtectionManager private constructor(private val context: Context) {
     }
 
     /** Launchers, the default dialer: blocking them would lock the owner out. */
+    @Volatile private var exemptCache: Pair<Long, Set<String>>? = null
+
+    /**
+     * Launcher + default dialer. Called on every foreground-app event (main
+     * thread), so the package-manager query is cached for a minute: the
+     * default home/dialer app changes rarely.
+     */
     private fun deviceExemptPackages(): Set<String> {
+        val now = SystemClock.elapsedRealtime()
+        exemptCache?.let { (at, set) -> if (now - at < 60_000) return set }
+        return queryExemptPackages().also { exemptCache = now to it }
+    }
+
+    private fun queryExemptPackages(): Set<String> {
         val pm = context.packageManager
         val out = HashSet<String>()
         @Suppress("DEPRECATION")
@@ -554,10 +590,19 @@ class ProtectionManager private constructor(private val context: Context) {
         refreshRuleCounts()
     }
 
+    /** Never throws: a database error only leaves the counts at the lists. */
     private fun refreshRuleCounts() {
         val listed = bundledLists.sumOf { it.size }
+        val (count, blocking) = try {
+            rules.count() to rules.countBlocking()
+        } catch (e: RuntimeException) {
+            onDatabaseFailure(e)
+            0 to 0
+        }
         status.update {
-            it.copy(rulesReady = true, ruleCount = rules.count() + listed, blockingRuleCount = rules.countBlocking() + listed)
+            // "Ready" only once the bundled lists are in: before that most
+            // category blocking isn't active yet.
+            it.copy(rulesReady = listsLoaded, ruleCount = count + listed, blockingRuleCount = blocking + listed)
         }
     }
 

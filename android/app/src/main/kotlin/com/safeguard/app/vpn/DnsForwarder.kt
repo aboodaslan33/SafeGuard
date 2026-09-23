@@ -91,7 +91,12 @@ class DnsForwarder(
     private fun fitToMtu(answer: ByteArray): ByteArray {
         if (answer.size <= MAX_UDP_PAYLOAD) return answer
         val q = DnsMessage.parseQuery(answer.copyOf().also { it[2] = (it[2].toInt() and 0x7F).toByte() })
-            ?: return answer.copyOf(DnsMessage.HEADER)
+            ?: return answer.copyOf(DnsMessage.HEADER).also { header ->
+                // Header only: every section count must be zero, and TC set
+                // so the resolver retries instead of reading a broken reply.
+                header[2] = (header[2].toInt() or 0x82).toByte()
+                for (i in 4 until 12) header[i] = 0
+            }
         val truncated = answer.copyOf(q.questionEnd)
         truncated[2] = (truncated[2].toInt() or 0x82).toByte() // QR + TC
         for (i in 6 until 12) truncated[i] = 0

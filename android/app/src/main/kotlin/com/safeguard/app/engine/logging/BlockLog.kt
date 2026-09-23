@@ -130,6 +130,10 @@ class BlockLogger(
 ) : BlockListener {
     private val lastLogged = LruCache<String, Long>(512)
     private var insertsSincePrune = 0
+    private val writeFailures = java.util.concurrent.atomic.AtomicLong()
+
+    /** Log writes that failed (e.g. storage full); shown in diagnostics. */
+    val failedWrites: Long get() = writeFailures.get()
 
     /** Current time on the logger's clock (for non-DNS event sources). */
     fun now(): Long = clock()
@@ -154,10 +158,16 @@ class BlockLogger(
             lastLogged.put(key, now)
         }
         executor.execute {
-            store.insert(event)
-            if (++insertsSincePrune >= 200) {
-                insertsSincePrune = 0
-                store.prune(now - policy.retentionMs, maxRows)
+            // Disk full / I/O errors must never crash the process (and with
+            // it the VPN): losing one log row is the safe failure.
+            try {
+                store.insert(event)
+                if (++insertsSincePrune >= 200) {
+                    insertsSincePrune = 0
+                    store.prune(now - policy.retentionMs, maxRows)
+                }
+            } catch (e: RuntimeException) {
+                writeFailures.incrementAndGet()
             }
         }
     }
@@ -171,7 +181,11 @@ class BlockLogger(
         val policy = retention()
         val now = clock()
         executor.execute {
-            if (policy.keepsLog) store.prune(now - policy.retentionMs, maxRows) else store.prune(Long.MAX_VALUE, 0)
+            try {
+                if (policy.keepsLog) store.prune(now - policy.retentionMs, maxRows) else store.prune(Long.MAX_VALUE, 0)
+            } catch (e: RuntimeException) {
+                writeFailures.incrementAndGet()
+            }
         }
     }
 
