@@ -9,7 +9,6 @@ import com.safeguard.app.engine.ai.text.TextModel
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
-import java.lang.management.ManagementFactory
 
 /**
  * Micro-benchmarks on the build machine's JVM (NOT an Android device).
@@ -18,18 +17,24 @@ import java.lang.management.ManagementFactory
  * pathological regressions.
  */
 class AiBenchmarkTest {
-    private val threads = ManagementFactory.getThreadMXBean()
+    // java.lang.management isn't in android.jar (the unit-test compile
+    // classpath), so it is reached reflectively; tests run on a desktop JVM.
+    private val threadBean: Any = Class.forName("java.lang.management.ManagementFactory")
+        .getMethod("getThreadMXBean").invoke(null)!!
+    private val cpuTimeMethod = Class.forName("java.lang.management.ThreadMXBean")
+        .getMethod("getCurrentThreadCpuTime")
+    private fun currentThreadCpuTime(): Long = cpuTimeMethod.invoke(threadBean) as Long
 
     private fun medianMicros(runs: Int, block: () -> Unit): Pair<Double, Double> {
         repeat(runs / 5) { block() } // warm-up
         val wall = LongArray(runs)
-        val cpuStart = threads.currentThreadCpuTime
+        val cpuStart = currentThreadCpuTime()
         for (i in 0 until runs) {
             val t0 = System.nanoTime()
             block()
             wall[i] = System.nanoTime() - t0
         }
-        val cpuPer = (threads.currentThreadCpuTime - cpuStart) / runs / 1000.0
+        val cpuPer = (currentThreadCpuTime() - cpuStart) / runs / 1000.0
         wall.sort()
         return wall[runs / 2] / 1000.0 to cpuPer
     }
