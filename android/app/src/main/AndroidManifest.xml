@@ -18,6 +18,13 @@
     <!-- Phase 8: the "protection stopped / degraded" alert only. Asked for at
          runtime (Android 13+) from the setup assistant; optional. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      AI Content Shield image checks (optional): a foreground service that
+      holds the MediaProjection the user granted in Android's own consent
+      dialog. Nothing runs without that consent.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
     <!--
       Package visibility (Android 11+): launcher apps only, so the user can
@@ -115,6 +122,10 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/content_shield_config" />
         </service>
+        <service
+            android:name=".shield.ScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <activity
             android:name=".apps.AppBlockedActivity"
             android:exported="false"

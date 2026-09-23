@@ -652,6 +652,12 @@ abstract interface class ProtectionEngine {
 
   /// Records the answer to the shield's accessibility disclosure.
   Future<ShieldStatus> setShieldDisclosure({required bool accepted});
+
+  /// Shows Android's screen-capture consent dialog; true if the user allowed it.
+  Future<bool> requestScreenCapture();
+
+  /// Ends screen capture (the UI asks for the PIN first).
+  Future<void> stopScreenCapture();
 }
 
 /// Engine for platforms without the native layer (tests, previews): reports
@@ -811,6 +817,10 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   @override
   Future<ShieldStatus> setShieldDisclosure({required bool accepted}) async =>
       ShieldStatus.unsupported;
+  @override
+  Future<bool> requestScreenCapture() async => false;
+  @override
+  Future<void> stopScreenCapture() async {}
 }
 
 abstract interface class ProtectionRepository {

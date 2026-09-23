@@ -553,6 +553,9 @@ class FakeProtectionEngine implements ProtectionEngine {
   bool shieldEnabled = false;
   AccessibilityStatus shieldAccessibility = AccessibilityStatus.disabled;
   bool shieldTextModel = true;
+  bool screenCapture = false;
+  bool grantScreenCapture = true;
+  int screenCaptureRequests = 0;
   final shieldDisabledApps = <String>{};
   final shieldDisclosureAnswers = <bool>[];
 
@@ -561,6 +564,7 @@ class FakeProtectionEngine implements ProtectionEngine {
     ('tiktok', 'TikTok', ShieldSupportLevel.textLimited),
     ('youtube', 'YouTube', ShieldSupportLevel.textLimited),
     ('reddit', 'Reddit', ShieldSupportLevel.text),
+    ('facebook', 'Facebook', ShieldSupportLevel.textLimited),
     ('chrome', 'Chrome', ShieldSupportLevel.text),
     ('firefox', 'Firefox', ShieldSupportLevel.text),
   ];
@@ -573,7 +577,7 @@ class FakeProtectionEngine implements ProtectionEngine {
           name: name,
           packages: ['pkg.$key'],
           level: level,
-          limitations: const [ShieldLimitation.imagesNeedModel],
+          limitations: const [ShieldLimitation.imagesNeedCapture],
           enabled: !shieldDisabledApps.contains(key),
           installed: key != 'firefox',
           verifiedOnDevice: false,
@@ -585,26 +589,29 @@ class FakeProtectionEngine implements ProtectionEngine {
       if (apps.every((a) => !a.enabled)) ShieldIssue.noApps,
     ];
     final text = shieldEnabled && blocking.isEmpty && shieldTextModel;
+    final image = shieldEnabled && blocking.isEmpty && screenCapture;
+    final partial = [
+      if (!shieldTextModel) ShieldIssue.textModelUnavailable,
+      if (!screenCapture) ShieldIssue.screenCaptureOff,
+    ];
     return ShieldStatus(
       enabled: shieldEnabled,
       state: !shieldEnabled
           ? ShieldState.off
-          : text
-          ? ShieldState.partial
-          : ShieldState.unavailable,
-      issues: shieldEnabled
-          ? [
-              ...blocking,
-              if (!shieldTextModel) ShieldIssue.textModelUnavailable,
-              ShieldIssue.imageModelUnavailable,
-            ]
-          : const [],
+          : !text && !image
+          ? ShieldState.unavailable
+          : partial.isEmpty
+          ? ShieldState.active
+          : ShieldState.partial,
+      issues: shieldEnabled ? [...blocking, ...partial] : const [],
       textActive: text,
-      imageActive: false,
+      imageActive: image,
+      imageModel: 'gantman-nsfw-mnv2@110',
+      screenCaptureActive: screenCapture,
       accessibility: shieldAccessibility,
       textModel: 'sg-text-1',
       textModelAvailable: shieldTextModel,
-      imageModelState: ImageModelState.notBundled,
+      imageModelState: ImageModelState.notLoaded,
       apps: apps,
     );
   }
@@ -627,6 +634,16 @@ class FakeProtectionEngine implements ProtectionEngine {
     }
     return shield;
   }
+
+  @override
+  Future<bool> requestScreenCapture() async {
+    screenCaptureRequests++;
+    screenCapture = grantScreenCapture;
+    return screenCapture;
+  }
+
+  @override
+  Future<void> stopScreenCapture() async => screenCapture = false;
 
   @override
   Future<ShieldStatus> setShieldDisclosure({required bool accepted}) async {

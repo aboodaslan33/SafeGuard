@@ -35,10 +35,12 @@ import com.safeguard.app.engine.safesearch.SafeSearchConfig
 import com.safeguard.app.engine.safesearch.YouTubeMode
 import com.safeguard.app.engine.search.CustomKeyword
 import com.safeguard.app.engine.search.KeywordException
+import com.safeguard.app.engine.shield.BuiltInImagePacks
 import com.safeguard.app.engine.shield.SupportedApps
 import com.safeguard.app.engine.stats.WindowStatistics
 import com.safeguard.app.engine.status.ProtectionStatus
 import com.safeguard.app.protection.ProtectionManager
+import com.safeguard.app.shield.ScreenCaptureService
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -126,6 +128,7 @@ class ProtectionChannel(
     private val events = EventChannel(messenger, EVENT_CHANNEL)
     private var sink: EventChannel.EventSink? = null
     private var pendingPermission: MethodChannel.Result? = null
+    private var pendingCapture: MethodChannel.Result? = null
     private var pendingImage: MethodChannel.Result? = null
     private var pendingExport: Pair<MethodChannel.Result, String>? = null
     private var pendingNotifications: MethodChannel.Result? = null
@@ -191,6 +194,17 @@ class ProtectionChannel(
             }
             return true
         }
+        if (requestCode == REQUEST_CAPTURE) {
+            val result = pendingCapture ?: return true
+            pendingCapture = null
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                ScreenCaptureService.start(activity, resultCode, data)
+                result.success(true)
+            } else {
+                result.success(false) // the user declined Android's dialog
+            }
+            return true
+        }
         if (requestCode != REQUEST_VPN) return false
         val granted = resultCode == Activity.RESULT_OK
         pendingPermission?.success(granted)
@@ -222,6 +236,12 @@ class ProtectionChannel(
             "openBatterySettings" -> result.success(open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)))
             "openPrivateDnsSettings" -> result.success(open(Intent(Settings.ACTION_WIRELESS_SETTINGS)))
             "checkImage" -> pickImage(result)
+            "requestScreenCapture" -> requestScreenCapture(result)
+            "stopScreenCapture" -> {
+                // Ending capture loosens protection: the UI asks for the PIN first.
+                ScreenCaptureService.stop()
+                result.success(true)
+            }
             "requestNotificationPermission" -> requestNotifications(result)
             "saveExport" -> saveExport(call, result)
             else -> io.execute { handle(call, result) }
@@ -483,6 +503,8 @@ class ProtectionChannel(
             "textModel" to BuiltInModels.TEXT_V1.id,
             "textModelAvailable" to manager.contentClassifier.isAvailable(ContentKind.TEXT),
             "imageModelState" to manager.shieldImageModelState.id,
+            "imageModel" to BuiltInImagePacks.all.firstOrNull()?.modelVersion,
+            "screenCaptureActive" to ScreenCaptureService.running,
             "apps" to SupportedApps.all.map { app ->
                 mapOf(
                     "key" to app.key,
@@ -526,6 +548,38 @@ class ProtectionChannel(
         pendingNotifications?.success(grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
         pendingNotifications = null
         return true
+    }
+
+    /**
+     * Android's own screen-capture consent dialog. Only offered when the
+     * shield is on and the image model is usable; SafeGuard never captures
+     * without this consent.
+     */
+    private fun requestScreenCapture(result: MethodChannel.Result) {
+        if (ScreenCaptureService.running) {
+            result.success(true)
+            return
+        }
+        if (!manager.config.shieldSettings.enabled || !manager.config.enabled) {
+            result.error("NOT_ALLOWED", "Turn on protection and the AI Content Shield first", null)
+            return
+        }
+        if (pendingCapture != null) {
+            result.error("BUSY", "Screen-capture request already in progress", null)
+            return
+        }
+        val intent = ScreenCaptureService.consentIntent(activity)
+        if (intent == null) {
+            result.error("UNSUPPORTED", "Screen capture isn't available on this device", null)
+            return
+        }
+        pendingCapture = result
+        try {
+            activity.startActivityForResult(intent, REQUEST_CAPTURE)
+        } catch (e: ActivityNotFoundException) {
+            pendingCapture = null
+            result.error("UNSUPPORTED", "Screen capture isn't available on this device", null)
+        }
     }
 
     private fun requestPermission(result: MethodChannel.Result) {
@@ -746,6 +800,7 @@ class ProtectionChannel(
         const val REQUEST_IMAGE = 0x5648
         const val REQUEST_EXPORT = 0x5649
         const val REQUEST_NOTIFICATIONS = 0x564A
+        const val REQUEST_CAPTURE = 0x564B
     }
 }
 

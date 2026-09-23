@@ -76,6 +76,8 @@ android {
     // uncompressed (they are random hashes and wouldn't compress anyway).
     androidResources {
         noCompress += "sgbl"
+        // The image model is memory-mapped by LiteRT: keep it uncompressed.
+        noCompress += "tflite"
     }
 
     signingConfigs {
@@ -116,6 +118,10 @@ flutter {
 }
 
 dependencies {
+    // On-device image model runtime (AI Content Shield). LiteRT is Google's
+    // TensorFlow Lite runtime; it executes the pinned .tflite data file only.
+    implementation("com.google.ai.edge.litert:litert:1.4.0")
+
     // Pure-Kotlin engine tests (DNS parsing, rules, logging, statistics).
     testImplementation("junit:junit:4.13.2")
     // Real SQLite schema/query tests on the JVM (data/SqliteStoresTest).

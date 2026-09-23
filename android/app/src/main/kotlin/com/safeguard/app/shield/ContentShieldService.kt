@@ -2,13 +2,17 @@ package com.safeguard.app.shield
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.accessibilityservice.GestureDescription
 import android.content.Intent
+import android.graphics.Path
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.safeguard.app.apps.AppBlockedActivity
+import com.safeguard.app.engine.shield.BlockAction
+import com.safeguard.app.engine.shield.BlockEscalation
 import com.safeguard.app.engine.shield.NodeView
 import com.safeguard.app.engine.shield.ShieldOutcome
 import com.safeguard.app.engine.shield.SupportedApps
@@ -34,8 +38,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   and links are dropped ([VisibleTextExtractor]).
  * - Text is classified in memory on a background thread and discarded; it
  *   is never logged, stored or sent. Only block metadata is logged.
- * - No overlay is drawn: a block sends the user home and shows SafeGuard's
- *   own blocking screen, without the content.
+ * - No overlay is drawn. A block first swipes to the next item (reels,
+ *   shorts, feeds); if blocked content is still there it goes Back, then
+ *   Home with SafeGuard's own blocking screen ([BlockEscalation]). The
+ *   only gestures performed are that one swipe, Back and Home.
+ * - Screen images come only from [ScreenCaptureService] (MediaProjection,
+ *   with Android's consent); this service takes no screenshots.
  *
  * Separate from [com.safeguard.app.apps.AppGuardService] (app protection)
  * so the user grants each permission for its own purpose.
@@ -46,6 +54,7 @@ class ContentShieldService : AccessibilityService() {
     private val main = Handler(Looper.getMainLooper())
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { Thread(it, "sg-shield").apply { isDaemon = true } }
     private val busy = AtomicBoolean(false)
+    private val escalation = BlockEscalation()
     @Volatile private var destroyed = false
     @Volatile private var foreground: String? = null
     private var retried = false
@@ -65,7 +74,9 @@ class ContentShieldService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 if (pkg != foreground) {
                     foreground = pkg
+                    manager.shieldForeground = pkg
                     engine.onForeground(pkg)
+                    ScreenCaptureService.updateActive()
                 }
             }
             else -> engine.onContentChanged()
@@ -98,7 +109,7 @@ class ContentShieldService : AccessibilityService() {
             worker.execute {
                 try {
                     val outcome = engine.onText(pkg, text)
-                    if (outcome is ShieldOutcome.Blocked) main.post { block(outcome) }
+                    if (outcome is ShieldOutcome.Blocked) main.post { act(outcome) }
                 } finally {
                     busy.set(false)
                 }
@@ -115,15 +126,40 @@ class ContentShieldService : AccessibilityService() {
         main.postDelayed(snapshot, RETRY_MS)
     }
 
-    private fun block(outcome: ShieldOutcome.Blocked) {
-        if (destroyed || !manager.onShieldBlock(outcome.event)) return
-        performGlobalAction(GLOBAL_ACTION_HOME)
-        startActivity(
-            Intent(this, AppBlockedActivity::class.java)
-                .putExtra(AppBlockedActivity.EXTRA_KIND, AppBlockedActivity.KIND_CONTENT)
-                .putExtra(AppBlockedActivity.EXTRA_CATEGORY, outcome.event.category.id)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY),
-        )
+    /** Gets blocked content off the screen: skip, then Back, then Home + blocking screen. */
+    private fun act(outcome: ShieldOutcome.Blocked) {
+        val e = outcome.event
+        if (destroyed || e.packageName != foreground) return
+        val action = escalation.next(e.packageName, e.timestamp)
+        if (!manager.onShieldBlock(e, action)) return
+        manager.shield.onContentChanged() // the screen is about to change: let it settle
+        when (action) {
+            BlockAction.SKIP -> if (!swipeToNext()) performGlobalAction(GLOBAL_ACTION_BACK)
+            BlockAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
+            BlockAction.HOME -> {
+                performGlobalAction(GLOBAL_ACTION_HOME)
+                startActivity(
+                    Intent(this, AppBlockedActivity::class.java)
+                        .putExtra(AppBlockedActivity.EXTRA_KIND, AppBlockedActivity.KIND_CONTENT)
+                        .putExtra(AppBlockedActivity.EXTRA_CATEGORY, e.category.id)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY),
+                )
+            }
+        }
+    }
+
+    /** One upward swipe in the middle of the screen: the next reel / short / feed item. */
+    private fun swipeToNext(): Boolean {
+        val m = resources.displayMetrics
+        val x = m.widthPixels / 2f
+        val path = Path().apply {
+            moveTo(x, m.heightPixels * 0.72f)
+            lineTo(x, m.heightPixels * 0.22f)
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, SWIPE_MS))
+            .build()
+        return dispatchGesture(gesture, null, null)
     }
 
     /**
@@ -149,8 +185,11 @@ class ContentShieldService : AccessibilityService() {
         if (!active) {
             main.removeCallbacks(snapshot)
             foreground = null
+            manager.shieldForeground = null
             manager.shield.onForeground(null)
+            escalation.reset()
         }
+        ScreenCaptureService.updateActive()
     }
 
     override fun onInterrupt() = Unit
@@ -184,8 +223,15 @@ class ContentShieldService : AccessibilityService() {
     companion object {
         private const val SETTLE_MS = 450L
         private const val RETRY_MS = 1_100L
+        private const val SWIPE_MS = 180L
 
         @Volatile private var instance: WeakReference<ContentShieldService>? = null
+
+        /** A block found by the image path (capture thread): act on the main thread. */
+        fun onBlocked(outcome: ShieldOutcome.Blocked) {
+            val s = instance?.get() ?: return
+            s.main.post { s.act(outcome) }
+        }
 
         /** Re-applies settings to the running service (if the user enabled it). */
         fun refresh() {

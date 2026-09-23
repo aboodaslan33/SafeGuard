@@ -6,8 +6,8 @@ enum class AcquisitionMethod(val id: String) {
     ACCESSIBILITY_TEXT("accessibility_text"),
 
     /**
-     * Screen frames via MediaProjection (system consent dialog). Needs an
-     * image model; not active in this version (no model is bundled).
+     * Screen frames via MediaProjection: Android's consent dialog and
+     * capture indicator; runs only while the user allows it.
      */
     SCREEN_CAPTURE("screen_capture"),
 }
@@ -26,8 +26,12 @@ enum class SupportLevel(val id: String) {
 
 /** Known reasons content may be missed. Stable ids; the UI translates them. */
 enum class ShieldLimitation(val id: String) {
-    /** Photos and video need the image model, which isn't bundled. */
-    IMAGES_NEED_MODEL("images_need_model"),
+    /**
+     * Photos and video are checked only while screen capture is on (the
+     * user consents in Android's dialog; Android 14+ asks again after a
+     * restart). Protected (DRM) video appears black and can't be checked.
+     */
+    IMAGES_NEED_CAPTURE("images_need_capture"),
 
     /** Mostly video; captions are the only text. */
     MOSTLY_VIDEO("mostly_video"),
@@ -65,7 +69,7 @@ data class SupportedApp(
  * is a data change here; the engine doesn't know app names.
  */
 object SupportedApps {
-    private val common = listOf(ShieldLimitation.IMAGES_NEED_MODEL, ShieldLimitation.SECURE_SURFACES, ShieldLimitation.UI_CHANGES)
+    private val common = listOf(ShieldLimitation.IMAGES_NEED_CAPTURE, ShieldLimitation.SECURE_SURFACES, ShieldLimitation.UI_CHANGES)
     private val both = listOf(AcquisitionMethod.ACCESSIBILITY_TEXT, AcquisitionMethod.SCREEN_CAPTURE)
 
     val all: List<SupportedApp> = listOf(
@@ -84,6 +88,10 @@ object SupportedApps {
         SupportedApp(
             "reddit", "Reddit", listOf("com.reddit.frontpage"), SupportLevel.TEXT, both,
             common + ShieldLimitation.PRIVATE_MESSAGES_VISIBLE,
+        ),
+        SupportedApp(
+            "facebook", "Facebook", listOf("com.facebook.katana", "com.facebook.lite"), SupportLevel.TEXT_LIMITED, both,
+            common + ShieldLimitation.CUSTOM_RENDERING + ShieldLimitation.PRIVATE_MESSAGES_VISIBLE,
         ),
         SupportedApp("chrome", "Chrome", listOf("com.android.chrome"), SupportLevel.TEXT, both, common),
         SupportedApp("firefox", "Firefox", listOf("org.mozilla.firefox"), SupportLevel.TEXT, both, common),

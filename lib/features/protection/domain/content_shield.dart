@@ -43,6 +43,7 @@ enum ShieldIssue {
   noApps('no_apps'),
   textModelUnavailable('text_model_unavailable'),
   imageModelUnavailable('image_model_unavailable'),
+  screenCaptureOff('screen_capture_off'),
   inferenceSlow('inference_slow');
 
   const ShieldIssue(this.id);
@@ -81,8 +82,12 @@ enum ShieldIssue {
       'The text model is unavailable right now.',
     ),
     imageModelUnavailable => tr(
-      'لا يوجد نموذج صور في هذا الإصدار: الصور والفيديو لا تُفحص.',
-      'No image model in this version: images and video are not checked.',
+      'نموذج الصور غير متاح الآن: الصور والفيديو لا تُفحص.',
+      "The image model isn't available right now: images and video aren't checked.",
+    ),
+    screenCaptureOff => tr(
+      'فحص الصور متوقف: فعّله واسمح بالتقاط الشاشة في نافذة Android.',
+      "Image checks are off: turn them on and allow screen capture in Android's dialog.",
     ),
     inferenceSlow => tr(
       'التحليل بطيء على هذا الجهاز، فأُوقف مؤقتًا.',
@@ -149,7 +154,7 @@ enum ShieldSupportLevel {
 
 /// Known reasons content may be missed. Mirrors `ShieldLimitation`.
 enum ShieldLimitation {
-  imagesNeedModel('images_need_model'),
+  imagesNeedCapture('images_need_capture'),
   mostlyVideo('mostly_video'),
   customRendering('custom_rendering'),
   secureSurfaces('secure_surfaces'),
@@ -167,9 +172,9 @@ enum ShieldLimitation {
   }
 
   String get message => switch (this) {
-    imagesNeedModel => tr(
-      'الصور والفيديو لا تُفحص (لا يوجد نموذج صور).',
-      "Photos and video aren't checked (no image model).",
+    imagesNeedCapture => tr(
+      'الصور والفيديو تُفحص فقط أثناء تشغيل «فحص الصور» (يطلب Android الموافقة من جديد بعد إعادة التشغيل). الفيديو المحمي قد يظهر أسود ولا يُفحص.',
+      "Photos and video are checked only while “Image checks” is on (Android asks again after a restart). Protected video may appear black and can't be checked.",
     ),
     mostlyVideo => tr(
       'معظم المحتوى فيديو؛ يُفحص نص العناوين والوصف فقط.',
@@ -253,6 +258,8 @@ class ShieldStatus {
     required this.textModelAvailable,
     required this.imageModelState,
     required this.apps,
+    this.imageModel,
+    this.screenCaptureActive = false,
   });
 
   /// The user turned the shield on.
@@ -268,6 +275,12 @@ class ShieldStatus {
   final bool textModelAvailable;
   final ImageModelState imageModelState;
   final List<ShieldApp> apps;
+
+  /// e.g. `gantman-nsfw-mnv2@110`; null when no image model is bundled.
+  final String? imageModel;
+
+  /// Screen capture (MediaProjection) is running this session.
+  final bool screenCaptureActive;
 
   /// Shown on platforms without the native layer.
   static const unsupported = ShieldStatus(
@@ -298,6 +311,8 @@ class ShieldStatus {
     textModel: m['textModel'] is String ? m['textModel']! as String : '',
     textModelAvailable: m['textModelAvailable'] == true,
     imageModelState: ImageModelState.fromId(m['imageModelState']),
+    imageModel: m['imageModel'] is String ? m['imageModel']! as String : null,
+    screenCaptureActive: m['screenCaptureActive'] == true,
     apps: [
       for (final a in (m['apps'] as List?) ?? const []) ?ShieldApp.fromMap(a),
     ],
@@ -314,5 +329,7 @@ class ShieldStatus {
     textModelAvailable: textModelAvailable,
     imageModelState: imageModelState,
     apps: apps ?? this.apps,
+    imageModel: imageModel,
+    screenCaptureActive: screenCaptureActive,
   );
 }

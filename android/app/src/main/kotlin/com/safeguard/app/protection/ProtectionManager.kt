@@ -16,6 +16,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import com.safeguard.app.MainActivity
 import com.safeguard.app.ai.BitmapImageDecoder
+import com.safeguard.app.ai.LiteRtImageRuntime
 import com.safeguard.app.apps.AppGuardService
 import com.safeguard.app.data.SafeGuardDatabase
 import com.safeguard.app.data.SqliteAiStatsStore
@@ -95,9 +96,12 @@ import com.safeguard.app.engine.search.SearchDecisionListener
 import com.safeguard.app.engine.search.SearchFilterService
 import com.safeguard.app.engine.search.SearchNormalizer
 import com.safeguard.app.engine.search.SearchQuery
+import com.safeguard.app.engine.shield.BlockAction
 import com.safeguard.app.engine.shield.BuiltInImagePacks
 import com.safeguard.app.engine.shield.ContentShieldEngine
+import com.safeguard.app.engine.shield.ImageModelPack
 import com.safeguard.app.engine.shield.ImageModelState
+import com.safeguard.app.engine.shield.ImageRuntimeKind
 import com.safeguard.app.engine.shield.ShieldEvent
 import com.safeguard.app.engine.shield.ShieldImageClassifier
 import com.safeguard.app.engine.shield.ShieldStatus
@@ -109,6 +113,7 @@ import com.safeguard.app.engine.stats.StatisticsService
 import com.safeguard.app.engine.status.ProtectionStatusHolder
 import com.safeguard.app.engine.status.VpnState
 import com.safeguard.app.shield.ContentShieldService
+import com.safeguard.app.shield.ScreenCaptureService
 import com.safeguard.app.vpn.NetworkMonitor
 import com.safeguard.app.vpn.SafeGuardVpnService
 import com.safeguard.app.vpn.UpstreamNetwork
@@ -202,11 +207,19 @@ class ProtectionManager private constructor(private val context: Context) {
     )
 
     /**
-     * Screen-image classification. No image model pack ships
-     * ([BuiltInImagePacks] is empty) and no inference runtime is compiled
-     * in, so this reports NOT_BUNDLED and image AI is unavailable.
+     * Screen-image classification with the pinned image model pack, run by
+     * LiteRT. The model file is memory-mapped from the APK (stored
+     * uncompressed), SHA-256-checked, loaded on the first frame and released
+     * when capture, the shield or protection stops.
      */
-    private val shieldImage = ShieldImageClassifier(BuiltInImagePacks.all.firstOrNull(), readModel = { null }, runtimes = { null })
+    private val shieldImage = ShieldImageClassifier(
+        BuiltInImagePacks.all.firstOrNull(),
+        readModel = ::mapAsset,
+        runtimes = { kind -> if (kind == ImageRuntimeKind.TFLITE) LiteRtImageRuntime.factory else null },
+    )
+
+    /** App in front, as last reported by the shield's accessibility service (supported apps only). */
+    @Volatile var shieldForeground: String? = null
 
     val shield = ContentShieldEngine(
         classifyText = shieldText::classifyText,
@@ -748,6 +761,7 @@ class ProtectionManager private constructor(private val context: Context) {
             accessibilityAvailable = a11y != AccessibilityState.UNAVAILABLE,
             textModelAvailable = contentClassifier.isAvailable(ContentKind.TEXT),
             imageModelAvailable = shieldImage.isUsable,
+            screenCaptureActive = ScreenCaptureService.running,
             textSlow = shield.textSlow,
             imageSlow = shield.imageSlow,
         )
@@ -778,7 +792,7 @@ class ProtectionManager private constructor(private val context: Context) {
      * bucket, model version). Returns false if protection stopped in the
      * meantime, in which case nothing is blocked.
      */
-    fun onShieldBlock(e: ShieldEvent): Boolean {
+    fun onShieldBlock(e: ShieldEvent, action: BlockAction): Boolean {
         if (!shield.isActiveFor(e.packageName)) return false
         logger.record(
             BlockEvent(
@@ -787,16 +801,46 @@ class ProtectionManager private constructor(private val context: Context) {
                 category = e.category,
                 source = EventSource.AI,
                 confidence = e.confidenceBucket / 100.0,
-                ruleType = e.ruleType,
+                ruleType = "${e.ruleType}:${action.id}",
             ),
         )
         return true
     }
 
-    /** Protection, pause or shield settings changed: re-apply to the service; free the model when idle. */
+    /** Screen capture started or stopped: free the image model when it can't be used. */
+    fun onScreenCaptureChanged() {
+        if (!ScreenCaptureService.running) shieldImage.close()
+    }
+
+    /**
+     * Protection, pause or shield settings changed: re-apply to the
+     * services; end screen capture when the shield or protection is turned
+     * off (a pause only detaches it); free the models when idle.
+     */
     private fun onShieldStateChanged() {
+        if (!config.shieldSettings.enabled || !config.enabled) ScreenCaptureService.stop()
         if (!config.shieldSettings.enabled || !shieldContentActive()) shield.release()
         ContentShieldService.refresh()
+        ScreenCaptureService.updateActive()
+    }
+
+    /** Memory-maps an uncompressed asset (falls back to a direct copy if it is compressed). */
+    private fun mapAsset(pack: ImageModelPack): ByteBuffer? = try {
+        context.assets.openFd(pack.assetPath).use { fd ->
+            FileInputStream(fd.fileDescriptor).channel.use { ch ->
+                ch.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
+            }
+        }
+    } catch (e: java.io.IOException) {
+        // openFd fails for compressed assets (FileNotFoundException too): copy instead.
+        try {
+            context.assets.open(pack.assetPath).use { input ->
+                val bytes = input.readBytes()
+                ByteBuffer.allocateDirect(bytes.size).put(bytes).also { it.rewind() }
+            }
+        } catch (missing: java.io.IOException) {
+            null
+        }
     }
 
     /** Launchers, the default dialer: blocking them would lock the owner out. */

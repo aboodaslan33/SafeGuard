@@ -34,7 +34,7 @@ class ShieldSourceAuditTest {
         assertFalse(file("$main/res/xml/accessibility_service_config.xml").contains("canRetrieveWindowContent=\"true\""))
     }
 
-    @Test fun manifestAddsNoCapturingOrOverlayPermission() {
+    @Test fun manifestPermissionsAreExactlyTheDeclaredOnes() {
         val manifest = file("$main/AndroidManifest.xml")
         val permissions = Regex("<uses-permission[^>]*android:name=\"([^\"]+)\"").findAll(manifest).map { it.groupValues[1] }.toSet()
         assertEquals(
@@ -43,10 +43,16 @@ class ShieldSourceAuditTest {
                 "android.permission.ACCESS_NETWORK_STATE",
                 "android.permission.RECEIVE_BOOT_COMPLETED",
                 "android.permission.POST_NOTIFICATIONS",
+                // Screen capture for image checks, only after Android's consent dialog.
+                "android.permission.FOREGROUND_SERVICE",
+                "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION",
             ),
             permissions,
         )
-        assertFalse("no screen-capture service type", manifest.contains("foregroundServiceType=\"mediaProjection\""))
+        val capture = manifest.substringAfter(".shield.ScreenCaptureService").substringBefore("/>")
+        assertTrue(capture.contains("android:foregroundServiceType=\"mediaProjection\""))
+        assertTrue(capture.contains("android:exported=\"false\""))
+        assertEquals("only one media-projection service", 1, Regex("mediaProjection\"").findAll(manifest).count())
         val entry = manifest.substringAfter(".shield.ContentShieldService").substringBefore("</service>")
         assertTrue(entry.contains("android.permission.BIND_ACCESSIBILITY_SERVICE"))
         assertTrue(entry.contains("android:exported=\"false\""))
@@ -64,6 +70,20 @@ class ShieldSourceAuditTest {
             "TYPE_ACCESSIBILITY_OVERLAY", "addView(", "Bitmap.compress",
         )
         for (f in forbidden) assertFalse("shield code must not use $f", code.contains(f))
+    }
+
+    @Test fun screenCaptureNeverSavesEncodesLogsOrSendsFrames() {
+        val code = file("$main/kotlin/com/safeguard/app/shield/ScreenCaptureService.kt").lines()
+            .map { it.substringBefore("//").trim() }
+            .filterNot { it.startsWith("*") || it.startsWith("/*") }
+            .joinToString("\n")
+        for (f in listOf("Log.", "println(", "Bitmap", "compress(", "FileOutputStream", "openFileOutput", "writeBytes(", "HttpURLConnection", "Socket(", "MediaRecorder", "SharedPreferences")) {
+            assertFalse("capture code must not use $f", code.contains(f))
+        }
+        // Frames are released right after classification.
+        assertTrue(code.contains("image.close()"))
+        // Capture only through the consent intent.
+        assertTrue(code.contains("createScreenCaptureIntent"))
     }
 
     @Test fun serviceNeverReceivesEventsFromEveryApp() {

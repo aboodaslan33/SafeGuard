@@ -184,16 +184,54 @@ class ContentShieldTest {
     @Test fun imageWithoutAModelIsSkippedAndReportsNotBundled() {
         val h = Harness({ textResult(Category.SAFE, 0.0) }, clock = { now })
         assertEquals(ShieldOutcome.Skipped, h.engine.onFrame(instagram, frame(16, 16) { _, _ -> 0 }))
-        val c = ShieldImageClassifier(BuiltInImagePacks.all.firstOrNull(), { null }, { null })
+        val c = ShieldImageClassifier(null, { null }, { null })
         assertEquals(ImageModelState.NOT_BUNDLED, c.state)
         assertFalse(c.isUsable)
-        assertTrue("no image model ships in this version", BuiltInImagePacks.all.isEmpty())
+    }
+
+    @Test fun bundledImageModelIsPinnedAndMatchesTheAsset() {
+        val p = BuiltInImagePacks.GANTMAN_NSFW_MNV2
+        assertEquals(listOf(p), BuiltInImagePacks.all)
+        assertEquals("models/gantman-nsfw-mnv2.tflite", p.assetPath)
+        assertEquals(listOf(AiLabel.SAFE, AiLabel.SEXUAL, AiLabel.SAFE, AiLabel.SEXUAL, AiLabel.SUGGESTIVE), p.labels)
+        assertEquals(224, p.input.size)
+        assertEquals(TensorLayout.NHWC, p.layout)
+        val assets = java.io.File(System.getProperty("sg.assets") ?: "src/main/assets")
+        val file = java.io.File(assets, p.assetPath)
+        assertEquals(p.sizeBytes, file.length())
+        assertTrue("asset SHA-256 must match the pinned pack", ShieldImageClassifier.sha256Matches(ByteBuffer.wrap(file.readBytes()), p.sha256))
+    }
+
+    @Test fun repeatedLabelsAreAddedUp() {
+        // GantMan order: drawings, hentai, neutral, porn, sexy (softmax).
+        val rt = FixedRuntime(floatArrayOf(0.30f, 0.05f, 0.40f, 0.05f, 0.20f))
+        val gm = BuiltInImagePacks.GANTMAN_NSFW_MNV2
+        val c = ShieldImageClassifier(gm, { ByteBuffer.allocate(0) }, { null })
+        // Not loadable here (no asset); check the aggregation through probabilities + fromProbabilities.
+        val probs = ShieldImageClassifier.probabilities(rt.out, gm)!!
+        val byLabel = LinkedHashMap<AiLabel, Double>()
+        gm.labels.forEachIndexed { i, l -> byLabel[l] = (byLabel[l] ?: 0.0) + probs[i] }
+        val r = AiClassification.fromProbabilities(byLabel, gm.modelVersion, gm.minConfidence)
+        assertEquals(AiLabel.SAFE, r.label)
+        assertEquals(0.70, r.confidence, 1e-6)
+        assertEquals(0.10, r.score(AiLabel.SEXUAL), 1e-6)
+        assertEquals(ImageModelState.NOT_LOADED, c.state)
+    }
+
+    @Test fun escalationGoesSkipBackHomeAndResets() {
+        val e = BlockEscalation(windowMs = 8_000)
+        assertEquals(BlockAction.SKIP, e.next(instagram, 0))
+        assertEquals(BlockAction.BACK, e.next(instagram, 2_000))
+        assertEquals(BlockAction.HOME, e.next(instagram, 4_000))
+        assertEquals(BlockAction.HOME, e.next(instagram, 6_000))
+        assertEquals("quiet period starts over", BlockAction.SKIP, e.next(instagram, 20_000))
+        assertEquals("another app starts over", BlockAction.SKIP, e.next("com.google.android.youtube", 21_000))
     }
 
     @Test fun imagePipelineRunsThroughPolicyWithARuntime() {
         // Plumbing test with a fixed-output runtime (test double, not AI).
         val rt = FixedRuntime(floatArrayOf(0f, 0f, 6f, 0f, 0f)) // logits → "sexual" ≈ 0.95
-        val image = ShieldImageClassifier(pack, { "abcd".toByteArray() }, { ImageRuntimeFactory { _, _ -> rt } })
+        val image = ShieldImageClassifier(pack, { ByteBuffer.wrap("abcd".toByteArray()) }, { ImageRuntimeFactory { _, _ -> rt } })
         val h = Harness({ textResult(Category.SAFE, 0.0) }, image = image, clock = { now })
         val out = h.engine.onFrame(instagram, frame(64, 64) { x, _ -> if (x < 32) 0xFF0000 else 0x0000FF })
         assertTrue(out.toString(), out is ShieldOutcome.Blocked)
@@ -213,21 +251,21 @@ class ContentShieldTest {
     // ---- image classifier failures -------------------------------------------
 
     @Test fun corruptedMissingOrUnloadableModelsAreRejected() {
-        val wrong = ShieldImageClassifier(pack, { "abce".toByteArray() }, { ImageRuntimeFactory { _, _ -> FixedRuntime(FloatArray(5)) } })
+        val wrong = ShieldImageClassifier(pack, { ByteBuffer.wrap("abce".toByteArray()) }, { ImageRuntimeFactory { _, _ -> FixedRuntime(FloatArray(5)) } })
         assertEquals(AiLabel.UNKNOWN, wrong.classify(frame(8, 8) { _, _ -> 0 }).label)
         assertEquals(ImageModelState.CORRUPTED, wrong.state)
         val missing = ShieldImageClassifier(pack, { null }, { ImageRuntimeFactory { _, _ -> FixedRuntime(FloatArray(5)) } })
         missing.classify(frame(8, 8) { _, _ -> 0 })
         assertEquals(ImageModelState.CORRUPTED, missing.state)
-        val noRuntime = ShieldImageClassifier(pack, { "abcd".toByteArray() }, { null })
+        val noRuntime = ShieldImageClassifier(pack, { ByteBuffer.wrap("abcd".toByteArray()) }, { null })
         noRuntime.classify(frame(8, 8) { _, _ -> 0 })
         assertEquals(ImageModelState.NO_RUNTIME, noRuntime.state)
-        val fails = ShieldImageClassifier(pack, { "abcd".toByteArray() }, { ImageRuntimeFactory { _, _ -> throw IllegalArgumentException("bad model") } })
+        val fails = ShieldImageClassifier(pack, { ByteBuffer.wrap("abcd".toByteArray()) }, { ImageRuntimeFactory { _, _ -> throw IllegalArgumentException("bad model") } })
         fails.classify(frame(8, 8) { _, _ -> 0 })
         assertEquals(ImageModelState.LOAD_FAILED, fails.state)
         fails.resetAfterFailure()
         assertEquals(ImageModelState.NOT_LOADED, fails.state)
-        val oomLoad = ShieldImageClassifier(pack, { "abcd".toByteArray() }, { ImageRuntimeFactory { _, _ -> throw OutOfMemoryError() } })
+        val oomLoad = ShieldImageClassifier(pack, { ByteBuffer.wrap("abcd".toByteArray()) }, { ImageRuntimeFactory { _, _ -> throw OutOfMemoryError() } })
         oomLoad.classify(frame(8, 8) { _, _ -> 0 })
         assertEquals(ImageModelState.OUT_OF_MEMORY, oomLoad.state)
     }
@@ -238,7 +276,7 @@ class ContentShieldTest {
             override fun run(input: FloatArray): FloatArray = throw OutOfMemoryError()
             override fun close() { closed = true }
         }
-        val c = ShieldImageClassifier(pack, { "abcd".toByteArray() }, { ImageRuntimeFactory { _, _ -> rt } })
+        val c = ShieldImageClassifier(pack, { ByteBuffer.wrap("abcd".toByteArray()) }, { ImageRuntimeFactory { _, _ -> rt } })
         assertEquals(AiLabel.UNKNOWN, c.classify(frame(8, 8) { _, _ -> 0 }).label)
         assertTrue(rt.closed)
         assertEquals(ImageModelState.OUT_OF_MEMORY, c.state)
@@ -314,6 +352,31 @@ class ContentShieldTest {
         val nchw = FramePreprocessor.toTensor(f, spec, TensorLayout.NCHW, FloatArray(12))
         // R plane: [1, 0, 1, 0]; G plane: [0, 1, 0, 1]
         assertEquals(listOf(1f, 0f, 1f, 0f, 0f, 1f, 0f, 1f), nchw.take(8))
+    }
+
+    /**
+     * Golden values from the numpy re-implementation that was run with the
+     * real GantMan model (docs/AI_CONTENT_SHIELD.md §8b): the Kotlin
+     * preprocessor must produce the same tensor for a 360×640 frame.
+     */
+    @Test fun preprocessorMatchesTheValidatedReference() {
+        val w = 360
+        val h = 640
+        val f = frame(w, h) { x, y ->
+            val r = (x * 7 + y * 3) % 256
+            val g = (x * y) % 256
+            val b = (x + 2 * y) % 256
+            (r shl 16) or (g shl 8) or b
+        }
+        val spec = BuiltInImagePacks.GANTMAN_NSFW_MNV2.input
+        val t = FramePreprocessor.toTensor(f, spec, TensorLayout.NHWC, FloatArray(spec.tensorLength))
+        fun at(y: Int, x: Int, c: Int) = t[(y * 224 + x) * 3 + c].toDouble()
+        assertEquals(0.0058823529411764705, at(0, 0, 0), 1e-5)
+        assertEquals(0.6274509803921569, at(10, 20, 1), 1e-5)
+        assertEquals(0.5490196078431373, at(100, 50, 2), 1e-5)
+        assertEquals(0.2803921568627451, at(223, 223, 0), 1e-5)
+        assertEquals(0.48104575163398694, at(123, 77, 1), 1e-5)
+        assertEquals(74770.65620915033, t.sumOf { it.toDouble() }, 0.5)
     }
 
     @Test fun framesAreBoundedAndValidated() {
@@ -431,7 +494,13 @@ class ContentShieldTest {
         assertEquals(ShieldState.PARTIAL, shipped.state)
         assertEquals(listOf(ShieldIssue.IMAGE_MODEL_UNAVAILABLE), shipped.issues)
         assertTrue(shipped.textActive); assertFalse(shipped.imageActive)
-        assertEquals(ShieldState.ACTIVE, r(image = true).state)
+        // Model ready but no screen capture consent: still partial, and says why.
+        val noCapture = r(image = true)
+        assertEquals(ShieldState.PARTIAL, noCapture.state)
+        assertEquals(listOf(ShieldIssue.SCREEN_CAPTURE_OFF), noCapture.issues)
+        val full = ShieldStatusResolver.resolve(on, true, true, true, true, true, true, screenCaptureActive = true)
+        assertEquals(ShieldState.ACTIVE, full.state)
+        assertTrue(full.imageActive)
         for (bad in listOf(r(protection = false), r(ai = false), r(a11y = false), r(a11yAvail = false), r(text = false), r(s = on.copy(disabledApps = SupportedApps.all.map { it.key }.toSet())))) {
             assertEquals(bad.issues.toString(), ShieldState.UNAVAILABLE, bad.state)
             assertFalse(bad.textActive || bad.imageActive)
@@ -444,11 +513,12 @@ class ContentShieldTest {
 
     @Test fun supportedAppsCoverTheRequiredAppsWithoutHardcodingOne() {
         val keys = SupportedApps.all.map { it.key }
-        assertEquals(listOf("instagram", "tiktok", "youtube", "reddit", "chrome", "firefox"), keys)
+        assertEquals(listOf("instagram", "tiktok", "youtube", "reddit", "facebook", "chrome", "firefox"), keys)
+        assertEquals("facebook", SupportedApps.forPackage("com.facebook.lite")?.key)
         assertEquals("tiktok", SupportedApps.forPackage("com.ss.android.ugc.trill")?.key)
         assertNull(SupportedApps.forPackage("com.whatsapp"))
         assertTrue("nothing is verified on a device yet", SupportedApps.all.none { it.verifiedOnDevice })
-        assertTrue(SupportedApps.all.all { ShieldLimitation.IMAGES_NEED_MODEL in it.limitations })
+        assertTrue(SupportedApps.all.all { ShieldLimitation.IMAGES_NEED_CAPTURE in it.limitations })
         assertEquals(emptyList<String>(), ShieldSettings(enabled = false).monitoredPackages())
         val some = ShieldSettings(enabled = true, disabledApps = setOf("tiktok"))
         assertFalse("com.zhiliaoapp.musically" in some.monitoredPackages())

@@ -139,6 +139,11 @@ class ProtectionChannel {
   Future<Map<Object?, Object?>> setShieldDisclosure(bool accepted) =>
       _map('setShieldDisclosure', {'accepted': accepted});
 
+  Future<bool> requestScreenCapture() async =>
+      await _call<bool>('requestScreenCapture') ?? false;
+
+  Future<void> stopScreenCapture() => _call<bool>('stopScreenCapture');
+
   Future<Map<Object?, Object?>> getAlertsState() => _map('getAlertsState');
 
   Future<Map<Object?, Object?>> setAlertsEnabled(bool enabled) =>

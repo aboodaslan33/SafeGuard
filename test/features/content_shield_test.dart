@@ -65,7 +65,7 @@ void main() {
             'name': 'Chrome',
             'packages': ['com.android.chrome'],
             'level': 'text',
-            'limitations': ['images_need_model', 'bogus'],
+            'limitations': ['images_need_capture', 'bogus'],
             'enabled': true,
             'installed': true,
             'verifiedOnDevice': false,
@@ -75,7 +75,7 @@ void main() {
       });
       expect(s.state, ShieldState.partial);
       expect(s.issues, [ShieldIssue.imageModelUnavailable]);
-      expect(s.apps.single.limitations, [ShieldLimitation.imagesNeedModel]);
+      expect(s.apps.single.limitations, [ShieldLimitation.imagesNeedCapture]);
       expect(s.imageModelState.usable, isFalse);
       // Unknown or missing state never reads as "active".
       expect(ShieldStatus.fromMap({}).state, ShieldState.unavailable);
@@ -134,7 +134,6 @@ void main() {
       await open(tester);
       expect(find.text('درع المحتوى الذكي'), findsWidgets);
       expect(find.text('متوقف'), findsWidgets);
-      expect(find.text('غير مضمَّن في هذا الإصدار'), findsOneWidget);
       // Both capabilities read "not running" while off.
       expect(find.text('لا يعمل'), findsNWidgets(2));
       expect(find.text('يعمل'), findsNothing);
@@ -166,7 +165,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('يعمل جزئيًا'), findsOneWidget);
       expect(find.text('يعمل'), findsOneWidget); // text checks only
-      expect(find.textContaining('الصور والفيديو لا تُفحص'), findsWidgets);
+      expect(find.textContaining('فحص الصور متوقف'), findsWidgets);
     });
 
     testWidgets('turning the shield or an app off needs the PIN', (
@@ -199,6 +198,71 @@ void main() {
       expect(find.text('أدخل رمز PIN'), findsOneWidget);
       await enterPin(tester, '739154');
       expect(engine.shieldEnabled, isFalse);
+    });
+
+    testWidgets('image checks need consent to start and the PIN to stop', (
+      tester,
+    ) async {
+      final engine = await open(
+        tester,
+        setup: (e) => e
+          ..shieldEnabled = true
+          ..shieldAccessibility = AccessibilityStatus.enabled,
+      );
+      final start = find.text('تفعيل فحص الصور');
+      await tester.scrollUntilVisible(
+        start,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(start);
+      await tester.pumpAndSettle();
+      // SafeGuard's explanation first, then Android's own dialog.
+      await tester.ensureVisible(find.text('متابعة'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('متابعة'));
+      await tester.pumpAndSettle();
+      expect(engine.screenCaptureRequests, 1);
+      expect(engine.screenCapture, isTrue);
+      // Text and image both running: the only time the shield reads "active".
+      expect(find.text('يعمل'), findsWidgets);
+
+      final stop = find.text('إيقاف فحص الصور');
+      await tester.ensureVisible(stop);
+      await tester.pumpAndSettle();
+      await tester.tap(stop);
+      await tester.pumpAndSettle();
+      expect(find.text('أدخل رمز PIN'), findsOneWidget);
+      await enterPin(tester, '739154');
+      expect(engine.screenCapture, isFalse);
+    });
+
+    testWidgets('declining Android capture keeps image checks off', (
+      tester,
+    ) async {
+      final engine = await open(
+        tester,
+        setup: (e) => e
+          ..shieldEnabled = true
+          ..shieldAccessibility = AccessibilityStatus.enabled
+          ..grantScreenCapture = false,
+      );
+      final start = find.text('تفعيل فحص الصور');
+      await tester.scrollUntilVisible(
+        start,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(start);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('متابعة'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('متابعة'));
+      await tester.pumpAndSettle();
+      expect(engine.screenCapture, isFalse);
+      expect(find.text('تفعيل فحص الصور'), findsOneWidget);
     });
   });
 }

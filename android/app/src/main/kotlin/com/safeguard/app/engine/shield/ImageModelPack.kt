@@ -3,12 +3,13 @@ package com.safeguard.app.engine.shield
 import com.safeguard.app.engine.ai.ClassificationStatus
 import com.safeguard.app.engine.ai.ContentKind
 import com.safeguard.app.engine.ai.image.ModelInputSpec
+import java.nio.ByteBuffer
 import java.security.MessageDigest
 
 /** Which inference runtime a pack needs. Only data formats: never code. */
-enum class ImageRuntimeKind(val id: String) {
-    ONNX("onnx"),
-    TFLITE("tflite");
+enum class ImageRuntimeKind(val id: String, val fileExtension: String) {
+    ONNX("onnx", "onnx"),
+    TFLITE("tflite", "tflite");
 
     companion object {
         fun fromId(id: String?) = entries.firstOrNull { it.id == id }
@@ -41,7 +42,8 @@ enum class OutputKind(val id: String) {
  * mean=0.485,0.456,0.406
  * std=0.229,0.224,0.225
  * output=softmax
- * labels=safe,sexual            (model output order → AiLabel ids)
+ * labels=safe,sexual            (model output order → AiLabel ids; a label may
+ *                                repeat: its probabilities are added)
  * minConfidence=0.50
  * license=Apache-2.0
  * provenance=<where weights and training data come from>
@@ -66,6 +68,9 @@ data class ImageModelPack(
 ) {
     /** e.g. "example-nsfw@1": what logs and the UI show as the model version. */
     val modelVersion: String get() = "$id@$version"
+
+    /** Where the model file lives in the APK's assets (stored uncompressed). */
+    val assetPath: String get() = "models/$id.${runtime.fileExtension}"
 
     companion object {
         const val FORMAT = "sg-image-pack/1"
@@ -105,7 +110,8 @@ data class ImageModelPack(
             require(std.all { it > 0f }) { "bad std" }
             val output = OutputKind.fromId(kv["output"]) ?: error("bad output")
             val labels = kv.getValue("labels").split(',').map { AiLabel.fromId(it.trim()) ?: error("unknown label") }
-            require(labels.size in 2..AiLabel.entries.size && labels.toSet().size == labels.size) { "bad labels" }
+            require(labels.size in 2..32) { "bad labels" }
+            require(AiLabel.SAFE in labels && labels.any { it.isRisk }) { "need SAFE and a risk label" }
             require(AiLabel.UNKNOWN !in labels) { "UNKNOWN is not a model output" }
             val minConfidence = kv.getValue("minConfidence").toDoubleOrNull()?.takeIf { it in 0.0..1.0 } ?: error("bad minConfidence")
             return ImageModelPack(
@@ -124,12 +130,39 @@ data class ImageModelPack(
 
 /**
  * Image model packs this build may load, pinned by id, version and SHA-256
- * (like `BuiltInModels`). **Empty in this version:** no image model met the
- * license, provenance, size and verification bar (docs/AI_CONTENT_SHIELD.md
- * §Model selection), so image classification reports UNAVAILABLE.
+ * (like `BuiltInModels`). Nothing else can be loaded.
  */
 object BuiltInImagePacks {
-    val all: List<ImageModelPack> = emptyList()
+    /**
+     * GantMan nsfw_model v1.1.0, MobileNetV2 140/224, the official
+     * `saved_model.tflite` from the GitHub release, unmodified. MIT license.
+     * Classes (alphabetical, the model's output order): drawings, hentai,
+     * neutral, porn, sexy. Input: 224×224 RGB scaled to 0..1 (the
+     * project's own preprocessing). Training data was scraped from the web
+     * (nsfw_data_scraper): provenance accepted by the project owner, see
+     * docs/AI_CONTENT_SHIELD.md §4.
+     */
+    val GANTMAN_NSFW_MNV2: ImageModelPack = ImageModelPack.parse(
+        """
+        format=sg-image-pack/1
+        id=gantman-nsfw-mnv2
+        version=110
+        runtime=tflite
+        sizeBytes=24414436
+        sha256=6d9271fd927ef46328e8168babeaf4169abed8f5808d79383f448f90c67f36d4
+        inputSize=224
+        layout=nhwc
+        mean=0,0,0
+        std=1,1,1
+        output=softmax
+        labels=safe,sexual,safe,sexual,suggestive
+        minConfidence=0.40
+        license=MIT (GantMan/nsfw_model, Copyright (c) 2020 The nsfw_model Developers)
+        provenance=GantMan/nsfw_model release 1.1.0 (MobileNetV2 transfer learning); web-scraped training data
+        """.trimIndent(),
+    )
+
+    val all: List<ImageModelPack> = listOf(GANTMAN_NSFW_MNV2)
 }
 
 /** Runs one model. Implementations wrap an inference runtime; they execute no downloaded code. */
@@ -138,9 +171,9 @@ interface ImageInferenceRuntime : AutoCloseable {
     fun run(input: FloatArray): FloatArray
 }
 
-/** Opens a runtime for verified model bytes. */
+/** Opens a runtime for a verified model (a read-only, possibly memory-mapped buffer). */
 fun interface ImageRuntimeFactory {
-    fun open(pack: ImageModelPack, modelBytes: ByteArray): ImageInferenceRuntime
+    fun open(pack: ImageModelPack, model: ByteBuffer): ImageInferenceRuntime
 }
 
 /** Why image classification can't run. [id] goes to the UI and diagnostics. */
@@ -173,8 +206,8 @@ enum class ImageModelState(val id: String) {
  */
 class ShieldImageClassifier(
     private val pack: ImageModelPack?,
-    /** Reads the model file (e.g. from assets); null if missing. */
-    private val readModel: (ImageModelPack) -> ByteArray?,
+    /** Maps or reads the model file (e.g. from assets); null if missing. */
+    private val readModel: (ImageModelPack) -> ByteBuffer?,
     /** Null when no runtime for the pack's format is compiled in. */
     private val runtimes: (ImageRuntimeKind) -> ImageRuntimeFactory?,
 ) : AutoCloseable {
@@ -199,7 +232,10 @@ class ShieldImageClassifier(
             FramePreprocessor.toTensor(frame, p.input, p.layout, input)
             val raw = rt.run(input)
             val probs = probabilities(raw, p) ?: return AiClassification.unavailable(ContentKind.IMAGE, ClassificationStatus.UNAVAILABLE, p.modelVersion)
-            AiClassification.fromProbabilities(p.labels.zip(probs.toList()).toMap(), p.modelVersion, p.minConfidence)
+            // A label may appear more than once (e.g. drawings + neutral = SAFE).
+            val byLabel = LinkedHashMap<AiLabel, Double>()
+            p.labels.forEachIndexed { i, l -> byLabel[l] = (byLabel[l] ?: 0.0) + probs[i] }
+            AiClassification.fromProbabilities(byLabel, p.modelVersion, p.minConfidence)
         } catch (e: OutOfMemoryError) {
             release(ImageModelState.OUT_OF_MEMORY)
             AiClassification.unavailable(ContentKind.IMAGE, ClassificationStatus.UNAVAILABLE, p.modelVersion)
@@ -237,7 +273,7 @@ class ShieldImageClassifier(
         } catch (e: Exception) {
             null
         }
-        if (bytes == null || bytes.size.toLong() != p.sizeBytes || !sha256Matches(bytes, p.sha256)) {
+        if (bytes == null || bytes.capacity().toLong() != p.sizeBytes || !sha256Matches(bytes, p.sha256)) {
             state = ImageModelState.CORRUPTED
             return null
         }
@@ -285,8 +321,8 @@ class ShieldImageClassifier(
             }
         }
 
-        fun sha256Matches(bytes: ByteArray, hex: String): Boolean {
-            val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+        fun sha256Matches(buffer: ByteBuffer, hex: String): Boolean {
+            val digest = MessageDigest.getInstance("SHA-256").apply { update(buffer.duplicate().also { it.clear() }) }.digest()
             val expected = ByteArray(32) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
             return MessageDigest.isEqual(digest, expected)
         }

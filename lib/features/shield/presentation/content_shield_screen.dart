@@ -100,6 +100,44 @@ class _ContentShieldScreenState extends State<ContentShieldScreen> {
     if (accepted) await _engine.openAccessibilitySettings();
   }
 
+  Future<void> _startImageChecks() async {
+    final agreed = await showSgBottomSheet<bool>(
+      context,
+      title: tr('تفعيل فحص الصور', 'Turn on image checks'),
+      builder: (context) => const _CaptureDisclosure(),
+    );
+    if (agreed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final ok = await _engine.requestScreenCapture();
+      if (!ok && mounted) {
+        showSgSnack(
+          context,
+          tr(
+            'لم يُسمح بالتقاط الشاشة، فالصور لا تُفحص.',
+            "Screen capture wasn't allowed, so images aren't checked.",
+          ),
+        );
+      }
+    } catch (e, st) {
+      AppLogger.error('shield', e, st);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    await _refresh();
+  }
+
+  Future<void> _stopImageChecks() async {
+    final ok = await ProtectionGuard.authorize(
+      context,
+      loosens: true,
+      reason: tr('لإيقاف فحص الصور', 'to turn off image checks'),
+    );
+    if (!ok || !mounted) return;
+    await _engine.stopScreenCapture();
+    await _refresh();
+  }
+
   Future<void> _setApp(ShieldApp app, bool on) async {
     final ok = await ProtectionGuard.authorize(
       context,
@@ -148,6 +186,15 @@ class _ContentShieldScreenState extends State<ContentShieldScreen> {
             ],
           ),
           SectionHeader(
+            title: tr('فحص الصور والفيديو', 'Image and video checks'),
+          ),
+          _ImageChecksCard(
+            status: s,
+            busy: _busy,
+            onStart: _startImageChecks,
+            onStop: _stopImageChecks,
+          ),
+          SectionHeader(
             title: tr('حالة نماذج الذكاء الاصطناعي', 'AI model status'),
           ),
           SgGroupedCard(
@@ -162,9 +209,12 @@ class _ContentShieldScreenState extends State<ContentShieldScreen> {
                 showChevron: false,
               ),
               SecuritySettingTile(
-                icon: Icons.image_not_supported_outlined,
+                icon: Icons.image_search_rounded,
                 title: tr('نموذج الصور', 'Image model'),
-                subtitle: s.imageModelState.label,
+                subtitle: [
+                  if (s.imageModel != null) s.imageModel!,
+                  s.imageModelState.label,
+                ].join(' · '),
                 value: s.imageModelState.usable
                     ? tr('متاح', 'Available')
                     : tr('غير متاح', 'Unavailable'),
@@ -224,9 +274,10 @@ class _ContentShieldScreenState extends State<ContentShieldScreen> {
           const SizedBox(height: SgSpace.x3),
           _Hint(
             tr(
-              'في الوضع «صارم» يُحظر أيضًا المحتوى الإيحائي؛ في «عادي» يُحظر المحتوى الجنسي '
-                  'الواضح فقط. نتيجة واحدة غير مؤكدة لا تحظر: يلزم تأكيدها بعيّنة ثانية.',
-              'In “Strict” mode suggestive content is blocked too; in “Normal” only explicit sexual content is. A single uncertain result never blocks: it needs a second confirming sample.',
+              'لحظر الصور المثيرة والعري الجزئي (وليس الإباحي فقط) اختر الوضع «صارم». '
+                  'في «عادي» يُحظر المحتوى الجنسي الواضح فقط. نتيجة واحدة غير مؤكدة لا '
+                  'تحظر، إلا إذا كانت الثقة عالية جدًا.',
+              'To also block revealing images and partial nudity (not only explicit content), choose “Strict” mode. “Normal” blocks clearly sexual content only. A single uncertain result never blocks unless confidence is very high.',
             ),
           ),
           SectionHeader(title: tr('الخصوصية', 'Privacy')),
@@ -273,8 +324,8 @@ class _StatusCard extends StatelessWidget {
         'Text and images are checked in the supported apps you left on.',
       ),
       ShieldState.partial => tr(
-        'يُفحص النص فقط في التطبيقات المدعومة المفعّلة. الصور والفيديو لا تُفحص.',
-        "Only text is checked in the supported apps you left on. Photos and video aren't checked.",
+        'الدرع يعمل جزئيًا: جزء من الفحص متوقف (التفاصيل أدناه).',
+        'The shield is partly running: some checks are off (details below).',
       ),
       ShieldState.unavailable => tr(
         'الدرع مفعّل لكنه لا يفحص أي شيء الآن.',
@@ -383,10 +434,12 @@ class _ModelNote extends StatelessWidget {
       color: c.info,
       background: c.infoMuted,
       text: tr(
-        'لا يتضمّن هذا الإصدار نموذجًا لتصنيف الصور: لم يستوفِ أي نموذج متاح شروط الترخيص '
-            'ومصدر بيانات التدريب والحجم والتحقق. لذلك لا تُفحص الصور والفيديو، ولا يدّعي '
-            'SafeGuard ذلك. نموذج النصوص صغير ودقته محدودة.',
-        "This version doesn't include an image classification model: no available model met the license, training-data provenance, size and verification bar. So photos and video aren't checked, and SafeGuard doesn't claim they are. The text model is small and of limited accuracy.",
+        'نموذج الصور: MobileNetV2 من مشروع nsfw_model (ترخيص MIT)، يعمل على الجهاز. '
+            'يميّز: إباحي ورسوم إباحية (جنسي)، ومثير (إيحائي)، وآمن. دقته حسب مطوّريه '
+            'حوالي 92% على بياناتهم؛ لم تُقَس على بيانات مستقلة. قد يخطئ: يحظر أحيانًا صور '
+            'شاطئ أو رياضة، ويفوّت أحيانًا محتوى. بيانات تدريبه جُمعت من الإنترنت. '
+            'نموذج النصوص صغير ودقته محدودة.',
+        'Image model: MobileNetV2 from the nsfw_model project (MIT), running on your device. It tells apart porn and drawn porn (sexual), revealing images (suggestive) and safe images. Its authors report about 92% accuracy on their own data; it was not measured on independent data. It can be wrong: sometimes blocking beach or sports photos, sometimes missing content. Its training data was collected from the web. The text model is small and of limited accuracy.',
       ),
     );
   }
@@ -455,8 +508,8 @@ class _PrivacyCard extends StatelessWidget {
           point(
             Icons.no_photography_outlined,
             tr(
-              'لا تُلتقط صور للشاشة ولا يُخزَّن أي محتوى.',
-              'No screenshots are taken and no content is stored.',
+              'صور الشاشة (عند تشغيل فحص الصور) تُفحص في الذاكرة وتُحذف فورًا، ولا تُحفظ أو تُرسل أبدًا.',
+              'Screen frames (while image checks are on) are checked in memory and discarded at once; they are never saved or sent.',
             ),
           ),
           point(
@@ -514,9 +567,9 @@ class _ShieldDisclosure extends StatelessWidget {
           tr(
             'يستخدم درع المحتوى الذكي خدمة «تسهيل الاستخدام» (Accessibility) في Android '
                 'لقراءة النص الظاهر على الشاشة في التطبيقات المدعومة فقط '
-                '(Instagram وTikTok وYouTube وReddit وChrome وFirefox)، وفحصه على جهازك '
+                '(Instagram وTikTok وYouTube وReddit وFacebook وChrome وFirefox)، وفحصه على جهازك '
                 'وفق إعدادات الحماية.',
-            "The AI Content Shield uses Android's Accessibility service to read the text shown on screen in the supported apps only (Instagram, TikTok, YouTube, Reddit, Chrome, Firefox) and check it on your device against your protection settings.",
+            "The AI Content Shield uses Android's Accessibility service to read the text shown on screen in the supported apps only (Instagram, TikTok, YouTube, Reddit, Facebook, Chrome, Firefox) and check it on your device against your protection settings.",
           ),
           style: context.text.bodyLarge,
         ),
@@ -538,15 +591,15 @@ class _ShieldDisclosure extends StatelessWidget {
         point(
           Icons.phone_android_rounded,
           tr(
-            'لا يغادر أي شيء جهازك، ولا تُلتقط صور للشاشة.',
-            'Nothing leaves your device, and no screenshots are taken.',
+            'لا يغادر أي شيء جهازك. هذه الخدمة لا تلتقط صورًا للشاشة (فحص الصور منفصل ويحتاج موافقتك).',
+            'Nothing leaves your device. This service takes no screenshots (image checks are separate and need your consent).',
           ),
         ),
         point(
           Icons.home_outlined,
           tr(
-            'عند اكتشاف محتوى محظور يعيدك إلى الشاشة الرئيسية ويعرض شاشة الحظر.',
-            'When blocked content is found, it sends you to the home screen and shows the block screen.',
+            'عند اكتشاف محتوى محظور ينتقل إلى الريل أو المنشور التالي تلقائيًا؛ وإن بقي، يرجع للخلف ثم للشاشة الرئيسية.',
+            'When blocked content is found, it swipes to the next reel or post; if it is still there, it goes back, then to the home screen.',
           ),
         ),
         point(
@@ -564,6 +617,153 @@ class _ShieldDisclosure extends StatelessWidget {
         const SizedBox(height: SgSpace.x2),
         SgTextButton(
           label: tr('لا أوافق', "I don't agree"),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+      ],
+    );
+  }
+}
+
+/// Starts / stops screen capture for the image model.
+class _ImageChecksCard extends StatelessWidget {
+  const _ImageChecksCard({
+    required this.status,
+    required this.busy,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final ShieldStatus status;
+  final bool busy;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = status;
+    final running = s.screenCaptureActive;
+    final canStart = s.enabled && s.imageModelState.usable && !running && !busy;
+    return SgCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  tr('فحص الصور', 'Image checks'),
+                  style: context.text.titleMedium,
+                ),
+              ),
+              StatusIndicator(
+                status: s.imageActive
+                    ? SgStatus.active
+                    : running
+                    ? SgStatus.paused
+                    : SgStatus.unavailable,
+                label: s.imageActive
+                    ? tr('يعمل', 'Running')
+                    : running
+                    ? tr('بانتظار الدرع', 'Waiting for the shield')
+                    : tr('متوقف', 'Off'),
+                dense: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: SgSpace.x2),
+          Text(
+            tr(
+              'يفحص الصور والفيديو الظاهرة في التطبيقات المدعومة بنموذج على جهازك. يحتاج '
+                  'موافقتك في نافذة «التقاط الشاشة» من Android، ويظهر مؤشر التسجيل طوال التشغيل. '
+                  'بعد إعادة تشغيل الجهاز يجب التفعيل من جديد.',
+              "Checks photos and video shown in supported apps with a model on your device. Needs your consent in Android's screen-capture dialog; Android shows its recording indicator the whole time. After a restart it has to be turned on again.",
+            ),
+            style: context.text.bodyMedium,
+          ),
+          const SizedBox(height: SgSpace.x4),
+          if (running)
+            SgTextButton(
+              label: tr('إيقاف فحص الصور', 'Turn off image checks'),
+              onPressed: busy ? null : onStop,
+            )
+          else
+            PrimaryButton(
+              label: tr('تفعيل فحص الصور', 'Turn on image checks'),
+              icon: Icons.image_search_rounded,
+              onPressed: canStart ? onStart : null,
+            ),
+          if (!s.enabled) ...[
+            const SizedBox(height: SgSpace.x2),
+            Text(
+              tr('فعّل الدرع أولًا.', 'Turn on the shield first.'),
+              style: context.text.bodySmall?.copyWith(
+                color: context.colors.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// What image checks do, shown before Android's own consent dialog.
+class _CaptureDisclosure extends StatelessWidget {
+  const _CaptureDisclosure();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    Widget point(IconData icon, String text) => Padding(
+      padding: const EdgeInsets.only(bottom: SgSpace.x3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: c.accent),
+          const SizedBox(width: SgSpace.x3),
+          Expanded(child: Text(text, style: context.text.bodyMedium)),
+        ],
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        point(
+          Icons.screenshot_monitor_outlined,
+          tr(
+            'سيطلب Android موافقتك على «التقاط الشاشة». اختر مشاركة الشاشة كاملة.',
+            'Android will ask you to allow screen capture. Choose to share the entire screen.',
+          ),
+        ),
+        point(
+          Icons.apps_rounded,
+          tr(
+            'تُفحص الشاشة فقط أثناء فتح تطبيق مدعوم فعّلته، وبحد أقصى حوالي مرة في الثانية.',
+            'The screen is checked only while a supported app you left on is open, at most about once a second.',
+          ),
+        ),
+        point(
+          Icons.phone_android_rounded,
+          tr(
+            'كل صورة تُفحص في الذاكرة وتُحذف فورًا. لا شيء يُحفظ أو يُرسل.',
+            'Each frame is checked in memory and discarded at once. Nothing is saved or sent.',
+          ),
+        ),
+        point(
+          Icons.battery_charging_full_rounded,
+          tr(
+            'يستهلك بطارية أكثر أثناء استخدام هذه التطبيقات.',
+            'It uses more battery while you use these apps.',
+          ),
+        ),
+        const SizedBox(height: SgSpace.x4),
+        PrimaryButton(
+          label: tr('متابعة', 'Continue'),
+          onPressed: () => Navigator.of(context).pop(true),
+        ),
+        const SizedBox(height: SgSpace.x2),
+        SgTextButton(
+          label: tr('ليس الآن', 'Not now'),
           onPressed: () => Navigator.of(context).pop(false),
         ),
       ],

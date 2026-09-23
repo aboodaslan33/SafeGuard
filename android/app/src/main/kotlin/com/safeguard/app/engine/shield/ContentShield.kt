@@ -50,6 +50,9 @@ enum class ShieldIssue(val id: String) {
     NO_APPS("no_apps"),
     TEXT_MODEL_UNAVAILABLE("text_model_unavailable"),
     IMAGE_MODEL_UNAVAILABLE("image_model_unavailable"),
+
+    /** The image model is ready but screen capture isn't running (needs the user's consent). */
+    SCREEN_CAPTURE_OFF("screen_capture_off"),
     INFERENCE_SLOW("inference_slow"),
 }
 
@@ -75,6 +78,8 @@ object ShieldStatusResolver {
         accessibilityAvailable: Boolean,
         textModelAvailable: Boolean,
         imageModelAvailable: Boolean,
+        /** MediaProjection capture is running (the user consented this session). */
+        screenCaptureActive: Boolean = false,
         textSlow: Boolean = false,
         imageSlow: Boolean = false,
     ): ShieldStatus {
@@ -89,10 +94,11 @@ object ShieldStatusResolver {
         val partial = buildList {
             if (!textModelAvailable) add(ShieldIssue.TEXT_MODEL_UNAVAILABLE)
             if (!imageModelAvailable) add(ShieldIssue.IMAGE_MODEL_UNAVAILABLE)
+            else if (!screenCaptureActive) add(ShieldIssue.SCREEN_CAPTURE_OFF)
             if ((textModelAvailable && textSlow) || (imageModelAvailable && imageSlow)) add(ShieldIssue.INFERENCE_SLOW)
         }
         val text = blocking.isEmpty() && textModelAvailable && !textSlow
-        val image = blocking.isEmpty() && imageModelAvailable && !imageSlow
+        val image = blocking.isEmpty() && imageModelAvailable && screenCaptureActive && !imageSlow
         val state = when {
             !text && !image -> ShieldState.UNAVAILABLE
             partial.isEmpty() -> ShieldState.ACTIVE
@@ -135,6 +141,43 @@ class InferenceWatchdog(
             consecutive = 0
         }
         return true
+    }
+}
+
+/** What SafeGuard does to get blocked content off the screen, mildest first. */
+enum class BlockAction(val id: String) {
+    /** Swipe to the next item (reels, shorts, feeds). */
+    SKIP("skip"),
+
+    /** Leave the current screen (e.g. a video page). */
+    BACK("back"),
+
+    /** Go to the home screen and show SafeGuard's blocking screen. */
+    HOME("home"),
+}
+
+/**
+ * Escalates when skipping doesn't help: a block in the same app within
+ * [windowMs] of the previous one moves to the next action (skip → back →
+ * home). A quiet period or another app starts again from skip.
+ */
+class BlockEscalation(private val windowMs: Long = 8_000) {
+    private var lastPackage: String? = null
+    private var lastAt = Long.MIN_VALUE / 2
+    private var level = 0
+
+    @Synchronized
+    fun next(packageName: String, now: Long): BlockAction {
+        level = if (packageName == lastPackage && now - lastAt <= windowMs) (level + 1).coerceAtMost(BlockAction.entries.size - 1) else 0
+        lastPackage = packageName
+        lastAt = now
+        return BlockAction.entries[level]
+    }
+
+    @Synchronized
+    fun reset() {
+        lastPackage = null
+        level = 0
     }
 }
 
@@ -197,8 +240,8 @@ class ContentShieldEngine(
     private val clock: () -> Long = System::currentTimeMillis,
     private val textWatchdog: InferenceWatchdog = InferenceWatchdog(limitMs = 250),
     private val imageWatchdog: InferenceWatchdog = InferenceWatchdog(limitMs = 1_500),
-    /** After a block, the same app isn't blocked again for this long (the user is sent home). */
-    private val blockCooldownMs: Long = 3_000,
+    /** A second block of the same app within this time is the same content (debounce). */
+    private val blockCooldownMs: Long = 1_200,
 ) {
     private val textGate = FrameGate(minIntervalMs = 1_000, settleMs = 400, maxWaitMs = 2_500, sameScreenBits = 0)
     private val imageGate = FrameGate()

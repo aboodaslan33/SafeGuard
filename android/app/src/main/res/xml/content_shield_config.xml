@@ -8,15 +8,19 @@
   - canRetrieveWindowContent is needed to read visible text in those apps.
     Editable and password fields are never read; text is classified in
     memory and discarded.
-  - No gestures other than "Home", no overlays, no screenshots.
+  - canPerformGestures: to skip blocked content (one swipe to the next
+    reel/item), then Back / Home if that isn't enough. No other gestures,
+    no overlays, no accessibility screenshots (images come only from
+    MediaProjection, with Android's consent dialog).
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
+    android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
     android:isAccessibilityTool="false"
     android:notificationTimeout="300"
-    android:packageNames="com.android.chrome,com.google.android.youtube,com.instagram.android,com.reddit.frontpage,com.ss.android.ugc.trill,com.zhiliaoapp.musically,org.mozilla.firefox"
+    android:packageNames="com.android.chrome,com.facebook.katana,com.facebook.lite,com.google.android.youtube,com.instagram.android,com.reddit.frontpage,com.ss.android.ugc.trill,com.zhiliaoapp.musically,org.mozilla.firefox"
     android:description="@string/content_shield_description"
     android:summary="@string/content_shield_summary" />
