@@ -634,8 +634,8 @@ class _ShieldDisclosure extends StatelessWidget {
         point(
           Icons.visibility_off_outlined,
           tr(
-            'لا يقرأ ما تكتبه ولا كلمات المرور، ولا يعمل في أي تطبيق آخر.',
-            "It doesn't read what you type or passwords, and doesn't run in any other app.",
+            'لا يقرأ كلمات المرور ولا ما تكتبه، إلا مربع البحث داخل هذه التطبيقات (لحظر البحث غير اللائق)، ولا يقرأ نصوص أي تطبيق آخر.',
+            "It doesn't read passwords or what you type, except the search box inside these apps (to block unsuitable searches), and doesn't read text in any other app.",
           ),
         ),
         point(
@@ -655,8 +655,8 @@ class _ShieldDisclosure extends StatelessWidget {
         point(
           Icons.home_outlined,
           tr(
-            'عند اكتشاف محتوى محظور ينتقل إلى الريل أو المنشور التالي تلقائيًا؛ وإن بقي، يرجع للخلف ثم للشاشة الرئيسية.',
-            'When blocked content is found, it swipes to the next reel or post; if it is still there, it goes back, then to the home screen.',
+            'عند اكتشاف محتوى محظور يغطّيه SafeGuard فورًا وينتقل إلى الريل أو المنشور التالي، دون أن يُخرجك من التطبيق. إن تكرر يبقى مغطّى حتى تختار «التالي» أو «رجوع». البحث المحظور داخل التطبيق يُمسح.',
+            'When blocked content is found, SafeGuard covers it right away and swipes to the next reel or post, without taking you out of the app. If it keeps coming back, it stays covered until you choose Next or Back. A blocked search inside the app is cleared.',
           ),
         ),
         point(

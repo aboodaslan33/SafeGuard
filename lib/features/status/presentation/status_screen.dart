@@ -558,8 +558,8 @@ class _Limitations extends StatelessWidget {
       'The device owner can disconnect the VPN, uninstall the app or clear its data from Android settings.',
     ),
     tr(
-      'فحص البحث يشمل ما تبحث عنه عبر SafeGuard فقط؛ لا يقرأ SafeGuard ما تكتبه في التطبيقات الأخرى.',
-      "Search checks cover only what you search for through SafeGuard; SafeGuard doesn't read what you type in other apps.",
+      'فحص البحث يشمل ما تبحث عنه عبر SafeGuard، ومربع البحث في التطبيقات المدعومة إذا فعّلت درع المحتوى؛ لا يقرأ SafeGuard أي شيء آخر تكتبه.',
+      "Search checks cover what you search for through SafeGuard, and the search box in supported apps if you turn on the Content Shield; SafeGuard doesn't read anything else you type.",
     ),
     tr(
       'حماية التطبيقات تمنع فتح التطبيق كاملًا، ولا تستطيع فلترة المحتوى داخله.',

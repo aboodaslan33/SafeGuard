@@ -96,19 +96,24 @@ Declaration text (draft):
 > restricted to those package names. It reads the text those apps display
 > on screen and classifies it **on the device** with SafeGuard's bundled
 > model; when the user's protection settings say the content should be
-> blocked, it performs one swipe to the next item, then "Back", then
-> "Home" with SafeGuard's own "content blocked" screen. It never reads
-> text input fields or password fields, never stores or transmits screen
-> text, takes no screenshots, draws no overlays, and performs no other
-> gesture. Only block metadata (time, app,
+> blocked, it covers the screen with SafeGuard's own "content hidden"
+> message (an accessibility overlay) and performs one swipe to the next
+> item; if the content keeps coming back, the cover stays until the user
+> taps "Next" or "Back". It never reads password fields or text input
+> fields other than the app's own search box, whose query is checked by
+> SafeGuard's search protection (a blocked search is cleared). It never
+> stores or transmits screen text or queries, takes no screenshots, and
+> performs no other gesture. Only block metadata (time, app,
 > category, rounded confidence, model version) is kept in the local log.
 > The user turns it on in Android's Accessibility settings after an
 > in-app disclosure, and can turn it off there at any time.
 
 Facts behind the text: `packageNames` in the config (test keeps it equal
 to `SupportedApps`), `VisibleTextExtractor` (skips editable/password),
-`ShieldSourceAuditTest` (no logging, storage, network, capture or overlay
-APIs in the shield path), `ContentShieldService.block` (Home + activity).
+`SearchFieldDetector` (the only editable field read), `ShieldSourceAuditTest`
+(no logging, storage, network or capture APIs in the shield path; the only
+overlay is `ShieldCover`, a `TYPE_ACCESSIBILITY_OVERLAY` that reads
+nothing; no `SYSTEM_ALERT_WINDOW`; no Home action).
 
 With the optional "check images in every app" switch, the service
 receives events from all apps, but only to learn which app is in front

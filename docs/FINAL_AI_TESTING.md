@@ -37,9 +37,10 @@ matter.
 
 Expected, for every app:
 - **Safe content:** no block.
-- **Clearly risky text or image:** within about 1–2 s SafeGuard swipes to
-  the next item. If it's still on screen: Back, then Home with "This
-  content was blocked" (category only, never the content).
+- **Clearly risky text or image:** within about 1–2 s SafeGuard covers the
+  screen ("Content hidden", category-free) and swipes to the next item. If
+  blocked content keeps coming back, the cover stays with **Next** / **Back**
+  buttons. SafeGuard never sends you out of the app.
 - **Safe images (beach, sports, family):** no block in NORMAL; STRICT
   may block some swimwear or fitness photos (expected, but record it).
 
@@ -61,9 +62,9 @@ Expected, for every app:
 | Y2 | YouTube | Search results with explicit / gore titles | Block | NOT EXECUTED |
 | Y3 | YouTube | Gambling video title | Block | NOT EXECUTED |
 | Y4 | YouTube | Shorts with nudity | Skipped to the next short | NOT EXECUTED |
-| Y5 | YouTube | Normal video page showing explicit frames | Back (skip swipe doesn't change the video), then Home | NOT EXECUTED |
+| Y5 | YouTube | Normal video page showing explicit frames | Covered; cover stays with Next / Back (the swipe doesn't change the video); never leaves YouTube | NOT EXECUTED |
 | FB1 | Facebook | Normal feed | No block | NOT EXECUTED |
-| FB2 | Facebook | Reels / posts with nudity | Skipped; Back / Home if it stays | NOT EXECUTED |
+| FB2 | Facebook | Reels / posts with nudity | Covered and skipped; cover stays with Next / Back if it keeps coming back | NOT EXECUTED |
 | FB3 | Facebook Lite | Same as FB1–FB2 | Same | NOT EXECUTED |
 | C1 | Chrome | News site (war, crash reports) | No block (NORMAL) | NOT EXECUTED |
 | C2 | Chrome | Casino landing page (if DNS lists didn't block it) | Block (GAMBLING) | NOT EXECUTED |
@@ -102,7 +103,10 @@ Expected, for every app:
 | B20 | Stop image checks in SafeGuard | PIN required; indicator and notification disappear | NOT EXECUTED |
 | B21 | Stop casting from Android's quick settings / indicator | SafeGuard shows image checks off; no crash | NOT EXECUTED |
 | B22 | Leave supported apps (home screen, WhatsApp) | No frames processed (battery); indicator may stay (Android) | NOT EXECUTED |
-| B23 | Skip loop | A blocked reel followed by more blocked reels: skip, Back, Home, no endless swiping | NOT EXECUTED |
+| B23 | Skip loop | A blocked reel followed by more blocked reels: skip, skip, then a cover that stays; no endless swiping, never sent out of the app | NOT EXECUTED |
+| B24 | Search in apps | Type a sexual or gambling term in Instagram / Facebook search | Box cleared, "Search blocked" cover, counted in blocked searches; a normal search works | NOT EXECUTED |
+| B25 | Normal use | Open Instagram / Facebook and scroll a normal feed for 5 min | Never sent to the home screen; note every wrong cover | NOT EXECUTED |
+| B26 | App protection | Add Instagram in App protection | Warning that it blocks the whole app | NOT EXECUTED |
 | B24 | Battery with image checks on, 1 h of reels | Record battery % and phone temperature | NOT EXECUTED |
 | B25 | Netflix-style protected video in Chrome | Black frames, no block, no crash | NOT EXECUTED |
 

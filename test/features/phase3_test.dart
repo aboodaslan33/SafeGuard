@@ -512,5 +512,33 @@ void main() {
       );
       expect(find.text('لا توجد تطبيقات محمية'), findsOneWidget);
     });
+
+    testWidgets(
+      'an app the content shield covers asks before blocking it all',
+      (tester) async {
+        final engine = await open(tester, 'حماية التطبيقات');
+        engine.installed.add(
+          const InstalledApp(packageName: 'pkg.instagram', label: 'Instagram'),
+        );
+        Future<void> pick() async {
+          await tester.tap(find.text('إضافة تطبيق'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Instagram'));
+          await tester.pumpAndSettle();
+        }
+
+        await pick();
+        expect(find.text('هذا يمنع فتح التطبيق كله'), findsOneWidget);
+        expect(find.textContaining('درع المحتوى'), findsOneWidget);
+        await tester.tap(find.text('إلغاء'));
+        await tester.pumpAndSettle();
+        expect(engine.protected, isEmpty);
+
+        await pick();
+        await tester.tap(find.text('منع التطبيق كله'));
+        await tester.pumpAndSettle();
+        expect(engine.protected.single.packageName, 'pkg.instagram');
+      },
+    );
   });
 }

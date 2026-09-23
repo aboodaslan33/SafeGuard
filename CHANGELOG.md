@@ -9,6 +9,39 @@ Every release lists **Migration notes** (data / settings changes),
 Play a rollback is always a *new* release with a higher `versionCode`
 carrying the previous code (see docs/RELEASE.md).
 
+## [1.10.0+11] — Content Shield stays in the app; in-app search blocking
+
+### Changed
+- **A block never sends you out of the app.** Blocked content is covered
+  at once by SafeGuard's "content hidden" screen and swiped past; if it
+  keeps coming back (a single post, a profile, results), the cover stays
+  until you tap **Next** or **Back**. The old Back → Home escalation is
+  gone.
+- App protection warns before adding an app the Content Shield covers
+  (Instagram, Facebook…): it would block the whole app, not just the
+  content.
+
+### Added
+- **Search blocking inside supported apps:** the query typed into the
+  app's own search box (Instagram, Facebook, TikTok, YouTube…) is checked
+  by search protection once typing pauses, with the same categories,
+  custom keywords and AI; a blocked search is cleared and counted in the
+  blocked-searches statistics.
+
+### Security notes
+- The shield now reads one editable field: the focused search box of a
+  supported app (recognised by its id or hint). Passwords and every other
+  field are still never read. The query is checked in memory; only a
+  keyed hash of a blocked query is logged. Disclosures updated.
+- The cover is a `TYPE_ACCESSIBILITY_OVERLAY` of the shield's own service
+  (no new permission); a test keeps it free of any content reading.
+
+### Migration notes
+- None. Log entries now end in `:skip` or `:cover`.
+
+### Rollback
+- Ship 1.9.0's code with a higher build number.
+
 ## [1.9.0+10] — AI Content Shield: image AI, screen capture, skip
 
 ### Added

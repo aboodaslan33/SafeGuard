@@ -51,11 +51,14 @@ ContentShieldEngine ── sg-text-1 (text) / GantMan MobileNetV2 via LiteRT (im
   ▼
 ProtectionDecisionEngine (existing, unchanged) ← the only authority
   ▼
-ALLOW / UNKNOWN → nothing          BLOCK → BlockEscalation:
-                                     1st: swipe to the next reel/post
-                                     2nd (within 8 s): Back
-                                     3rd: Home + "This content was blocked"
+ALLOW / UNKNOWN → nothing          BLOCK → BlockEscalation (never leaves the app):
+                                     1st, 2nd: cover (ShieldCover) + swipe to the next reel/post
+                                     3rd within 8 s: cover stays until "Next" / "Back"
                                    + metadata-only log event
+
+Search box of a supported app (focused, recognised by SearchFieldDetector)
+  → once typing pauses → search protection (same categories, keywords, AI)
+  → BLOCK: the box is cleared + "Search blocked" cover (Back if it can't be cleared)
 ```
 
 Code:
@@ -160,10 +163,14 @@ What the capture service does:
   - Frames are released after inference.
   - The input tensor and LiteRT's input buffer are zeroed after each run.
   - Text is dropped and nodes are recycled.
-- **Never read:** input fields, password fields, apps outside the list.
+- **Never read:** password fields, input fields other than the app's
+  search box (`SearchFieldDetector`: view id / hint says "search"), apps
+  outside the list. A blocked search is logged like a web search: keyed
+  hash only, never the text.
 - **Logged on a block** (if the log is on): time, app package, category,
   confidence rounded down to 10 %, model version and the action taken
-  (`ai_shield:<kind>:<label>:<model>:<skip|back|home>`).
+  (`ai_shield:<kind>:<label>:<model>:<skip|cover>`; entries from 1.9.0
+  may end in `back` or `home`).
 - **Enforced by tests:** `ShieldSourceAuditTest` fails the build if the
   shield or capture code uses logging, file or preference writes, network,
   bitmaps or encoding, or if a permission other than the six listed is
@@ -178,7 +185,7 @@ What the capture service does:
 | Slow device | `InferenceWatchdog`: 3 image runs over 1.5 s → image checks paused 60 s, status "too slow" |
 | Model missing / corrupted / load failure / out of memory / wrong tensor shapes | `ImageModelState` → image UNAVAILABLE (UI says so); a transient failure is retried once; corrupted never |
 | Consent refused or revoked | Status "image checks are off"; nothing captured |
-| Block loops | 1.2 s per-app debounce; escalation skip → back → home |
+| Block loops | 1.2 s per-app debounce; escalation skip → skip → cover that stays until the user chooses; never Home |
 | UI truthfulness | ACTIVE only when text **and** image checks run; otherwise PARTIAL / UNAVAILABLE with reasons |
 
 **Measured, not on a phone:**
@@ -263,8 +270,13 @@ accuracy figure is the authors' own ≈ 92 %.
   - Frames are sampled, so short video moments can be missed.
   - DRM video and secure screens are black to capture.
 - **Skipping depends on the app:** "skip" is an upward swipe; in apps or
-  screens where that doesn't move to the next item, SafeGuard escalates to
-  Back and Home.
+  screens where that doesn't move to the next item, the content stays
+  covered until the user taps "Next" or "Back". SafeGuard never sends the
+  user out of the app.
+- **Search boxes are recognised heuristically** (view id or hint contains
+  "search"/"بحث"). An app that labels its search box differently isn't
+  covered; its results pages are still checked as screen text.
+- **The cover is itself captured:** while it is up, image checks pause.
 - **Consent and the user's control:**
   - Android 14+ requires new capture consent after every restart; image
     checks are off until the user allows it again.

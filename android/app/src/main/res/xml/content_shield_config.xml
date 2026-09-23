@@ -6,15 +6,17 @@
     to the apps the user left on, and switches content events off while
     the shield or protection is off.
   - canRetrieveWindowContent is needed to read visible text in those apps.
-    Editable and password fields are never read; text is classified in
-    memory and discarded.
+    Password fields are never read; the only editable field read is the
+    app's focused search box (for search protection). Text is classified
+    in memory and discarded.
   - canPerformGestures: to skip blocked content (one swipe to the next
-    reel/item), then Back / Home if that isn't enough. No other gestures,
-    no overlays, no accessibility screenshots (images come only from
-    MediaProjection, with Android's consent dialog).
+    reel/item) and Back when the user asks. Blocked content is covered by
+    SafeGuard's own accessibility overlay (its message only); the user is
+    never sent out of the app. No accessibility screenshots (images come
+    only from MediaProjection, with Android's consent dialog).
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled|typeViewTextChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
     android:canPerformGestures="true"

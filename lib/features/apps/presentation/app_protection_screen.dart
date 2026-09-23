@@ -84,6 +84,24 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
       ),
     );
     if (picked == null || !mounted) return;
+    if (await _coveredByShield(picked.packageName)) {
+      if (!mounted) return;
+      final blockWholeApp = await showSgConfirmDialog(
+        context,
+        title: tr('هذا يمنع فتح التطبيق كله', 'This blocks the whole app'),
+        message: tr(
+          'حماية التطبيقات تمنع فتح «${picked.label}» كليًا، مهما كان المحتوى. '
+              'لحجب المحتوى الجنسي والعاري فقط داخله مع بقاء التطبيق يعمل، '
+              'استخدم «درع المحتوى» ولا تضفه هنا.',
+          'App protection stops “${picked.label}” from opening at all, whatever '
+              'it shows. To hide only sexual or nude content inside it and keep '
+              "using the app, use the Content Shield and don't add it here.",
+        ),
+        confirmLabel: tr('منع التطبيق كله', 'Block the whole app'),
+        cancelLabel: tr('إلغاء', 'Cancel'),
+      );
+      if (!blockWholeApp || !mounted) return;
+    }
     try {
       await _engine.addProtectedApp(picked.packageName);
       if (mounted) {
@@ -98,6 +116,16 @@ class _AppProtectionScreenState extends State<AppProtectionScreen> {
       await _refresh();
     } on AppFailure catch (f) {
       if (mounted) showSgSnack(context, f.message);
+    }
+  }
+
+  /// Whether the AI Content Shield can filter this app's content instead.
+  Future<bool> _coveredByShield(String packageName) async {
+    try {
+      final status = await _engine.shieldStatus();
+      return status.apps.any((a) => a.packages.contains(packageName));
+    } on AppFailure {
+      return false;
     }
   }
 

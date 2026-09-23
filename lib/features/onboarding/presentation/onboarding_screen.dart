@@ -71,8 +71,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
       [
         tr(
-          'لا يقرأ ما تكتبه في التطبيقات الأخرى',
-          'It doesn\'t read what you type in other apps',
+          'لا يقرأ ما تكتبه في التطبيقات الأخرى، إلا مربع البحث في التطبيقات التي تختار حمايتها بدرع المحتوى',
+          'It doesn\'t read what you type in other apps, except the search box in apps you protect with the Content Shield',
         ),
       ],
     ),

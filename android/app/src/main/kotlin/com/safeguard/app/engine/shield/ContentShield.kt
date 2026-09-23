@@ -168,41 +168,73 @@ class InferenceWatchdog(
     }
 }
 
-/** What SafeGuard does to get blocked content off the screen, mildest first. */
+/**
+ * What SafeGuard does with blocked content. It never leaves the app: the
+ * content is covered, then skipped.
+ */
 enum class BlockAction(val id: String) {
-    /** Swipe to the next item (reels, shorts, feeds). */
+    /** Cover the screen for a moment and swipe to the next item (reels, shorts, feeds). */
     SKIP("skip"),
 
-    /** Leave the current screen (e.g. a video page). */
-    BACK("back"),
-
-    /** Go to the home screen and show SafeGuard's blocking screen. */
-    HOME("home"),
+    /**
+     * Skipping didn't help (a single post, a profile, search results): keep
+     * the content covered until the user chooses "Next" or "Back".
+     */
+    COVER("cover"),
 }
 
 /**
- * Escalates when skipping doesn't help: a block in the same app within
- * [windowMs] of the previous one moves to the next action (skip → back →
- * home). A quiet period or another app starts again from skip.
+ * Chooses the action for a block. The first [skipsBeforeCover] blocks in
+ * the same app within [windowMs] of each other skip; if blocked content
+ * keeps coming back, it stays covered instead. A quiet period, another app
+ * or the user's choice on the cover starts again from skip.
  */
-class BlockEscalation(private val windowMs: Long = 8_000) {
+class BlockEscalation(
+    private val windowMs: Long = 8_000,
+    private val skipsBeforeCover: Int = 2,
+) {
     private var lastPackage: String? = null
     private var lastAt = Long.MIN_VALUE / 2
-    private var level = 0
+    private var count = 0
 
     @Synchronized
     fun next(packageName: String, now: Long): BlockAction {
-        level = if (packageName == lastPackage && now - lastAt <= windowMs) (level + 1).coerceAtMost(BlockAction.entries.size - 1) else 0
+        count = if (packageName == lastPackage && now - lastAt <= windowMs) count + 1 else 1
         lastPackage = packageName
         lastAt = now
-        return BlockAction.entries[level]
+        return if (count <= skipsBeforeCover) BlockAction.SKIP else BlockAction.COVER
     }
 
     @Synchronized
     fun reset() {
         lastPackage = null
-        level = 0
+        count = 0
     }
+}
+
+/**
+ * Recognises the search box of a supported app from what accessibility
+ * reports about the focused, editable field. Only such a field is ever
+ * read; message boxes and other inputs are not.
+ */
+object SearchFieldDetector {
+    private val WORDS = listOf("search", "بحث", "ابحث")
+
+    fun isSearchField(viewId: String?, hint: CharSequence?, description: CharSequence?, className: CharSequence?): Boolean {
+        val id = viewId?.substringAfter(":id/", viewId)?.lowercase()
+        if (id != null && "search" in id) return true
+        if (className?.toString()?.endsWith("SearchView\$SearchAutoComplete") == true) return true
+        return listOfNotNull(hint, description).any { t -> WORDS.any { t.toString().contains(it, ignoreCase = true) } }
+    }
+
+    /** The query worth checking, or null (too short, or just the hint). */
+    fun query(text: CharSequence?, showingHint: Boolean): String? {
+        if (showingHint) return null
+        val q = text?.toString()?.trim()?.take(MAX_QUERY) ?: return null
+        return q.takeIf { it.count(Char::isLetterOrDigit) >= 2 }
+    }
+
+    const val MAX_QUERY = 200
 }
 
 /** What happened with one sample. */

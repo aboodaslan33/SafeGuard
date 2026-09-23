@@ -8,8 +8,9 @@ import java.io.File
 
 /**
  * Static checks over the shipped sources that keep the AI Content Shield's
- * privacy promises true: no screenshots, overlays, storage, logging or
- * network in the shield path, and events only from the supported apps.
+ * privacy promises true: no screenshots, storage, logging or network in
+ * the shield path, only SafeGuard's own accessibility-overlay cover, and
+ * events only from the supported apps.
  */
 class ShieldSourceAuditTest {
 
@@ -67,9 +68,29 @@ class ShieldSourceAuditTest {
         val forbidden = listOf(
             "Log.", "println(", "FileOutputStream", "openFileOutput", "writeText(", "SharedPreferences", "getSharedPreferences",
             "HttpURLConnection", "URL(", "Socket(", "takeScreenshot", "MediaProjection", "TYPE_APPLICATION_OVERLAY",
-            "TYPE_ACCESSIBILITY_OVERLAY", "addView(", "Bitmap.compress",
+            "TYPE_ACCESSIBILITY_OVERLAY", "addView(", "Bitmap.compress", "SYSTEM_ALERT_WINDOW", "GLOBAL_ACTION_HOME",
         )
         for (f in forbidden) assertFalse("shield code must not use $f", code.contains(f))
+        // The only text written into an app is an empty string (clearing a blocked search).
+        assertEquals(1, Regex("ACTION_SET_TEXT").findAll(code).count())
+        assertTrue(code.contains("ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, \"\")"))
+        // An editable field is read only after it is recognised as a search box.
+        assertTrue(code.contains("if (!SearchFieldDetector.isSearchField("))
+    }
+
+    @Test fun coverIsOnlyAnAccessibilityOverlayThatReadsNothing() {
+        val code = file("$main/kotlin/com/safeguard/app/shield/ShieldCover.kt").lines()
+            .map { it.substringBefore("//").trim() }
+            .filterNot { it.startsWith("*") || it.startsWith("/*") }
+            .joinToString("\n")
+        assertTrue(code.contains("TYPE_ACCESSIBILITY_OVERLAY"))
+        for (f in listOf(
+            "TYPE_APPLICATION_OVERLAY", "SYSTEM_ALERT_WINDOW", "AccessibilityNodeInfo", "rootInActiveWindow", "MediaProjection",
+            "takeScreenshot", "Log.", "SharedPreferences", "HttpURLConnection", "Socket(", "GLOBAL_ACTION_HOME",
+        )) {
+            assertFalse("cover must not use $f", code.contains(f))
+        }
+        assertFalse(file("$main/AndroidManifest.xml").contains("SYSTEM_ALERT_WINDOW"))
     }
 
     @Test fun screenCaptureNeverSavesEncodesLogsOrSendsFrames() {

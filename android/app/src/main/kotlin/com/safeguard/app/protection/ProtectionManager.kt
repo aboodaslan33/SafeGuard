@@ -283,6 +283,24 @@ class ProtectionManager private constructor(private val context: Context) {
         keywords = keywords,
     )
 
+    /**
+     * Search filtering for queries typed into the search boxes of apps the
+     * AI Content Shield covers. Same layers and logging as web searches
+     * (only a keyed hash of a blocked query is kept).
+     */
+    private val appSearchFilter: SearchFilterService = AiSearchFilterService(
+        rules = RuleBasedSearchClassifier(),
+        config = { config.appSearchPolicy },
+        ai = contentClassifier,
+        aiSettings = { config.effectiveAi },
+        listener = SearchDecisionListener { q, d ->
+            searchRecorder.onDecision(q, d)
+            trace.recordSearch(d, System.currentTimeMillis())
+        },
+        aiListener = aiStatsRecorder,
+        keywords = keywords,
+    )
+
     private val protectedApps = SqliteProtectedAppStore(database)
     val appProtection = AppProtection(
         store = protectedApps,
@@ -846,6 +864,16 @@ class ProtectionManager private constructor(private val context: Context) {
             ),
         )
         return true
+    }
+
+    /**
+     * A query typed into a supported app's search box (checked once typing
+     * pauses). Null when the shield doesn't cover the app right now.
+     */
+    fun shieldSearch(pkg: String, query: String): SearchDecision? {
+        val app = SupportedApps.forPackage(pkg) ?: return null
+        if (!shield.isActiveFor(pkg, ContentKind.TEXT)) return null
+        return appSearchFilter.classify(SearchQuery("app:${app.key}", query.take(SearchNormalizer.MAX_INPUT)))
     }
 
     /** Screen capture started or stopped: free the image model when it can't be used. */

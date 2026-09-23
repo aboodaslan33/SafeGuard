@@ -83,6 +83,19 @@ class ProtectionConfigStore(
 
     val searchEffectivelyEnabled: Boolean get() = effective.safeSearch.enabled
 
+    /**
+     * Search protection for queries typed into the search boxes of apps the
+     * AI Content Shield covers (Instagram, Facebook…): the same categories
+     * and threshold, on whenever protection is active (the web SafeSearch
+     * switch is about search engines and doesn't turn this off).
+     */
+    val appSearchPolicy: SearchPolicyConfig
+        get() = if (filteringActive) {
+            SearchPolicyConfig(true, effective.categories, defaultThreshold = effective.lexiconThreshold)
+        } else {
+            SearchPolicyConfig.DISABLED
+        }
+
     val effectiveAi: AiSettings get() = effective.ai
 
     @Synchronized

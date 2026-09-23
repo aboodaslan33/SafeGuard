@@ -290,14 +290,39 @@ class ContentShieldTest {
         assertFalse(ShieldSettings(enabled = true).isLoosenedBy(full))
     }
 
-    @Test fun escalationGoesSkipBackHomeAndResets() {
+    @Test fun escalationSkipsThenCoversAndNeverLeavesTheApp() {
         val e = BlockEscalation(windowMs = 8_000)
         assertEquals(BlockAction.SKIP, e.next(instagram, 0))
-        assertEquals(BlockAction.BACK, e.next(instagram, 2_000))
-        assertEquals(BlockAction.HOME, e.next(instagram, 4_000))
-        assertEquals(BlockAction.HOME, e.next(instagram, 6_000))
+        assertEquals(BlockAction.SKIP, e.next(instagram, 2_000))
+        assertEquals(BlockAction.COVER, e.next(instagram, 4_000))
+        assertEquals(BlockAction.COVER, e.next(instagram, 6_000))
         assertEquals("quiet period starts over", BlockAction.SKIP, e.next(instagram, 20_000))
         assertEquals("another app starts over", BlockAction.SKIP, e.next("com.google.android.youtube", 21_000))
+        e.next(instagram, 22_000); e.next(instagram, 23_000)
+        e.reset()
+        assertEquals("the user's choice on the cover starts over", BlockAction.SKIP, e.next(instagram, 24_000))
+        assertEquals("no action leaves the app", listOf("skip", "cover"), BlockAction.entries.map { it.id })
+    }
+
+    @Test fun onlySearchBoxesAreRecognisedAsSearchFields() {
+        assertTrue(SearchFieldDetector.isSearchField("com.instagram.android:id/action_bar_search_edit_text", null, null, "android.widget.EditText"))
+        assertTrue(SearchFieldDetector.isSearchField(null, "Search", null, "android.widget.EditText"))
+        assertTrue(SearchFieldDetector.isSearchField(null, "ابحث في فيسبوك", null, "android.widget.EditText"))
+        assertTrue(SearchFieldDetector.isSearchField(null, null, null, "android.widget.SearchView\$SearchAutoComplete"))
+        // Message boxes, comments, captions: never.
+        assertFalse(SearchFieldDetector.isSearchField("com.instagram.android:id/row_thread_composer_edittext", "Message…", null, "android.widget.EditText"))
+        assertFalse(SearchFieldDetector.isSearchField("com.facebook.katana:id/comment_input", "Write a comment…", null, "android.widget.EditText"))
+        assertFalse(SearchFieldDetector.isSearchField(null, null, null, "android.widget.EditText"))
+        // The package part of the id doesn't count.
+        assertFalse(SearchFieldDetector.isSearchField("com.search.app:id/message", null, null, null))
+    }
+
+    @Test fun searchQueryIgnoresHintsAndTinyInput() {
+        assertEquals(null, SearchFieldDetector.query("Search", showingHint = true))
+        assertEquals(null, SearchFieldDetector.query(" a ", showingHint = false))
+        assertEquals(null, SearchFieldDetector.query(null, showingHint = false))
+        assertEquals("porn", SearchFieldDetector.query("  porn ", showingHint = false))
+        assertEquals(SearchFieldDetector.MAX_QUERY, SearchFieldDetector.query("x".repeat(500), false)!!.length)
     }
 
     @Test fun imagePipelineRunsThroughPolicyWithARuntime() {

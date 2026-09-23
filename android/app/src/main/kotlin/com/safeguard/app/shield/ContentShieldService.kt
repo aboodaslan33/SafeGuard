@@ -3,17 +3,19 @@ package com.safeguard.app.shield
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
-import android.content.Intent
 import android.graphics.Path
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.safeguard.app.apps.AppBlockedActivity
+import com.safeguard.app.engine.rules.RuleAction
 import com.safeguard.app.engine.shield.BlockAction
 import com.safeguard.app.engine.shield.BlockEscalation
 import com.safeguard.app.engine.shield.NodeView
+import com.safeguard.app.engine.shield.SearchFieldDetector
 import com.safeguard.app.engine.shield.ShieldOutcome
 import com.safeguard.app.engine.shield.SupportedApps
 import com.safeguard.app.engine.shield.VisibleTextExtractor
@@ -34,14 +36,20 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   switches); SafeGuard never receives events from any other app.
  * - While the shield or protection is off, content events are switched off
  *   and no window content is read.
- * - Editable and password fields are never read; codes, numbers, e-mails
- *   and links are dropped ([VisibleTextExtractor]).
+ * - Password fields are never read. Editable fields are never read, with
+ *   one exception: the focused search box of a supported app
+ *   ([SearchFieldDetector]), checked by search protection once typing
+ *   pauses. Message boxes and other inputs are not search boxes.
+ *   Codes, numbers, e-mails and links are dropped ([VisibleTextExtractor]).
  * - Text is classified in memory on a background thread and discarded; it
- *   is never logged, stored or sent. Only block metadata is logged.
- * - No overlay is drawn. A block first swipes to the next item (reels,
- *   shorts, feeds); if blocked content is still there it goes Back, then
- *   Home with SafeGuard's own blocking screen ([BlockEscalation]). The
- *   only gestures performed are that one swipe, Back and Home.
+ *   is never logged, stored or sent. Only block metadata (and, for a
+ *   blocked search, a keyed hash) is logged.
+ * - A block never leaves the app: SafeGuard covers the screen
+ *   ([ShieldCover], an accessibility overlay showing only its own message)
+ *   and swipes to the next item (reels, shorts, feeds). If blocked content
+ *   keeps coming back, the cover stays until the user picks "Next" or
+ *   "Back" ([BlockEscalation]). The only gestures performed are that one
+ *   swipe and Back; a blocked search is cleared.
  * - Screen images come only from [ScreenCaptureService] (MediaProjection,
  *   with Android's consent); this service takes no screenshots.
  *
@@ -59,6 +67,30 @@ class ContentShieldService : AccessibilityService() {
     @Volatile private var foreground: String? = null
     private var retried = false
 
+    /** Last search-box query checked (so the same query isn't re-checked). */
+    private var lastQuery: String? = null
+    private var coverHiddenAt = Long.MIN_VALUE / 2
+
+    private val cover by lazy {
+        ShieldCover(
+            service = this,
+            arabic = { manager.config.uiLanguage != "en" },
+            onNext = {
+                escalation.reset()
+                main.postDelayed({ swipeToNext() }, GESTURE_DELAY_MS)
+            },
+            onBack = {
+                escalation.reset()
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            },
+            onHidden = {
+                coverHiddenAt = SystemClock.uptimeMillis()
+                // The screen underneath may have changed: let it settle before checking again.
+                manager.shield.onContentChanged()
+            },
+        )
+    }
+
     private val snapshot = Runnable { takeSnapshot() }
 
     override fun onServiceConnected() {
@@ -68,6 +100,8 @@ class ContentShieldService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
+        // SafeGuard's own cover is not "the app in front".
+        if (pkg == packageName && (cover.showing || SystemClock.uptimeMillis() - coverHiddenAt < OWN_WINDOW_GRACE_MS)) return
         // Events from other apps arrive only with "all apps" on (packageNames
         // unset); they are used for the foreground app, never for text.
         val supported = SupportedApps.forPackage(pkg) != null
@@ -76,6 +110,9 @@ class ContentShieldService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 // The keyboard isn't "the app in front".
                 if (pkg != foreground && pkg != keyboardPackage()) {
+                    // The user left the app: the cover belongs to it.
+                    cover.hide()
+                    lastQuery = null
                     foreground = pkg
                     manager.shieldForeground = pkg
                     engine.onForeground(pkg)
@@ -96,11 +133,14 @@ class ContentShieldService : AccessibilityService() {
     private fun takeSnapshot() {
         val pkg = foreground ?: return
         val engine = manager.shield
-        if (busy.get()) return reschedule()
-        if (!engine.wantsText(pkg)) return reschedule()
+        // Covered: the user can't see the content, nothing to check.
+        if (cover.showing) return
         val root = rootInActiveWindow ?: return
         val text = try {
             if (root.packageName?.toString() != pkg) return
+            checkSearch(root, pkg)
+            if (busy.get()) return reschedule()
+            if (!engine.wantsText(pkg)) return reschedule()
             VisibleTextExtractor.extract(root, Nodes)
         } catch (e: RuntimeException) {
             return // window changed while reading
@@ -129,25 +169,83 @@ class ContentShieldService : AccessibilityService() {
         main.postDelayed(snapshot, RETRY_MS)
     }
 
-    /** Gets blocked content off the screen: skip, then Back, then Home + blocking screen. */
+    /**
+     * The focused search box, if the app shows one: its query is checked by
+     * search protection once typing pauses (this runs [SETTLE_MS] after the
+     * last event). Any other field is left alone.
+     */
+    private fun checkSearch(root: AccessibilityNodeInfo, pkg: String) {
+        val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val query = try {
+            node?.let { searchQuery(it) }
+        } finally {
+            node?.let(Nodes::recycleRoot)
+        }
+        if (query == null) {
+            lastQuery = null
+            return
+        }
+        if (query == lastQuery) return
+        lastQuery = query
+        try {
+            worker.execute {
+                val d = manager.shieldSearch(pkg, query) ?: return@execute
+                if (d.action == RuleAction.BLOCK) main.post { onSearchBlocked(pkg) }
+            }
+        } catch (e: RejectedExecutionException) {
+            // service is shutting down
+        }
+    }
+
+    private fun searchQuery(n: AccessibilityNodeInfo): String? {
+        if (!n.isEditable || n.isPassword) return null
+        val hint = if (Build.VERSION.SDK_INT >= 26) n.hintText else null
+        if (!SearchFieldDetector.isSearchField(n.viewIdResourceName, hint, n.contentDescription, n.className)) return null
+        val showingHint = if (Build.VERSION.SDK_INT >= 26) n.isShowingHintText else false
+        return SearchFieldDetector.query(n.text, showingHint || (hint != null && n.text?.toString() == hint.toString()))
+    }
+
+    /** A blocked search: clear the box and say why. Stays in the app. */
+    private fun onSearchBlocked(pkg: String) {
+        if (destroyed || pkg != foreground) return
+        val cleared = rootInActiveWindow?.let { root ->
+            try {
+                root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let { n ->
+                    try {
+                        n.isEditable && !n.isPassword && n.performAction(
+                            AccessibilityNodeInfo.ACTION_SET_TEXT,
+                            Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "") },
+                        )
+                    } finally {
+                        Nodes.recycleRoot(n)
+                    }
+                }
+            } finally {
+                Nodes.recycleRoot(root)
+            }
+        } ?: false
+        lastQuery = null
+        cover.flash(ShieldCover.Message.SEARCH, SEARCH_COVER_MS)
+        // Couldn't clear it: leave the search screen (still inside the app).
+        if (!cleared) performGlobalAction(GLOBAL_ACTION_BACK)
+    }
+
+    /** Hides blocked content without leaving the app: cover + skip, or a cover that stays. */
     private fun act(outcome: ShieldOutcome.Blocked) {
         val e = outcome.event
-        if (destroyed || e.packageName != foreground) return
+        if (destroyed || e.packageName != foreground || cover.showing) return
         val action = escalation.next(e.packageName, e.timestamp)
         if (!manager.onShieldBlock(e, action)) return
         manager.shield.onContentChanged() // the screen is about to change: let it settle
         when (action) {
-            BlockAction.SKIP -> if (!swipeToNext()) performGlobalAction(GLOBAL_ACTION_BACK)
-            BlockAction.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
-            BlockAction.HOME -> {
-                performGlobalAction(GLOBAL_ACTION_HOME)
-                startActivity(
-                    Intent(this, AppBlockedActivity::class.java)
-                        .putExtra(AppBlockedActivity.EXTRA_KIND, AppBlockedActivity.KIND_CONTENT)
-                        .putExtra(AppBlockedActivity.EXTRA_CATEGORY, e.category.id)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY),
-                )
+            BlockAction.SKIP -> {
+                // The cover doesn't take touches, so the swipe reaches the app underneath.
+                cover.flash(ShieldCover.Message.CONTENT, SKIP_COVER_MS)
+                main.postDelayed({
+                    if (!destroyed && !swipeToNext()) cover.hold(ShieldCover.Message.CONTENT_REPEATED)
+                }, GESTURE_DELAY_MS)
             }
+            BlockAction.COVER -> cover.hold(ShieldCover.Message.CONTENT_REPEATED)
         }
     }
 
@@ -181,7 +279,8 @@ class ContentShieldService : AccessibilityService() {
             packages.isEmpty() -> 0 // shield off: no events at all
             active -> AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                AccessibilityEvent.TYPE_VIEW_SCROLLED
+                AccessibilityEvent.TYPE_VIEW_SCROLLED or
+                AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
             // Protection off or paused: app switches only (no content), to notice when it resumes.
             else -> AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         }
@@ -189,6 +288,8 @@ class ContentShieldService : AccessibilityService() {
         serviceInfo = info
         if (!active) {
             main.removeCallbacks(snapshot)
+            cover.hide()
+            lastQuery = null
             foreground = null
             manager.shieldForeground = null
             manager.shield.onForeground(null)
@@ -214,6 +315,7 @@ class ContentShieldService : AccessibilityService() {
     override fun onDestroy() {
         destroyed = true
         main.removeCallbacks(snapshot)
+        cover.hide()
         worker.shutdownNow()
         instance = null
         super.onDestroy()
@@ -241,8 +343,15 @@ class ContentShieldService : AccessibilityService() {
         private const val SETTLE_MS = 450L
         private const val RETRY_MS = 1_100L
         private const val SWIPE_MS = 180L
+        private const val GESTURE_DELAY_MS = 60L
+        private const val SKIP_COVER_MS = 1_000L
+        private const val SEARCH_COVER_MS = 1_500L
+        private const val OWN_WINDOW_GRACE_MS = 1_000L
 
         @Volatile private var instance: WeakReference<ContentShieldService>? = null
+
+        /** Whether SafeGuard's cover is on screen (screen frames then show the cover, not the app). */
+        val covering: Boolean get() = instance?.get()?.cover?.showing == true
 
         /** A block found by the image path (capture thread): act on the main thread. */
         fun onBlocked(outcome: ShieldOutcome.Blocked) {
