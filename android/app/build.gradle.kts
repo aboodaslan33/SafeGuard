@@ -120,7 +120,7 @@ flutter {
 dependencies {
     // On-device image model runtime (AI Content Shield). LiteRT is Google's
     // TensorFlow Lite runtime; it executes the pinned .tflite data file only.
-    implementation("com.google.ai.edge.litert:litert:1.4.0")
+    implementation("com.google.ai.edge.litert:litert:2.2.0")
 
     // Pure-Kotlin engine tests (DNS parsing, rules, logging, statistics).
     testImplementation("junit:junit:4.13.2")
