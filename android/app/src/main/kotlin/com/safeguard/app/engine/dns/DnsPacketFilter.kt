@@ -22,6 +22,8 @@ class DnsPacketFilter(
     private val dnsPort: Int = 53,
     /** SafeSearch enforcement; OFF unless Search Protection is on. */
     private val safeSearch: () -> SafeSearchConfig = { SafeSearchConfig.OFF },
+    /** Sees every decision (allow and block), e.g. the debug trace. */
+    private val observer: (Decision) -> Unit = {},
 ) {
     sealed interface Outcome {
         /** Write this packet back to the tun interface. */
@@ -67,6 +69,7 @@ class DnsPacketFilter(
         val query = DnsMessage.parseQuery(datagram.payload) ?: return Outcome.Drop
 
         val decision = engine.evaluate(query.name, policy())
+        observer(decision)
         if (decision.isBlocked) {
             listener.onBlocked(decision)
             val answer = DnsMessage.errorResponse(datagram.payload, query, DnsMessage.RCODE_NXDOMAIN)

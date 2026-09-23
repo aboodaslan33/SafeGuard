@@ -3,9 +3,11 @@ import 'dart:convert';
 import '../../../core/i18n/i18n.dart';
 import '../../ai/domain/ai_models.dart';
 import 'advanced_models.dart';
+import 'explanation.dart';
 
 export '../../ai/domain/ai_models.dart';
 export 'advanced_models.dart';
+export 'explanation.dart';
 
 /// Content categories SafeGuard can filter. [id] is the stable storage key
 /// and must never change once shipped.
@@ -252,6 +254,7 @@ class BlockEvent {
     this.ruleType = 'domain',
     this.isBlock = true,
     this.categoryId,
+    this.explanation,
   });
 
   final DateTime time;
@@ -272,6 +275,9 @@ class BlockEvent {
   final String? categoryId;
 
   bool get isCustomCategory => categoryId == 'custom';
+
+  /// Why it was blocked (null for events from older app versions).
+  final DecisionExplanation? explanation;
 }
 
 /// How long the activity log is kept on the device (Phase 6).
@@ -440,6 +446,7 @@ class SearchCheck {
     required this.ruleType,
     required this.reason,
     required this.opened,
+    this.explanation,
   });
 
   final RuleAction action;
@@ -450,6 +457,8 @@ class SearchCheck {
 
   /// Results were opened in the browser (only when allowed).
   final bool opened;
+
+  final DecisionExplanation? explanation;
 
   bool get blocked => action == RuleAction.block;
 }
@@ -575,6 +584,17 @@ abstract interface class ProtectionEngine {
   /// Local technical state for the diagnostics screen: states, counts and
   /// versions only — never domains, queries, package names or keywords.
   Future<Map<String, Object?>> diagnostics();
+
+  /// Alerts when protection stops or degrades (needs notification permission).
+  Future<AlertsState> alertsState();
+  Future<AlertsState> setAlertsEnabled(bool enabled);
+
+  /// Android 13+ system dialog; true when notifications are allowed.
+  Future<bool> requestNotificationPermission();
+
+  /// Content-free decision trace for debugging (off by default, memory only).
+  Future<DecisionTraceSnapshot> decisionTrace();
+  Future<void> setDecisionTraceEnabled(bool enabled);
 
   // ---- Phase 4: AI Protection (on-device) ----
   Future<AiSettings> aiSettings();
@@ -710,6 +730,18 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   Future<void> openPrivateDnsSettings() async {}
   @override
   Future<Map<String, Object?>> diagnostics() async => const {};
+  @override
+  Future<AlertsState> alertsState() async => const AlertsState();
+  @override
+  Future<AlertsState> setAlertsEnabled(bool enabled) async =>
+      AlertsState(enabled: enabled);
+  @override
+  Future<bool> requestNotificationPermission() async => false;
+  @override
+  Future<DecisionTraceSnapshot> decisionTrace() async =>
+      const DecisionTraceSnapshot();
+  @override
+  Future<void> setDecisionTraceEnabled(bool enabled) async {}
   @override
   Future<AiSettings> aiSettings() async => const AiSettings();
   @override

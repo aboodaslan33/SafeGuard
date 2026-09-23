@@ -77,6 +77,7 @@ void main() {
       AccessibilityStatus a11y = AccessibilityStatus.disabled,
       int apps = 0,
       bool? battery = true,
+      AlertsState? alerts = const AlertsState(permission: true),
     }) => SetupFacts(
       supported: true,
       vpnPermission: permission,
@@ -89,6 +90,7 @@ void main() {
       accessibility: a11y,
       protectedAppCount: apps,
       batteryOptimizationIgnored: battery,
+      alerts: alerts,
     );
 
     CheckStatus status(List<SetupCheck> c, SetupCheckId id) =>
@@ -99,9 +101,28 @@ void main() {
       expect(status(c, SetupCheckId.vpnConsent), CheckStatus.ok);
       expect(status(c, SetupCheckId.protectionRunning), CheckStatus.ok);
       expect(status(c, SetupCheckId.accessibility), CheckStatus.notNeeded);
-      expect(status(c, SetupCheckId.notifications), CheckStatus.notNeeded);
+      expect(status(c, SetupCheckId.notifications), CheckStatus.ok);
       // Always-on VPN can't be read by apps: never claimed as done.
       expect(status(c, SetupCheckId.alwaysOn), CheckStatus.recommended);
+    });
+
+    test('notifications: only for the optional alert', () {
+      final missing = evaluateSetup(
+        facts(alerts: const AlertsState(permission: false)),
+      ).firstWhere((x) => x.id == SetupCheckId.notifications);
+      expect(missing.status, CheckStatus.recommended);
+      expect(missing.action, CheckAction.requestNotifications);
+      expect(
+        status(
+          evaluateSetup(facts(alerts: const AlertsState(enabled: false))),
+          SetupCheckId.notifications,
+        ),
+        CheckStatus.notNeeded,
+      );
+      expect(
+        status(evaluateSetup(facts(alerts: null)), SetupCheckId.notifications),
+        CheckStatus.unknown,
+      );
     });
 
     test('missing consent and stopped VPN each get an action', () {

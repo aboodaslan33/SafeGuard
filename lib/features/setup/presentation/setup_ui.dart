@@ -31,6 +31,10 @@ Future<SetupFacts> loadSetupFacts(ProtectionController p) async {
   try {
     permission = await engine.hasVpnPermission();
   } catch (_) {}
+  AlertsState? alerts;
+  try {
+    alerts = await engine.alertsState();
+  } catch (_) {}
   bool? battery;
   try {
     final d = await engine.diagnostics();
@@ -45,6 +49,7 @@ Future<SetupFacts> loadSetupFacts(ProtectionController p) async {
     accessibility: p.accessibility,
     protectedAppCount: p.protectedAppCount,
     batteryOptimizationIgnored: battery,
+    alerts: alerts,
   );
 }
 
@@ -70,6 +75,17 @@ Future<void> runCheckAction(BuildContext context, CheckAction action) async {
         await context.push(Routes.appProtection);
       case CheckAction.openBatterySettings:
         await engine.openBatterySettings();
+      case CheckAction.requestNotifications:
+        final granted = await engine.requestNotificationPermission();
+        if (!granted && context.mounted) {
+          showSgSnack(
+            context,
+            tr(
+              'لم يُسمح بالإشعارات. يمكنك السماح بها لاحقًا من إعدادات Android.',
+              'Notifications weren\'t allowed. You can allow them later in Android settings.',
+            ),
+          );
+        }
     }
   } catch (_) {
     if (context.mounted) {
@@ -124,8 +140,8 @@ extension SetupCheckText on SetupCheckId {
       'App protection learns only the name of the app that opened, to stop the apps you chose. It doesn\'t read screen content.',
     ),
     SetupCheckId.notifications => tr(
-      'SafeGuard لا يرسل إشعارات، لذلك لا يطلب إذنها. Android يعرض رمز المفتاح أثناء عمل VPN.',
-      "SafeGuard doesn't post notifications, so it doesn't ask for that permission. Android shows a key icon while the VPN runs.",
+      'يُستخدم لتنبيه واحد فقط: عندما تتوقف الحماية أو تضعف. لا إعلانات ولا رسائل أخرى. بدونه يظهر الانقطاع عند فتح التطبيق فقط.',
+      'Used for one alert only: when protection stops or weakens. No ads or other messages. Without it, interruptions show only when you open the app.',
     ),
     SetupCheckId.battery => tr(
       'بعض الأجهزة (خصوصًا بعض الشركات المصنعة) توقف التطبيقات في الخلفية بقوة. الاستثناء من تحسين البطارية يقلل انقطاع الحماية.',
@@ -152,7 +168,10 @@ extension SetupCheckText on SetupCheckId {
       'حماية التطبيقات فقط',
       'App protection only',
     ),
-    SetupCheckId.notifications => tr('لا شيء', 'Nothing'),
+    SetupCheckId.notifications => tr(
+      'تنبيه توقف الحماية',
+      'The protection-stopped alert',
+    ),
     SetupCheckId.battery => tr(
       'استمرار الحماية في الخلفية',
       'Protection staying on in the background',
@@ -184,7 +203,10 @@ extension SetupCheckText on SetupCheckId {
       'افتح «حماية التطبيقات» واتبع الإفصاح، ثم فعّل SafeGuard في إعدادات تسهيل الاستخدام.',
       'Open App protection, read the disclosure, then turn on SafeGuard in Accessibility settings.',
     ),
-    SetupCheckId.notifications => tr('لا يلزم شيء.', 'Nothing to do.'),
+    SetupCheckId.notifications => tr(
+      'اضغط «السماح بالإشعارات» ثم «سماح» في نافذة Android.',
+      'Tap “Allow notifications”, then “Allow” in the Android dialog.',
+    ),
     SetupCheckId.battery => tr(
       'في القائمة التي تفتح: «كل التطبيقات» ← SafeGuard ← «عدم التحسين». الأسماء تختلف حسب الجهاز.',
       'In the list that opens: “All apps” → SafeGuard → “Don’t optimise”. Names vary by device.',
@@ -206,6 +228,10 @@ String checkActionLabel(CheckAction a) => switch (a) {
   ),
   CheckAction.openAppProtection => tr('حماية التطبيقات', 'App protection'),
   CheckAction.openBatterySettings => tr('إعدادات البطارية', 'Battery settings'),
+  CheckAction.requestNotifications => tr(
+    'السماح بالإشعارات',
+    'Allow notifications',
+  ),
 };
 
 (String, SgStatus) checkStatusLabel(CheckStatus s) => switch (s) {

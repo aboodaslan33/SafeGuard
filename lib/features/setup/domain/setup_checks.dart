@@ -26,6 +26,7 @@ enum CheckAction {
   openPrivateDnsSettings,
   openAppProtection,
   openBatterySettings,
+  requestNotifications,
 }
 
 enum SetupCheckId {
@@ -59,6 +60,7 @@ class SetupFacts {
     required this.accessibility,
     required this.protectedAppCount,
     this.batteryOptimizationIgnored,
+    this.alerts,
   });
 
   final bool supported;
@@ -68,11 +70,15 @@ class SetupFacts {
   final AccessibilityStatus accessibility;
   final int protectedAppCount;
   final bool? batteryOptimizationIgnored;
+
+  /// Protection alerts; null when unknown.
+  final AlertsState? alerts;
 }
 
 /// Pure evaluation (unit tested). Never reports "ok" for something it
 /// can't observe: Always-on VPN isn't readable by apps, so it stays a
-/// recommendation; notifications aren't used at all.
+/// recommendation. Notifications are used only for the optional
+/// "protection stopped" alert.
 List<SetupCheck> evaluateSetup(SetupFacts f) {
   if (!f.supported) {
     return const [SetupCheck(SetupCheckId.vpnConsent, CheckStatus.unknown)];
@@ -119,7 +125,23 @@ List<SetupCheck> evaluateSetup(SetupFacts f) {
           ? CheckAction.openAppProtection
           : null,
     ),
-    const SetupCheck(SetupCheckId.notifications, CheckStatus.notNeeded),
+    // Only the "protection stopped" alert uses notifications; optional.
+    switch (f.alerts) {
+      null => const SetupCheck(SetupCheckId.notifications, CheckStatus.unknown),
+      final a when !a.enabled => const SetupCheck(
+        SetupCheckId.notifications,
+        CheckStatus.notNeeded,
+      ),
+      final a when a.permission => const SetupCheck(
+        SetupCheckId.notifications,
+        CheckStatus.ok,
+      ),
+      _ => const SetupCheck(
+        SetupCheckId.notifications,
+        CheckStatus.recommended,
+        CheckAction.requestNotifications,
+      ),
+    },
     SetupCheck(
       SetupCheckId.battery,
       switch (f.batteryOptimizationIgnored) {

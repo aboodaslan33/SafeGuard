@@ -17,9 +17,13 @@ class BlockedContentScreen extends StatefulWidget {
     this.category,
     this.source,
     this.confidence = 0,
+    this.explanation,
   });
 
   final ProtectionCategory? category;
+
+  /// Which rule or check decided (no matched text, no model internals).
+  final DecisionExplanation? explanation;
 
   /// Set for blocks SafeGuard decided in-app (search rules or AI).
   final EventSourceKind? source;
@@ -110,6 +114,14 @@ class _BlockedContentScreenState extends State<BlockedContentScreen> {
             style: context.text.bodyMedium,
           ),
         ),
+        if (widget.explanation != null) ...[
+          const SizedBox(height: SgSpace.x3),
+          Text(
+            widget.explanation!.reason,
+            textAlign: TextAlign.center,
+            style: context.text.bodySmall!.copyWith(color: c.textSecondary),
+          ),
+        ],
         const SizedBox(height: SgSpace.x5),
         Text(
           tr(

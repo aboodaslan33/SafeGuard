@@ -390,11 +390,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       case 6:
         final checks = _checks;
         final relevant = checks
-            ?.where(
-              (c) =>
-                  c.id != SetupCheckId.notifications &&
-                  c.status != CheckStatus.notNeeded,
-            )
+            ?.where((c) => c.status != CheckStatus.notNeeded)
             .toList();
         return [
           if (relevant == null)

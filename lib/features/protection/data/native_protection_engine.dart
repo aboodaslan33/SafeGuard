@@ -105,6 +105,7 @@ class NativeProtectionEngine implements ProtectionEngine {
             categoryId: m['category'] is String
                 ? m['category']! as String
                 : null,
+            explanation: DecisionExplanation.fromId(m['explanation']),
           ),
     ];
   }
@@ -173,6 +174,7 @@ class NativeProtectionEngine implements ProtectionEngine {
       ruleType: m['ruleType'] is String ? m['ruleType']! as String : 'keyword',
       reason: m['reason'] is String ? m['reason']! as String : '',
       opened: m['opened'] == true,
+      explanation: DecisionExplanation.fromId(m['explanation']),
     );
   }
 
@@ -223,6 +225,26 @@ class NativeProtectionEngine implements ProtectionEngine {
 
   @override
   Future<void> openPrivateDnsSettings() => _channel.openPrivateDnsSettings();
+
+  @override
+  Future<AlertsState> alertsState() async =>
+      AlertsState.fromMap(await _channel.getAlertsState());
+
+  @override
+  Future<AlertsState> setAlertsEnabled(bool enabled) async =>
+      AlertsState.fromMap(await _channel.setAlertsEnabled(enabled));
+
+  @override
+  Future<bool> requestNotificationPermission() =>
+      _channel.requestNotificationPermission();
+
+  @override
+  Future<DecisionTraceSnapshot> decisionTrace() async =>
+      DecisionTraceSnapshot.fromMap(await _channel.getDecisionTrace());
+
+  @override
+  Future<void> setDecisionTraceEnabled(bool enabled) =>
+      _channel.setDecisionTraceEnabled(enabled);
 
   @override
   Future<Map<String, Object?>> diagnostics() async => {

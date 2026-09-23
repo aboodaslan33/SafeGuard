@@ -209,6 +209,11 @@ class ProtectionConfigStore(
         get() = LogRetention.fromId(prefs.getString(KEY_LOG_RETENTION, null)) ?: LogRetention.DEFAULT
         set(value) = prefs.edit().putString(KEY_LOG_RETENTION, value.id).apply()
 
+    /** Notify when protection is degraded or stops (on by default). */
+    var alertsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_ALERTS, true)
+        set(value) = prefs.edit().putBoolean(KEY_ALERTS, value).apply()
+
     /** UI language chosen in Flutter ("ar" or "en"), for native screens. */
     var uiLanguage: String
         get() = prefs.getString(KEY_UI_LANGUAGE, null) ?: "ar"
@@ -339,6 +344,7 @@ class ProtectionConfigStore(
         const val KEY_PAUSE_DURATION = "pause_duration"
         const val KEY_SAFE_MODE = "safe_mode"
         const val KEY_UI_LANGUAGE = "ui_language"
+        const val KEY_ALERTS = "alerts_enabled"
         const val KEY_LOG_RETENTION = "log_retention"
         const val KEY_BOOT_RESULT = "boot_result"
         const val KEY_BOOT_AT = "boot_at"

@@ -42,6 +42,15 @@ class LocalTextClassifierAdapter(
         return ClassificationResult(status, scores, id)
     }
 
+    /**
+     * Allows one more load attempt after a failure (called by the health
+     * monitor with backoff; a broken model is never retried in a loop).
+     */
+    @Synchronized
+    fun resetFailure() {
+        failed = false
+    }
+
     @Synchronized
     private fun tryLoad(): TextModel? {
         model?.let { return it }

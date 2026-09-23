@@ -1,9 +1,12 @@
 package com.safeguard.app.channel
 
+import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -30,6 +33,7 @@ import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.Rule
 import com.safeguard.app.engine.rules.RuleAction
 import com.safeguard.app.engine.rules.RuleSource
+import com.safeguard.app.engine.explain.DecisionExplainer
 import com.safeguard.app.engine.logging.LogRetention
 import com.safeguard.app.engine.pause.TemporaryUnlock
 import com.safeguard.app.engine.status.ProtectionStatus
@@ -123,6 +127,7 @@ class ProtectionChannel(
     private var pendingPermission: MethodChannel.Result? = null
     private var pendingImage: MethodChannel.Result? = null
     private var pendingExport: Pair<MethodChannel.Result, String>? = null
+    private var pendingNotifications: MethodChannel.Result? = null
     /**
      * Status changes come from several threads; posting the snapshot each
      * one saw could deliver them out of order. Instead every change posts a
@@ -145,6 +150,8 @@ class ProtectionChannel(
         pendingPermission?.error("DETACHED", null, null)
         pendingImage?.error("DETACHED", null, null)
         pendingExport?.first?.error("DETACHED", null, null)
+        pendingNotifications?.error("DETACHED", null, null)
+        pendingNotifications = null
         pendingPermission = null
         pendingImage = null
         pendingExport = null
@@ -214,6 +221,7 @@ class ProtectionChannel(
             "openBatterySettings" -> result.success(open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)))
             "openPrivateDnsSettings" -> result.success(open(Intent(Settings.ACTION_WIRELESS_SETTINGS)))
             "checkImage" -> pickImage(result)
+            "requestNotificationPermission" -> requestNotifications(result)
             "saveExport" -> saveExport(call, result)
             else -> io.execute { handle(call, result) }
         }
@@ -280,6 +288,31 @@ class ProtectionChannel(
                     true
                 }
                 "getDiagnostics" -> manager.diagnostics()
+                "getAlertsState" -> alertsState()
+                "setAlertsEnabled" -> {
+                    manager.config.alertsEnabled = call.argument<Boolean>("enabled") ?: throw bad("enabled")
+                    if (!manager.config.alertsEnabled) manager.alerts.clear()
+                    alertsState()
+                }
+                // Debug trace: what decided and why — never what was requested.
+                "setDecisionTraceEnabled" -> {
+                    manager.trace.enabled = call.argument<Boolean>("enabled") ?: throw bad("enabled")
+                    manager.trace.enabled
+                }
+                "getDecisionTrace" -> mapOf(
+                    "enabled" to manager.trace.enabled,
+                    "entries" to manager.trace.snapshot().map {
+                        mapOf(
+                            "timestamp" to it.timestamp,
+                            "source" to it.source.id,
+                            "verdict" to it.explanation.verdict.name.lowercase(),
+                            "explanation" to it.explanation.id,
+                            "category" to it.category.id,
+                            "confidenceBucket" to it.confidenceBucket,
+                            "stages" to it.stages,
+                        )
+                    },
+                )
                 "getLogRetention" -> manager.config.logRetention.id
                 "setLogRetention" -> {
                     val value = LogRetention.fromId(call.argument<String>("value")) ?: throw bad("value")
@@ -322,6 +355,7 @@ class ProtectionChannel(
                         "confidence" to d.confidence,
                         "ruleType" to d.ruleType,
                         "reason" to d.reason,
+                        "explanation" to DecisionExplainer.search(d).id,
                         "opened" to opened,
                     )
                 }
@@ -416,6 +450,35 @@ class ProtectionChannel(
         Settings.Global.getInt(activity.contentResolver, Settings.Global.BOOT_COUNT)
     } catch (e: Settings.SettingNotFoundException) {
         -1
+    }
+
+    private fun alertsState() = mapOf(
+        "enabled" to manager.config.alertsEnabled,
+        "permission" to manager.alerts.permissionGranted(),
+        // Android 13+ asks at runtime; older versions grant at install.
+        "runtimePermission" to (Build.VERSION.SDK_INT >= 33),
+    )
+
+    /** Android 13+: the system notification-permission dialog. */
+    private fun requestNotifications(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < 33 || manager.alerts.permissionGranted()) {
+            result.success(true)
+            return
+        }
+        if (pendingNotifications != null) {
+            result.error("BUSY", "Permission request already in progress", null)
+            return
+        }
+        pendingNotifications = result
+        activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+    }
+
+    /** Forwarded from MainActivity.onRequestPermissionsResult. */
+    fun onRequestPermissionsResult(requestCode: Int, grantResults: IntArray): Boolean {
+        if (requestCode != REQUEST_NOTIFICATIONS) return false
+        pendingNotifications?.success(grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+        pendingNotifications = null
+        return true
     }
 
     private fun requestPermission(result: MethodChannel.Result) {
@@ -628,6 +691,7 @@ class ProtectionChannel(
         const val REQUEST_VPN = 0x5647
         const val REQUEST_IMAGE = 0x5648
         const val REQUEST_EXPORT = 0x5649
+        const val REQUEST_NOTIFICATIONS = 0x564A
     }
 }
 
@@ -669,4 +733,5 @@ private fun BlockEvent.toMap(): Map<String, Any> = mapOf(
     "action" to action.name.lowercase(),
     "confidence" to confidence,
     "ruleType" to ruleType,
+    "explanation" to DecisionExplainer.event(source, ruleType).id,
 )

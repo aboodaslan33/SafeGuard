@@ -6,6 +6,7 @@ import '../../../app/app_info.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../core/error/failures.dart';
 import '../../../core/error/result.dart';
 import '../../../core/i18n/i18n.dart';
 import '../../advanced/presentation/advanced_actions.dart';
@@ -136,6 +137,7 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     onTap: engine.openVpnSettings,
                   ),
+                if (engine.isSupported) const _AlertsTile(),
               ],
             ),
             SectionHeader(title: tr('الحماية المتقدمة', 'Advanced protection')),
@@ -499,6 +501,78 @@ class _LogRetentionTileState extends State<_LogRetentionTile> {
         );
         if (applied != null && mounted) setState(() => _value = applied);
       },
+    );
+  }
+}
+
+/// "Alert me when protection stops" (Phase 8). Turning it off needs the
+/// PIN: the alert is how a parent learns protection was switched off.
+class _AlertsTile extends StatefulWidget {
+  const _AlertsTile();
+
+  @override
+  State<_AlertsTile> createState() => _AlertsTileState();
+}
+
+class _AlertsTileState extends State<_AlertsTile> {
+  AlertsState? _state;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_state == null) _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final s = await AppScope.of(context).protection.engine.alertsState();
+      if (mounted) setState(() => _state = s);
+    } on Object {
+      // Leave the switch in its default position.
+    }
+  }
+
+  Future<void> _set(bool on) async {
+    final engine = AppScope.of(context).protection.engine;
+    if (!on &&
+        !await requirePin(
+          context,
+          reason: tr(
+            'لإيقاف تنبيهات توقف الحماية',
+            'to turn off protection alerts',
+          ),
+        )) {
+      return;
+    }
+    try {
+      var next = await engine.setAlertsEnabled(on);
+      if (on && !next.permission) {
+        await engine.requestNotificationPermission();
+        next = await engine.alertsState();
+      }
+      if (mounted) setState(() => _state = next);
+    } on AppFailure catch (f) {
+      if (mounted) showSgSnack(context, f.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = _state ?? const AlertsState();
+    return SecuritySettingTile(
+      icon: Icons.notifications_active_outlined,
+      title: tr('تنبيه عند توقف الحماية', 'Alert when protection stops'),
+      subtitle: s.enabled && !s.permission
+          ? tr(
+              'الإشعارات غير مسموحة؛ لن يظهر التنبيه',
+              "Notifications aren't allowed; the alert can't appear",
+            )
+          : tr(
+              'إشعار واحد عندما تتوقف الحماية أو تضعف',
+              'One notification when protection stops or weakens',
+            ),
+      switchValue: s.enabled,
+      onSwitchChanged: _set,
     );
   }
 }

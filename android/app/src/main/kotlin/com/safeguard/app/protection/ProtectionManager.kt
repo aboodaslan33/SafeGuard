@@ -1,44 +1,28 @@
 package com.safeguard.app.protection
 
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.provider.Settings
-import android.telecom.TelecomManager
-import android.view.accessibility.AccessibilityManager
 import android.content.pm.ApplicationInfo
-import android.app.PendingIntent
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
+import android.telecom.TelecomManager
 import android.util.Log
+import android.view.accessibility.AccessibilityManager
 import com.safeguard.app.MainActivity
-import com.safeguard.app.engine.rules.BundledListStore
-import com.safeguard.app.engine.rules.BundledLists
-import com.safeguard.app.engine.rules.CompositeRuleStore
-import com.safeguard.app.engine.rules.HashedDomainList
-import java.io.FileInputStream
-import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
-import java.security.MessageDigest
-import com.safeguard.app.data.SqliteCustomKeywordStore
-import com.safeguard.app.engine.health.HealthInputs
-import com.safeguard.app.engine.health.HealthReport
-import com.safeguard.app.engine.health.Incident
-import com.safeguard.app.engine.health.IncidentDetector
-import com.safeguard.app.engine.health.IncidentKind
-import com.safeguard.app.engine.health.ProtectionHealthEvaluator
-import com.safeguard.app.engine.health.RecoveryPolicy
-import com.safeguard.app.engine.health.UpstreamHealth
-import com.safeguard.app.engine.modes.ProtectionMode
-import com.safeguard.app.engine.pause.TemporaryUnlock
-import com.safeguard.app.engine.rules.UserRules
-import com.safeguard.app.engine.search.CustomKeywords
-import com.safeguard.app.engine.stats.DetailedStatistics
 import com.safeguard.app.ai.BitmapImageDecoder
+import com.safeguard.app.apps.AppGuardService
+import com.safeguard.app.data.SafeGuardDatabase
 import com.safeguard.app.data.SqliteAiStatsStore
+import com.safeguard.app.data.SqliteBlockEventStore
+import com.safeguard.app.data.SqliteCustomKeywordStore
+import com.safeguard.app.data.SqliteProtectedAppStore
+import com.safeguard.app.data.SqliteRuleStore
 import com.safeguard.app.engine.ai.AdapterContentClassifier
 import com.safeguard.app.engine.ai.AiSearchFilterService
 import com.safeguard.app.engine.ai.AiSettings
@@ -57,43 +41,66 @@ import com.safeguard.app.engine.ai.model.BuiltInModels
 import com.safeguard.app.engine.ai.model.ModelLoader
 import com.safeguard.app.engine.ai.text.LocalTextClassifierAdapter
 import com.safeguard.app.engine.ai.text.TextModel
-import com.safeguard.app.apps.AppGuardService
-import com.safeguard.app.data.SqliteProtectedAppStore
 import com.safeguard.app.engine.apps.AccessibilityState
 import com.safeguard.app.engine.apps.AccessibilityStateResolver
 import com.safeguard.app.engine.apps.AppAction
 import com.safeguard.app.engine.apps.AppDecision
 import com.safeguard.app.engine.apps.AppProtection
+import com.safeguard.app.engine.domain.DomainName
+import com.safeguard.app.engine.explain.DecisionTrace
+import com.safeguard.app.engine.health.HealthInputs
+import com.safeguard.app.engine.health.HealthMonitorPolicy
+import com.safeguard.app.engine.health.HealthReport
+import com.safeguard.app.engine.health.Incident
+import com.safeguard.app.engine.health.IncidentDetector
+import com.safeguard.app.engine.health.IncidentKind
+import com.safeguard.app.engine.health.MonitorAction
+import com.safeguard.app.engine.health.MonitorObservation
+import com.safeguard.app.engine.health.OverallHealth
+import com.safeguard.app.engine.health.ProtectionHealthEvaluator
+import com.safeguard.app.engine.health.RecoveryPolicy
+import com.safeguard.app.engine.health.Repairable
+import com.safeguard.app.engine.health.UpstreamHealth
 import com.safeguard.app.engine.logging.BlockEvent
+import com.safeguard.app.engine.logging.BlockLogger
 import com.safeguard.app.engine.logging.EventSource
 import com.safeguard.app.engine.logging.LogRetention
+import com.safeguard.app.engine.modes.ProtectionMode
+import com.safeguard.app.engine.pause.TemporaryUnlock
 import com.safeguard.app.engine.privacy.QueryHasher
 import com.safeguard.app.engine.privacy.SearchEventRecorder
-import com.safeguard.app.engine.safesearch.SafeSearchConfig
-import com.safeguard.app.engine.search.RuleBasedSearchClassifier
-import com.safeguard.app.engine.search.SearchDecision
-import com.safeguard.app.engine.search.SearchNormalizer
-import com.safeguard.app.engine.search.SearchQuery
-import com.safeguard.app.data.SafeGuardDatabase
-import com.safeguard.app.data.SqliteBlockEventStore
-import com.safeguard.app.data.SqliteRuleStore
-import com.safeguard.app.engine.domain.DomainName
-import com.safeguard.app.engine.logging.BlockLogger
 import com.safeguard.app.engine.rules.BuiltInRules
+import com.safeguard.app.engine.rules.BundledListStore
+import com.safeguard.app.engine.rules.BundledLists
 import com.safeguard.app.engine.rules.Category
+import com.safeguard.app.engine.rules.CompositeRuleStore
 import com.safeguard.app.engine.rules.Decision
+import com.safeguard.app.engine.rules.HashedDomainList
 import com.safeguard.app.engine.rules.Rule
 import com.safeguard.app.engine.rules.RuleAction
 import com.safeguard.app.engine.rules.RuleEngine
 import com.safeguard.app.engine.rules.RuleSource
+import com.safeguard.app.engine.rules.UserRules
+import com.safeguard.app.engine.safesearch.SafeSearchConfig
+import com.safeguard.app.engine.search.CustomKeywords
+import com.safeguard.app.engine.search.RuleBasedSearchClassifier
+import com.safeguard.app.engine.search.SearchDecision
+import com.safeguard.app.engine.search.SearchDecisionListener
 import com.safeguard.app.engine.search.SearchFilterService
+import com.safeguard.app.engine.search.SearchNormalizer
+import com.safeguard.app.engine.search.SearchQuery
 import com.safeguard.app.engine.stats.BlockStatistics
+import com.safeguard.app.engine.stats.DetailedStatistics
 import com.safeguard.app.engine.stats.StatisticsService
 import com.safeguard.app.engine.status.ProtectionStatusHolder
 import com.safeguard.app.engine.status.VpnState
 import com.safeguard.app.vpn.NetworkMonitor
 import com.safeguard.app.vpn.SafeGuardVpnService
 import com.safeguard.app.vpn.UpstreamNetwork
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 /**
@@ -148,12 +155,14 @@ class ProtectionManager private constructor(private val context: Context) {
      */
     private val imageAdapter = LocalImageClassifierAdapter("local-image", BitmapImageDecoder(), { null })
 
+    private val textAdapter = LocalTextClassifierAdapter(BuiltInModels.TEXT_V1.id, {
+        TextModel.parse(ModelLoader { path -> context.assets.open(path) }.load(BuiltInModels.TEXT_V1))
+    })
+
     val contentClassifier = GuardedContentClassifier(
         AdapterContentClassifier(
             listOf(
-                LocalTextClassifierAdapter(BuiltInModels.TEXT_V1.id, {
-                    TextModel.parse(ModelLoader { path -> context.assets.open(path) }.load(BuiltInModels.TEXT_V1))
-                }),
+                textAdapter,
                 imageAdapter,
             ),
         ),
@@ -161,6 +170,10 @@ class ProtectionManager private constructor(private val context: Context) {
     )
 
     val keywords = CustomKeywords(SqliteCustomKeywordStore(database))
+
+    /** Content-free debug trace of recent decisions (off by default, memory only). */
+    val trace = DecisionTrace()
+    private val searchRecorder by lazy { SearchEventRecorder(logger, hasher) }
 
     private val userRules = UserRules(rules)
 
@@ -175,7 +188,10 @@ class ProtectionManager private constructor(private val context: Context) {
         config = { config.searchPolicy },
         ai = contentClassifier,
         aiSettings = { config.effectiveAi },
-        listener = SearchEventRecorder(logger, hasher),
+        listener = SearchDecisionListener { q, d ->
+            searchRecorder.onDecision(q, d)
+            trace.recordSearch(d, System.currentTimeMillis())
+        },
         aiListener = aiStatsRecorder,
         keywords = keywords,
     )
@@ -372,6 +388,76 @@ class ProtectionManager private constructor(private val context: Context) {
 
     fun detailedStatistics(): DetailedStatistics = statistics.detailed()
 
+    // ---- Continuous health monitoring (Phase 8) -------------------------
+
+    val alerts by lazy { ProtectionAlerts(context, config, ::launchIntent) }
+    private val monitorPolicy = HealthMonitorPolicy()
+    @Volatile var lastMonitorCheck = 0L
+        private set
+
+    /**
+     * One monitoring round (worker thread; called by the VPN service every
+     * 15 minutes while it runs, and after network changes): detect, repair
+     * what can be repaired (bounded backoff), re-check, notify once.
+     */
+    @Synchronized
+    fun monitorTick() {
+        val now = System.currentTimeMillis()
+        lastMonitorCheck = now
+        val expected = config.enabled && !config.safeMode && !config.isPaused()
+        var report = health()
+        val observation = MonitorObservation(
+            report = report,
+            protectionExpected = expected,
+            aiModelBroken = config.effectiveAi.enabled && !contentClassifier.isAvailable(ContentKind.TEXT),
+            databaseFailing = !databaseOk(),
+            bundledListsMissing = listsLoaded && bundledLists.isEmpty() && BundledLists.specs.isNotEmpty(),
+        )
+        var repaired = false
+        for (component in monitorPolicy.repairs(observation, now)) {
+            val ok = repair(component)
+            monitorPolicy.onRepairResult(component, ok, now)
+            repaired = repaired || ok
+        }
+        if (repaired) report = health() // re-check after a successful repair
+        for (action in monitorPolicy.notifications(report, expected, now)) {
+            when (action) {
+                is MonitorAction.Notify -> alerts.showDegraded(action.overall, action.reason)
+                MonitorAction.ClearNotification -> alerts.clear()
+                is MonitorAction.Repair -> Unit
+            }
+        }
+    }
+
+    private fun repair(c: Repairable): Boolean = try {
+        when (c) {
+            Repairable.AI_MODEL -> {
+                textAdapter.resetFailure()
+                contentClassifier.isAvailable(ContentKind.TEXT)
+            }
+            Repairable.DATABASE -> {
+                val ok = database.isHealthy() && runCatching { rules.count() }.isSuccess
+                if (ok) lastDatabaseFailureAt = 0
+                ok
+            }
+            Repairable.BUNDLED_LISTS -> {
+                bundledLists = loadBundledLists()
+                engine.invalidate()
+                refreshRuleCounts()
+                bundledLists.isNotEmpty()
+            }
+        }
+    } catch (e: RuntimeException) {
+        false
+    }
+
+    /** Immediate alert for events the user must know about (VPN lost). */
+    fun alertStopped(reason: String) {
+        if (config.enabled && !config.safeMode && !config.isPaused()) {
+            alerts.showDegraded(OverallHealth.NOT_PROTECTED, reason)
+        }
+    }
+
     /** Battery optimisation exemption. Some OEMs stop VPN apps that lack it. */
     fun ignoringBatteryOptimizations(): Boolean? = try {
         context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName)
@@ -420,6 +506,9 @@ class ProtectionManager private constructor(private val context: Context) {
             "batteryOptimizationIgnored" to ignoringBatteryOptimizations(),
             "openIncidents" to config.incidents.unacknowledged().size,
             "lastBoot" to config.lastBoot?.first,
+            "alertsEnabled" to config.alertsEnabled,
+            "notificationPermission" to safe { alerts.permissionGranted() },
+            "lastHealthCheckMinutesAgo" to lastMonitorCheck.takeIf { it > 0 }?.let { (System.currentTimeMillis() - it) / 60_000 },
         )
     }
 

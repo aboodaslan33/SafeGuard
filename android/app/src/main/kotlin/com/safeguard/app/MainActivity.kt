@@ -47,6 +47,11 @@ class MainActivity : FlutterActivity() {
         super.onActivityResult(requestCode, resultCode, data)
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (protectionChannel?.onRequestPermissionsResult(requestCode, grantResults) == true) return
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
     /**
      * FLAG_SECURE hides the window from screenshots, screen recording,
      * casting and the recent-apps thumbnail while a PIN is on screen.

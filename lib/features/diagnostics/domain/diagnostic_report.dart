@@ -47,6 +47,9 @@ class DiagnosticReport {
       'batteryOptimizationIgnored',
       'openIncidents',
       'lastBoot',
+      'alertsEnabled',
+      'notificationPermission',
+      'lastHealthCheckMinutesAgo',
     ],
   };
 

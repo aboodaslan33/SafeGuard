@@ -53,6 +53,30 @@ class SafeGuardVpnService : VpnService() {
     /** Posts recovery work; cleared whenever the session changes. */
     private val main = Handler(Looper.getMainLooper())
 
+    /**
+     * Health monitor: every 15 minutes while the VPN runs (Handler delays
+     * stretch during Doze, so an idle phone isn't woken up for it), and
+     * shortly after network changes. The check runs off the main thread.
+     */
+    private val monitorExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "sg-monitor").apply { isDaemon = true } }
+    private val monitorTick = object : Runnable {
+        override fun run() {
+            monitorExecutor.execute {
+                try {
+                    manager.monitorTick()
+                } catch (e: RuntimeException) {
+                    Log.w(TAG, "health check failed: ${e.javaClass.simpleName}")
+                }
+            }
+            main.postDelayed(this, MONITOR_INTERVAL_MS)
+        }
+    }
+
+    private fun scheduleMonitor(firstDelayMs: Long) {
+        main.removeCallbacks(monitorTick)
+        main.postDelayed(monitorTick, firstDelayMs)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // A pending automatic recovery belongs to the previous session.
         main.removeCallbacksAndMessages(null)
@@ -136,6 +160,7 @@ class SafeGuardVpnService : VpnService() {
             worker = Thread({ runLoop(fd, forwarder) }, "sg-vpn-loop").apply { start() }
             manager.status.running(System.currentTimeMillis())
             manager.onUpstreamChanged(monitor.current)
+            scheduleMonitor(MONITOR_FIRST_MS)
         } catch (e: Exception) {
             Log.e(TAG, "failed to start VPN: ${e.javaClass.simpleName}")
             manager.status.failed(e.javaClass.simpleName + ": " + (e.message ?: ""))
@@ -151,7 +176,10 @@ class SafeGuardVpnService : VpnService() {
         if (tun != null) {
             setUnderlyingNetworks(net?.let { arrayOf(it.network) })
         }
-        if (tun != null) manager.onUpstreamChanged(net)
+        if (tun != null) {
+            manager.onUpstreamChanged(net)
+            main.post { if (tun != null) scheduleMonitor(NETWORK_RECHECK_MS) }
+        }
     }
 
     private fun runLoop(fd: ParcelFileDescriptor, forwarder: DnsForwarder) {
@@ -172,6 +200,7 @@ class SafeGuardVpnService : VpnService() {
             { manager.config.policy },
             manager.logger,
             safeSearch = { manager.config.safeSearch },
+            observer = { d -> manager.trace.recordDomain(d, System.currentTimeMillis()) },
         )
         val buffer = ByteArray(MTU)
         val pipe = interruptPipe ?: return
@@ -230,6 +259,7 @@ class SafeGuardVpnService : VpnService() {
                 val delay = manager.recovery.nextDelay(manager.recoveryFacts(VpnState.ERROR), System.currentTimeMillis())
                 if (delay == null) {
                     manager.status.failed(reason)
+                    manager.alertStopped("vpn:failed")
                     stopSelf()
                     return@post
                 }
@@ -252,6 +282,7 @@ class SafeGuardVpnService : VpnService() {
     @Synchronized
     private fun shutdown(reportStopping: Boolean = true) {
         stopRequested = true
+        main.removeCallbacks(monitorTick)
         if (reportStopping) manager.status.stopping()
         interruptPipe?.let { pipe ->
             try {
@@ -297,12 +328,14 @@ class SafeGuardVpnService : VpnService() {
         // (a detour through STOPPING would hide it from the detector).
         manager.status.revoked()
         shutdown(reportStopping = false)
+        manager.alertStopped("vpn:revoked")
         manager.refreshEnvironment()
         super.onRevoke() // stops the service
     }
 
     override fun onDestroy() {
         main.removeCallbacksAndMessages(null)
+        monitorExecutor.shutdown()
         val wasRunning = tun != null
         shutdown()
         if (wasRunning) manager.status.stopped()
@@ -314,6 +347,9 @@ class SafeGuardVpnService : VpnService() {
         const val ACTION_START = "com.safeguard.app.vpn.START"
         const val ACTION_STOP = "com.safeguard.app.vpn.STOP"
         const val MTU = 1500
+        private const val MONITOR_INTERVAL_MS = 15 * 60_000L
+        private const val MONITOR_FIRST_MS = 60_000L
+        private const val NETWORK_RECHECK_MS = 10_000L
         private const val TUN_ADDRESS = "10.111.222.1"
         const val VIRTUAL_DNS = "10.111.222.2"
 

@@ -105,6 +105,9 @@ GoRouter createRouter(AppDependencies deps) {
             },
             confidence:
                 double.tryParse(s.uri.queryParameters['confidence'] ?? '') ?? 0,
+            explanation: DecisionExplanation.fromId(
+              s.uri.queryParameters['reason'],
+            ),
           ),
         ),
       ),

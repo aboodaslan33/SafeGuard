@@ -283,3 +283,29 @@ class CustomKeyword {
 
 /// Outcome of "Export settings".
 enum ExportResult { saved, cancelled, failed }
+
+/// "Protection stopped / degraded" alerts (Phase 8).
+class AlertsState {
+  const AlertsState({
+    this.enabled = true,
+    this.permission = false,
+    this.runtimePermission = true,
+  });
+
+  /// The user wants alerts (on by default).
+  final bool enabled;
+
+  /// Android allows SafeGuard to post notifications.
+  final bool permission;
+
+  /// Android 13+: permission is asked at runtime.
+  final bool runtimePermission;
+
+  bool get active => enabled && permission;
+
+  static AlertsState fromMap(Map<Object?, Object?> m) => AlertsState(
+    enabled: m['enabled'] != false,
+    permission: m['permission'] == true,
+    runtimePermission: m['runtimePermission'] != false,
+  );
+}

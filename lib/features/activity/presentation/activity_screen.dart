@@ -195,6 +195,15 @@ class _EventRow extends StatelessWidget {
                       category?.title ??
                           tr('فئة غير معروفة', 'Unknown category'),
                   }, style: context.text.titleMedium),
+                  if (event.explanation != null)
+                    Text(
+                      event.explanation!.reason,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.text.bodySmall!.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
                   Text(
                     // Search/AI events carry a rule or model id + hash,
                     // never the query or image.

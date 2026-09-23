@@ -128,6 +128,19 @@ class ProtectionChannel {
   Future<void> openPrivateDnsSettings() =>
       _call<bool>('openPrivateDnsSettings');
 
+  Future<Map<Object?, Object?>> getAlertsState() => _map('getAlertsState');
+
+  Future<Map<Object?, Object?>> setAlertsEnabled(bool enabled) =>
+      _map('setAlertsEnabled', {'enabled': enabled});
+
+  Future<bool> requestNotificationPermission() async =>
+      await _call<bool>('requestNotificationPermission') ?? false;
+
+  Future<void> setDecisionTraceEnabled(bool enabled) =>
+      _call<bool>('setDecisionTraceEnabled', {'enabled': enabled});
+
+  Future<Map<Object?, Object?>> getDecisionTrace() => _map('getDecisionTrace');
+
   /// States, counts and versions only (see ProtectionManager.diagnostics).
   Future<Map<Object?, Object?>> getDiagnostics() => _map('getDiagnostics');
 

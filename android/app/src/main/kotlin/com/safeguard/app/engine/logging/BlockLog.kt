@@ -1,6 +1,7 @@
 package com.safeguard.app.engine.logging
 
 import com.safeguard.app.engine.dns.BlockListener
+import com.safeguard.app.engine.explain.DecisionExplainer
 import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.Decision
 import com.safeguard.app.engine.rules.LruCache
@@ -140,7 +141,7 @@ class BlockLogger(
 
     override fun onBlocked(decision: Decision) {
         val domain = decision.domain ?: return
-        record(BlockEvent(clock(), domain, decision.category))
+        record(BlockEvent(clock(), domain, decision.category, ruleType = DecisionExplainer.domainRuleType(decision)))
     }
 
     /**

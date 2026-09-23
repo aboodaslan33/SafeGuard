@@ -5,6 +5,7 @@ import '../../../app/app_dependencies.dart';
 import '../../../app/app_info.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../core/i18n/i18n.dart';
+import '../../protection/domain/protection.dart';
 import '../domain/diagnostic_report.dart';
 
 /// Local technical state for beta testing and support. Nothing is sent
@@ -18,6 +19,7 @@ class DiagnosticsScreen extends StatefulWidget {
 
 class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   DiagnosticReport? _report;
+  DecisionTraceSnapshot _trace = const DecisionTraceSnapshot();
   bool _failed = false;
 
   @override
@@ -36,7 +38,11 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       final native = protection.engine.isSupported
           ? await protection.engine.diagnostics()
           : const <String, Object?>{};
+      final trace = protection.engine.isSupported
+          ? await protection.engine.decisionTrace()
+          : const DecisionTraceSnapshot();
       if (!mounted) return;
+      _trace = trace;
       setState(
         () => _report = DiagnosticReport.build(
           native: native,
@@ -48,6 +54,22 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       );
     } catch (_) {
       if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  Future<void> _setTrace(bool on) async {
+    final engine = AppScope.of(context).protection.engine;
+    try {
+      await engine.setDecisionTraceEnabled(on);
+      final t = await engine.decisionTrace();
+      if (mounted) setState(() => _trace = t);
+    } catch (_) {
+      if (mounted) {
+        showSgSnack(
+          context,
+          tr('تعذّر تغيير التتبع.', "Couldn't change tracing."),
+        );
+      }
     }
   }
 
@@ -113,6 +135,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     ),
     'openIncidents' => tr('انقطاعات غير مراجعة', 'Unreviewed interruptions'),
     'lastBoot' => tr('آخر تشغيل بعد الإقلاع', 'Last start after boot'),
+    'alertsEnabled' => tr('تنبيهات توقف الحماية', 'Protection alerts'),
+    'notificationPermission' => tr('إذن الإشعارات', 'Notification permission'),
+    'lastHealthCheckMinutesAgo' => tr(
+      'آخر فحص صحة (دقائق)',
+      'Last health check (minutes ago)',
+    ),
     _ => key,
   };
 
@@ -177,6 +205,65 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
             SectionHeader(title: _groupTitle(group.key)),
             SgGroupedCard(children: [for (final k in group.value) row(k)]),
           ],
+          SectionHeader(
+            title: tr('تتبع القرارات (للتصحيح)', 'Decision trace (debugging)'),
+          ),
+          SgGroupedCard(
+            children: [
+              SecuritySettingTile(
+                icon: Icons.account_tree_outlined,
+                title: tr(
+                  'تسجيل آخر 50 قرارًا',
+                  'Record the last 50 decisions',
+                ),
+                subtitle: tr(
+                  'ما الذي قرّر ولماذا، دون النطاق أو نص البحث. في الذاكرة فقط؛ يُمسح عند الإيقاف.',
+                  'What decided and why, without the domain or search text. Memory only; cleared when turned off.',
+                ),
+                switchValue: _trace.enabled,
+                onSwitchChanged: _setTrace,
+              ),
+              for (final e in _trace.entries.take(50))
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: SgSpace.x4,
+                    vertical: SgSpace.x2,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${e.explanation.verdictLabel} · ${e.explanation.reason}',
+                        style: context.text.bodyMedium,
+                      ),
+                      Text(
+                        [
+                          '${e.time.hour.toString().padLeft(2, '0')}:${e.time.minute.toString().padLeft(2, '0')}:${e.time.second.toString().padLeft(2, '0')}',
+                          e.sourceId,
+                          e.categoryId,
+                          if (e.confidenceBucket != null)
+                            '≥${e.confidenceBucket}%',
+                          e.stages.join(' → '),
+                        ].join(' · '),
+                        textDirection: TextDirection.ltr,
+                        style: context.text.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              if (_trace.enabled && _trace.entries.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(SgSpace.x4),
+                  child: Text(
+                    tr(
+                      'لا قرارات بعد. تصفّح قليلًا ثم أعد فتح هذه الشاشة.',
+                      'No decisions yet. Browse a little, then reopen this screen.',
+                    ),
+                    style: context.text.bodySmall,
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: SgSpace.x4),
           SgCard(
             child: Text(

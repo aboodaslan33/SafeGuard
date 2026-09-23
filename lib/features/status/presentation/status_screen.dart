@@ -582,9 +582,10 @@ class _Limitations extends StatelessWidget {
       "AI protection runs on the device and on demand only (SafeGuard search and images you choose to check). The text model is small with limited accuracy, and there's no image model in this version.",
     ),
     tr(
-      'لا يرسل SafeGuard إشعارات؛ انقطاع الحماية (فصل VPN، سحب الموافقة، إيقاف '
-          'خدمة التطبيقات) يظهر عند فتح التطبيق.',
-      "SafeGuard doesn't send notifications; protection interruptions (VPN disconnected, consent revoked, app service turned off) are shown when you open the app.",
+      'تنبيه «توقفت الحماية» يحتاج إذن الإشعارات، ويُفحص كل 15 دقيقة تقريبًا أثناء عمل VPN '
+          '(قد يتأخر عندما يكون الجهاز في وضع السكون). دونه يظهر الانقطاع عند فتح التطبيق فقط.',
+      'The “protection stopped” alert needs notification permission and is checked about every 15 minutes while the VPN runs '
+          '(it can be delayed while the phone sleeps). Without it, interruptions show only when you open the app.',
     ),
     tr(
       'بعد إعادة تشغيل الجهاز قد يمنع النظام بدء الحماية تلقائيًا؛ الطريقة '

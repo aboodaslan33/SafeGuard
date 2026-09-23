@@ -295,6 +295,7 @@ class _SafeSearchBoxState extends State<_SafeSearchBox> {
               'category': ?check.category?.id,
               'source': check.ruleType.startsWith('ai_') ? 'ai' : 'search',
               'confidence': check.confidence.toStringAsFixed(2),
+              'reason': ?check.explanation?.id,
             },
           ).toString(),
         );

@@ -337,6 +337,39 @@ class FakeProtectionEngine implements ProtectionEngine {
     'databaseOk': true,
   };
 
+  AlertsState alerts = const AlertsState();
+  int notificationRequests = 0;
+  bool grantNotifications = true;
+
+  @override
+  Future<AlertsState> alertsState() async => alerts;
+
+  @override
+  Future<AlertsState> setAlertsEnabled(bool enabled) async =>
+      alerts = AlertsState(enabled: enabled, permission: alerts.permission);
+
+  @override
+  Future<bool> requestNotificationPermission() async {
+    notificationRequests++;
+    alerts = AlertsState(
+      enabled: alerts.enabled,
+      permission: grantNotifications,
+    );
+    return grantNotifications;
+  }
+
+  DecisionTraceSnapshot trace = const DecisionTraceSnapshot();
+
+  @override
+  Future<DecisionTraceSnapshot> decisionTrace() async => trace;
+
+  @override
+  Future<void> setDecisionTraceEnabled(bool enabled) async =>
+      trace = DecisionTraceSnapshot(
+        enabled: enabled,
+        entries: enabled ? trace.entries : const [],
+      );
+
   @override
   Future<void> openBatterySettings() async => batterySettingsOpened++;
 
