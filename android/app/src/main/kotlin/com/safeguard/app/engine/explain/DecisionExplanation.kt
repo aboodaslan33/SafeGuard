@@ -35,6 +35,7 @@ enum class Explanation(val id: String, val verdict: Verdict) {
     AI_UNAVAILABLE("ai_unavailable", Verdict.ALLOWED),
     AI_SAFE("ai_safe", Verdict.ALLOWED),
     PROTECTED_APP("protected_app", Verdict.BLOCKED),
+    AI_CONTENT_SHIELD("ai_content_shield", Verdict.BLOCKED),
     TEMPORARY_UNLOCK("temporary_unlock", Verdict.ALLOWED);
 
     companion object {
@@ -47,6 +48,9 @@ object DecisionExplainer {
     const val RULE_TYPE_USER_DOMAIN = "user_domain"
     const val RULE_TYPE_CLASSIFIED_DOMAIN = "classified_domain"
     const val RULE_TYPE_STRICT_UNKNOWN = "strict_unknown"
+
+    /** AI Content Shield events: `ai_shield:<kind>:<label>:<model>` (see ShieldEvent). */
+    const val SHIELD_RULE_TYPE_PREFIX = "ai_shield:"
 
     fun domain(d: Decision): Explanation = when (d.reason) {
         DecisionReason.PROTECTION_OFF -> Explanation.PROTECTION_OFF
@@ -99,7 +103,7 @@ object DecisionExplainer {
         "ai_text", "ai_image" -> Explanation.AI_ABOVE_THRESHOLD
         BlockEvent.RULE_TYPE_PROTECTED_APP -> Explanation.PROTECTED_APP
         BlockEvent.RULE_TYPE_TEMPORARY_UNLOCK -> Explanation.TEMPORARY_UNLOCK
-        else -> if (source == EventSource.DNS) Explanation.KNOWN_BLOCKED_DOMAIN else Explanation.NO_MATCH
+        else -> if (ruleType.startsWith(SHIELD_RULE_TYPE_PREFIX)) Explanation.AI_CONTENT_SHIELD else if (source == EventSource.DNS) Explanation.KNOWN_BLOCKED_DOMAIN else Explanation.NO_MATCH
     }
 
     /** Pipeline stages in evaluation order, up to the one that decided. */
@@ -119,6 +123,7 @@ object DecisionExplainer {
             Explanation.AI_ABOVE_THRESHOLD, Explanation.AI_BELOW_THRESHOLD, Explanation.AI_UNCERTAIN,
             Explanation.AI_UNAVAILABLE, Explanation.AI_SAFE -> search
             Explanation.PROTECTED_APP -> listOf("app_protection")
+            Explanation.AI_CONTENT_SHIELD -> listOf("protection", "content_shield", "ai", "policy")
             Explanation.TEMPORARY_UNLOCK -> listOf("pause")
             Explanation.CATEGORY_DISABLED, Explanation.NO_MATCH -> listOf("all")
         }
