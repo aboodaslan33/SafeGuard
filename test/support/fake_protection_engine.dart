@@ -322,6 +322,33 @@ class FakeProtectionEngine implements ProtectionEngine {
 
   int accessibilitySettingsOpened = 0;
 
+  int batterySettingsOpened = 0;
+  int privateDnsSettingsOpened = 0;
+  Map<String, Object?> diagnosticsData = {
+    'androidRelease': '13',
+    'sdkInt': 33,
+    'manufacturer': 'TestCo',
+    'model': 'X1',
+    'vpnState': 'running',
+    'dnsFilterActive': true,
+    'bundledLists': {'gambling': 342623},
+    'userRules': 2,
+    'batteryOptimizationIgnored': false,
+    'databaseOk': true,
+  };
+
+  @override
+  Future<void> openBatterySettings() async => batterySettingsOpened++;
+
+  @override
+  Future<void> openPrivateDnsSettings() async => privateDnsSettingsOpened++;
+
+  @override
+  Future<Map<String, Object?>> diagnostics() async => {
+    ...diagnosticsData,
+    'vpnState': _snapshot.vpnState.name,
+  };
+
   @override
   Future<void> openAccessibilitySettings() async =>
       accessibilitySettingsOpened++;

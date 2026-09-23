@@ -209,6 +209,10 @@ class ProtectionChannel(
             "requestVpnPermission" -> requestPermission(result)
             "openVpnSettings" -> result.success(open(Intent(Settings.ACTION_VPN_SETTINGS)))
             "openAccessibilitySettings" -> result.success(open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+            // The system list of battery exemptions: the user decides there.
+            // (No REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission is used.)
+            "openBatterySettings" -> result.success(open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)))
+            "openPrivateDnsSettings" -> result.success(open(Intent(Settings.ACTION_WIRELESS_SETTINGS)))
             "checkImage" -> pickImage(result)
             "saveExport" -> saveExport(call, result)
             else -> io.execute { handle(call, result) }
@@ -275,6 +279,7 @@ class ProtectionChannel(
                     manager.config.uiLanguage = value
                     true
                 }
+                "getDiagnostics" -> manager.diagnostics()
                 "getLogRetention" -> manager.config.logRetention.id
                 "setLogRetention" -> {
                     val value = LogRetention.fromId(call.argument<String>("value")) ?: throw bad("value")

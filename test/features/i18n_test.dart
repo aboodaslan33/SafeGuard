@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:safeguard/app/app_dependencies.dart';
 import 'package:safeguard/app/router/routes.dart';
 import 'package:safeguard/app/safeguard_app.dart';
 import 'package:safeguard/core/error/failures.dart';
@@ -75,7 +76,7 @@ void main() {
         ..devicePixelRatio = 3;
     });
 
-    Future<void> launch(WidgetTester tester) async {
+    Future<AppDependencies> launch(WidgetTester tester) async {
       final engine = FakeProtectionEngine(permissionGranted: true);
       engine.protected.add(
         const ProtectedApp(packageName: 'com.example.game', label: 'Game'),
@@ -101,6 +102,7 @@ void main() {
       await tester.pumpAndSettle();
       await engine.start();
       await tester.pumpAndSettle();
+      return deps;
     }
 
     void expectNoArabic(WidgetTester tester, String where) {
@@ -113,7 +115,7 @@ void main() {
     }
 
     testWidgets('every main screen is fully English and LTR', (tester) async {
-      await launch(tester);
+      final deps = await launch(tester);
       final routes = [
         Routes.home,
         Routes.status,
@@ -127,8 +129,16 @@ void main() {
         Routes.keywords,
         Routes.statistics,
         '${Routes.blocked}?category=gambling',
+        Routes.setupAssistant,
+        Routes.diagnostics,
+        Routes.help,
+        Routes.about,
+        Routes.privacy,
+        Routes.categories,
+        Routes.setup,
       ];
       for (final route in routes) {
+        if (route == Routes.setup) deps.settings.setupPending = true;
         final context = tester.element(find.byType(Navigator).first);
         GoRouter.of(context).go(route);
         await tester.pumpAndSettle();

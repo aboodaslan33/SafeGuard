@@ -123,6 +123,14 @@ class ProtectionChannel {
   Future<void> openAccessibilitySettings() =>
       _call<bool>('openAccessibilitySettings');
 
+  Future<void> openBatterySettings() => _call<bool>('openBatterySettings');
+
+  Future<void> openPrivateDnsSettings() =>
+      _call<bool>('openPrivateDnsSettings');
+
+  /// States, counts and versions only (see ProtectionManager.diagnostics).
+  Future<Map<Object?, Object?>> getDiagnostics() => _map('getDiagnostics');
+
   // ---- Phase 4 ----
   Future<Map<Object?, Object?>> getAiSettings() => _map('getAiSettings');
 

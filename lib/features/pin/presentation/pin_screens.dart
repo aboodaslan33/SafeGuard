@@ -82,7 +82,8 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
           showSgSnack(context, tr('تم تغيير رمز PIN', 'PIN changed'));
           context.pop();
         } else {
-          // Router redirect takes the user to Home once this is saved.
+          // Router redirect continues into the setup wizard once saved.
+          deps.settings.setupPending = true;
           final saved = await deps.settings.completeOnboarding();
           if (saved case Err(:final failure)) return failure.message;
         }

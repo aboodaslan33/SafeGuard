@@ -29,6 +29,23 @@ Future<void> enterPin(WidgetTester tester, String pin) async {
   await tester.pumpAndSettle();
 }
 
+/// Onboarding → "Skip" → PIN setup.
+Future<void> openPinSetup(WidgetTester tester) async {
+  await tester.tap(find.text('تخطي'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('إعداد رمز PIN'));
+  await tester.pumpAndSettle();
+}
+
+/// Creates the first-run PIN and leaves the setup wizard for later.
+Future<void> createPinAndSkipWizard(WidgetTester tester, String pin) async {
+  await enterPin(tester, pin);
+  await enterPin(tester, pin);
+  expect(find.text('تفعيل حماية SafeGuard'), findsOneWidget);
+  await tester.tap(find.text('إكمال لاحقًا'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,11 +61,24 @@ void main() {
     await tester.pumpWidget(SafeGuardApp(dependencies: deps));
     await tester.pumpAndSettle();
 
-    expect(find.text('إعداد رمز PIN'), findsOneWidget);
-    // Regression: the pinned footer once collapsed the page body to 0px.
-    expect(find.text('يعمل على جهازك').hitTestable(), findsOneWidget);
-    final dir = Directionality.of(tester.element(find.text('إعداد رمز PIN')));
+    // Eight onboarding pages, each reachable with "Next".
+    expect(find.text('حمايتك تبدأ من جهازك').hitTestable(), findsOneWidget);
+    final dir = Directionality.of(tester.element(find.text('التالي')));
     expect(dir, TextDirection.rtl);
+    for (final title in [
+      'حماية الشبكة (DNS)',
+      'حماية البحث',
+      'الكشف الذكي',
+      'الأذونات المطلوبة',
+      'بياناتك تبقى هنا',
+      'حدود يجب أن تعرفها',
+      'تفعيل الحماية',
+    ]) {
+      await tester.tap(find.text('التالي'));
+      await tester.pumpAndSettle();
+      expect(find.text(title).hitTestable(), findsOneWidget, reason: title);
+    }
+    expect(find.text('تخطي'), findsNothing);
 
     await tester.tap(find.text('إعداد رمز PIN'));
     await tester.pumpAndSettle();
@@ -62,6 +92,13 @@ void main() {
     expect(find.text('أكّد الرمز'), findsOneWidget);
     await enterPin(tester, '739154');
 
+    // First run continues into the protection setup wizard.
+    expect(find.text('تفعيل حماية SafeGuard'), findsOneWidget);
+    expect(deps.settings.setupPending, isTrue);
+    await tester.tap(find.text('إكمال لاحقًا'));
+    await tester.pumpAndSettle();
+    expect(deps.settings.setupPending, isFalse);
+
     expect(find.text('الحماية نشطة'), findsOneWidget);
     expect(deps.settings.settings.onboardingCompleted, isTrue);
     expect(deps.security.pinSet, isTrue);
@@ -73,10 +110,8 @@ void main() {
     final deps = testDependencies();
     await tester.pumpWidget(SafeGuardApp(dependencies: deps));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('إعداد رمز PIN'));
-    await tester.pumpAndSettle();
-    await enterPin(tester, '739154');
-    await enterPin(tester, '739154');
+    await openPinSetup(tester);
+    await createPinAndSkipWizard(tester, '739154');
 
     final gamblingSwitch = find.descendant(
       of: find.byKey(const ValueKey('category-gambling')),
@@ -172,10 +207,8 @@ void main() {
       final deps = testDependencies(engine: engine);
       await tester.pumpWidget(SafeGuardApp(dependencies: deps));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('إعداد رمز PIN'));
-      await tester.pumpAndSettle();
-      await enterPin(tester, '739154');
-      await enterPin(tester, '739154');
+      await openPinSetup(tester);
+      await createPinAndSkipWizard(tester, '739154');
 
       expect(find.text('الحماية غير نشطة'), findsOneWidget);
       await tester.tap(find.text('تشغيل الحماية'));
@@ -200,10 +233,8 @@ void main() {
     final deps = testDependencies(engine: engine);
     await tester.pumpWidget(SafeGuardApp(dependencies: deps));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('إعداد رمز PIN'));
-    await tester.pumpAndSettle();
-    await enterPin(tester, '739154');
-    await enterPin(tester, '739154');
+    await openPinSetup(tester);
+    await createPinAndSkipWizard(tester, '739154');
 
     await tester.tap(find.text('تشغيل الحماية'));
     await tester.pumpAndSettle();
@@ -272,6 +303,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Blocklist: add freely.
+    await tester.ensureVisible(find.text('النطاقات المحظورة'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('النطاقات المحظورة'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('إضافة نطاق'));
@@ -290,6 +323,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Allowlist: PIN first.
+    await tester.ensureVisible(find.text('النطاقات المسموحة'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('النطاقات المسموحة'));
     await tester.pumpAndSettle();
     expect(find.text('أدخل رمز PIN'), findsOneWidget);

@@ -25,6 +25,16 @@ class SettingsController extends ChangeNotifier {
     return result;
   }
 
+  /// In memory only: set when the PIN is created on first run, so the
+  /// router opens the protection setup wizard next; cleared by the wizard.
+  bool _setupPending = false;
+  bool get setupPending => _setupPending;
+  set setupPending(bool value) {
+    if (_setupPending == value) return;
+    _setupPending = value;
+    notifyListeners();
+  }
+
   Future<Result<void>> completeOnboarding() =>
       _update(_settings.copyWith(onboardingCompleted: true));
 

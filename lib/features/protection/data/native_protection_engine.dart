@@ -218,6 +218,18 @@ class NativeProtectionEngine implements ProtectionEngine {
   Future<void> openAccessibilitySettings() =>
       _channel.openAccessibilitySettings();
 
+  @override
+  Future<void> openBatterySettings() => _channel.openBatterySettings();
+
+  @override
+  Future<void> openPrivateDnsSettings() => _channel.openPrivateDnsSettings();
+
+  @override
+  Future<Map<String, Object?>> diagnostics() async => {
+    for (final e in (await _channel.getDiagnostics()).entries)
+      if (e.key is String) e.key! as String: e.value,
+  };
+
   static ProtectedApp? _app(Map<Object?, Object?> m) {
     final pkg = m['packageName'];
     if (pkg is! String) return null;

@@ -38,6 +38,13 @@ void main() {
     '/blocked?category=violence&source=ai&confidence=0.95',
     '/keywords',
     '/statistics',
+    '/setup',
+    '/setup-assistant',
+    '/diagnostics',
+    '/help',
+    '/about',
+    '/privacy',
+    '/categories',
   ];
 
   for (final textScale in [1.0, 1.3]) {
@@ -120,6 +127,8 @@ void main() {
             await deps.security.createPin('739154', '739154');
             await deps.settings.completeOnboarding();
           }
+          // First-run wizard: reached right after PIN creation.
+          if (screen == '/setup') deps.settings.setupPending = true;
           final router = createRouter(deps);
           await tester.pumpWidget(
             SafeGuardApp(key: UniqueKey(), dependencies: deps, router: router),

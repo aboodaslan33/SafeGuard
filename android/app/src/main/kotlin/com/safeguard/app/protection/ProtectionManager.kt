@@ -10,6 +10,8 @@ import android.view.accessibility.AccessibilityManager
 import android.content.pm.ApplicationInfo
 import android.app.PendingIntent
 import android.net.VpnService
+import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import com.safeguard.app.MainActivity
@@ -369,6 +371,57 @@ class ProtectionManager private constructor(private val context: Context) {
     }
 
     fun detailedStatistics(): DetailedStatistics = statistics.detailed()
+
+    /** Battery optimisation exemption. Some OEMs stop VPN apps that lack it. */
+    fun ignoringBatteryOptimizations(): Boolean? = try {
+        context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName)
+    } catch (e: RuntimeException) {
+        null
+    }
+
+    /**
+     * Local diagnostics for "copy diagnostic information". States, counts and
+     * versions only: no domains, queries, package names, keywords or logs.
+     * Every probe is guarded so one broken component can't hide the rest.
+     */
+    fun diagnostics(): Map<String, Any?> {
+        fun <T> safe(block: () -> T): Any? = try { block() } catch (e: RuntimeException) { "error:" + e.javaClass.simpleName }
+        refreshEnvironment()
+        val s = status.current
+        return mapOf(
+            "androidRelease" to Build.VERSION.RELEASE,
+            "sdkInt" to Build.VERSION.SDK_INT,
+            "manufacturer" to Build.MANUFACTURER,
+            "model" to Build.MODEL,
+            "vpnState" to s.vpnState.name.lowercase(),
+            "vpnPermission" to safe { permissionIntent() == null },
+            "dnsFilterActive" to s.dnsFilterActive,
+            "upstreamAvailable" to s.upstreamAvailable,
+            "upstreamFailing" to upstreamHealth.isFailing(System.currentTimeMillis()),
+            "privateDnsStrict" to s.privateDnsStrict,
+            "otherVpnActive" to s.otherVpnActive,
+            "protectionEnabled" to config.enabled,
+            "mode" to config.mode.id,
+            "safeMode" to config.safeMode,
+            "paused" to config.isPaused(),
+            "rulesReady" to s.rulesReady,
+            "bundledLists" to bundledLists.associate { it.category.id to it.size },
+            "userRules" to safe { rules.count(RuleSource.USER) },
+            "keywords" to safe { keywords.list().size },
+            "protectedApps" to safe { protectedApps.list().size },
+            "accessibility" to safe { accessibilityState().name.lowercase() },
+            "searchEnabled" to config.searchEffectivelyEnabled,
+            "aiEnabled" to config.effectiveAi.enabled,
+            "aiTextModel" to safe { contentClassifier.isAvailable(ContentKind.TEXT) },
+            "aiImageModel" to safe { contentClassifier.isAvailable(ContentKind.IMAGE) },
+            "databaseOk" to safe { databaseOk() },
+            "logRetention" to config.logRetention.id,
+            "logWriteFailures" to logger.failedWrites,
+            "batteryOptimizationIgnored" to ignoringBatteryOptimizations(),
+            "openIncidents" to config.incidents.unacknowledged().size,
+            "lastBoot" to config.lastBoot?.first,
+        )
+    }
 
     /** Secure defaults for all settings; keeps lists, keywords, apps, logs. */
     fun resetProtection() {

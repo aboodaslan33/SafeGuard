@@ -566,6 +566,16 @@ abstract interface class ProtectionEngine {
   });
   Future<void> openAccessibilitySettings();
 
+  /// Android's battery-optimisation exemption list (the user decides).
+  Future<void> openBatterySettings();
+
+  /// Network settings, where Android's Private DNS lives.
+  Future<void> openPrivateDnsSettings();
+
+  /// Local technical state for the diagnostics screen: states, counts and
+  /// versions only — never domains, queries, package names or keywords.
+  Future<Map<String, Object?>> diagnostics();
+
   // ---- Phase 4: AI Protection (on-device) ----
   Future<AiSettings> aiSettings();
   Future<AiSettings> setAiSettings(AiSettings settings);
@@ -694,6 +704,12 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   }) async => AccessibilityStatus.unsupported;
   @override
   Future<void> openAccessibilitySettings() async {}
+  @override
+  Future<void> openBatterySettings() async {}
+  @override
+  Future<void> openPrivateDnsSettings() async {}
+  @override
+  Future<Map<String, Object?>> diagnostics() async => const {};
   @override
   Future<AiSettings> aiSettings() async => const AiSettings();
   @override

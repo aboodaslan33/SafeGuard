@@ -21,6 +21,15 @@ abstract final class Routes {
   static const keywords = '/keywords';
   static const statistics = '/statistics';
 
+  // Phase 7
+  static const setup = '/setup';
+  static const setupAssistant = '/setup-assistant';
+  static const diagnostics = '/diagnostics';
+  static const help = '/help';
+  static const about = '/about';
+  static const privacy = '/privacy';
+  static const categories = '/categories';
+
   static const _firstRun = {welcome, createPin};
   static const _entry = {splash, welcome, createPin, lock};
 
@@ -35,6 +44,7 @@ class GateState {
     required this.onboardingCompleted,
     required this.pinSet,
     required this.locked,
+    this.setupPending = false,
   });
 
   final bool ready;
@@ -42,16 +52,22 @@ class GateState {
   final bool pinSet;
   final bool locked;
 
+  /// The PIN was just created on first run: continue into the protection
+  /// setup wizard instead of Home.
+  final bool setupPending;
+
   @override
   bool operator ==(Object other) =>
       other is GateState &&
       other.ready == ready &&
       other.onboardingCompleted == onboardingCompleted &&
       other.pinSet == pinSet &&
-      other.locked == locked;
+      other.locked == locked &&
+      other.setupPending == setupPending;
 
   @override
-  int get hashCode => Object.hash(ready, onboardingCompleted, pinSet, locked);
+  int get hashCode =>
+      Object.hash(ready, onboardingCompleted, pinSet, locked, setupPending);
 }
 
 /// Pure redirect policy (unit tested). Returns null to stay put.
@@ -78,6 +94,7 @@ String? resolveRedirect(Uri uri, GateState gate) {
   }
 
   if (Routes._entry.contains(path)) {
+    if (gate.setupPending) return Routes.setup;
     final from = path == Routes.lock ? uri.queryParameters['from'] : null;
     return _isInternal(from) ? from! : Routes.home;
   }

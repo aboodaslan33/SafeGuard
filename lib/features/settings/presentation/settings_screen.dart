@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_dependencies.dart';
+import '../../../app/app_info.dart';
 import '../../../app/router/app_router.dart';
 import '../../../app/router/routes.dart';
 import '../../../core/design_system/design_system.dart';
@@ -11,11 +12,12 @@ import '../../advanced/presentation/advanced_actions.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_ui.dart';
 import '../domain/app_settings.dart';
+import 'language_picker.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  static const appVersion = '1.5.0';
+  static const appVersion = AppInfo.version;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +31,29 @@ class SettingsScreen extends StatelessWidget {
         return SgPage(
           title: tr('الإعدادات', 'Settings'),
           children: [
+            SectionHeader(title: tr('الإعداد', 'Setup')),
+            SgGroupedCard(
+              children: [
+                SecuritySettingTile(
+                  icon: Icons.fact_check_outlined,
+                  title: tr('مساعد الإعداد', 'Setup assistant'),
+                  subtitle: tr(
+                    'الأذونات وما ينقص الحماية',
+                    'Permissions and what protection is missing',
+                  ),
+                  onTap: () => context.push(Routes.setupAssistant),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.auto_fix_high_outlined,
+                  title: tr('معالج تفعيل الحماية', 'Protection setup wizard'),
+                  subtitle: tr(
+                    'الوضع والفئات والأذونات خطوة بخطوة',
+                    'Mode, categories and permissions step by step',
+                  ),
+                  onTap: () => context.push(Routes.setup),
+                ),
+              ],
+            ),
             SectionHeader(title: tr('الحماية', 'Protection')),
             SgGroupedCard(
               children: [
@@ -40,7 +65,7 @@ class SettingsScreen extends StatelessWidget {
                         '${ProtectionCategory.networkFiltered.length}',
                     '${protection.activeNetworkCount} of ${ProtectionCategory.networkFiltered.length}',
                   ),
-                  onTap: () => context.go(Routes.home),
+                  onTap: () => context.push(Routes.categories),
                 ),
                 SecuritySettingTile(
                   icon: Icons.block_rounded,
@@ -308,6 +333,36 @@ class SettingsScreen extends StatelessWidget {
                   icon: Icons.info_outline_rounded,
                   title: tr('الإصدار', 'Version'),
                   value: appVersion,
+                  onTap: () => context.push(Routes.about),
+                ),
+              ],
+            ),
+            SectionHeader(title: tr('المساعدة والمعلومات', 'Help and info')),
+            SgGroupedCard(
+              children: [
+                SecuritySettingTile(
+                  icon: Icons.help_outline_rounded,
+                  title: tr('المساعدة', 'Help'),
+                  onTap: () => context.push(Routes.help),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.privacy_tip_outlined,
+                  title: tr('الخصوصية وبياناتك', 'Privacy and your data'),
+                  onTap: () => context.push(Routes.privacy),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.bug_report_outlined,
+                  title: tr('التشخيص', 'Diagnostics'),
+                  subtitle: tr(
+                    'للاختبار والدعم، دون بيانات شخصية',
+                    'For testing and support, no personal data',
+                  ),
+                  onTap: () => context.push(Routes.diagnostics),
+                ),
+                SecuritySettingTile(
+                  icon: Icons.shield_outlined,
+                  title: tr('حول SafeGuard', 'About SafeGuard'),
+                  onTap: () => context.push(Routes.about),
                 ),
               ],
             ),
@@ -445,37 +500,5 @@ class _LogRetentionTileState extends State<_LogRetentionTile> {
         if (applied != null && mounted) setState(() => _value = applied);
       },
     );
-  }
-}
-
-/// Each language is named in itself so it can be found whatever is shown.
-String languageLabel(AppLanguage l) => switch (l) {
-  AppLanguage.ar => 'العربية',
-  AppLanguage.en => 'English',
-};
-
-/// Language picker, also used on the welcome screen.
-Future<void> pickLanguage(BuildContext context) async {
-  final settings = AppScope.of(context).settings;
-  final current = settings.settings.language;
-  final picked = await showSgBottomSheet<AppLanguage>(
-    context,
-    title: tr('اللغة', 'Language'),
-    builder: (context) => Column(
-      children: [
-        for (final value in AppLanguage.values)
-          SgChoiceRow(
-            label: languageLabel(value),
-            icon: Icons.translate_rounded,
-            selected: value == current,
-            onTap: () => Navigator.of(context).pop(value),
-          ),
-      ],
-    ),
-  );
-  if (picked == null || picked == current) return;
-  final result = await settings.setLanguage(picked);
-  if (result case Err(:final failure) when context.mounted) {
-    showSgSnack(context, failure.message);
   }
 }

@@ -9,13 +9,18 @@ import '../../features/advanced/presentation/statistics_screen.dart';
 import '../../features/ai/presentation/ai_protection_screen.dart';
 import '../../features/apps/presentation/app_protection_screen.dart';
 import '../../features/blocking/presentation/blocked_content_screen.dart';
+import '../../features/diagnostics/presentation/diagnostics_screen.dart';
+import '../../features/home/presentation/categories_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/info/presentation/info_screens.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/pin/presentation/pin_screens.dart';
 import '../../features/protection/domain/protection.dart';
 import '../../features/rules/presentation/domain_rules_screen.dart';
 import '../../features/search/presentation/search_protection_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/setup/presentation/setup_assistant_screen.dart';
+import '../../features/setup/presentation/setup_wizard_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../../features/status/presentation/status_screen.dart';
 import '../app_dependencies.dart';
@@ -103,6 +108,25 @@ GoRouter createRouter(AppDependencies deps) {
           ),
         ),
       ),
+      GoRoute(
+        path: Routes.setup,
+        pageBuilder: (c, s) => _fade(s, const SetupWizardScreen()),
+      ),
+      GoRoute(
+        path: Routes.setupAssistant,
+        builder: (c, s) => const SetupAssistantScreen(),
+      ),
+      GoRoute(
+        path: Routes.diagnostics,
+        builder: (c, s) => const DiagnosticsScreen(),
+      ),
+      GoRoute(path: Routes.help, builder: (c, s) => const HelpScreen()),
+      GoRoute(path: Routes.about, builder: (c, s) => const AboutScreen()),
+      GoRoute(path: Routes.privacy, builder: (c, s) => const PrivacyScreen()),
+      GoRoute(
+        path: Routes.categories,
+        builder: (c, s) => const CategoriesScreen(),
+      ),
       StatefulShellRoute.indexedStack(
         pageBuilder: (c, s, shell) => _fade(s, AppShell(shell: shell)),
         branches: [
@@ -164,6 +188,7 @@ class _GateNotifier extends ValueNotifier<GateState> {
         d.settings.settings.appLockEnabled &&
         d.security.pinSet &&
         !d.security.unlocked,
+    setupPending: d.settings.setupPending,
   );
 
   void _update() => value = _compute(_deps);
