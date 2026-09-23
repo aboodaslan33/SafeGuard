@@ -160,6 +160,21 @@ class ProtectionManager private constructor(private val context: Context) {
     private val statistics by lazy { StatisticsService(events, reportsSince = aiStats::reportsSince) }
     val status = ProtectionStatusHolder()
 
+    // Live counters: every stored event bumps status.activityVersion, at most
+    // twice a second (a burst of blocks becomes one update).
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    @Volatile private var activityPending = false
+    private val activityPulse = Runnable {
+        activityPending = false
+        status.activityChanged()
+    }
+
+    private fun onActivity() {
+        if (activityPending) return
+        activityPending = true
+        mainHandler.postDelayed(activityPulse, 500)
+    }
+
     /** Non-exportable Keystore HMAC key (event ids, AI cache keys). */
     private val hmacKey = KeystoreHmacKey(context)
     private val hasher = QueryHasher(hmacKey)
@@ -278,6 +293,7 @@ class ProtectionManager private constructor(private val context: Context) {
     private val isDebuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
     init {
+        logger.onRecorded = ::onActivity
         logger.applyRetention()
         seedBuiltInRules()
         if (database.createdFresh) restoreUserConfig()
@@ -906,6 +922,7 @@ class ProtectionManager private constructor(private val context: Context) {
         config.logRetention = value
         logger.applyRetention()
         if (!value.keepsLog) logger.reset()
+        onActivity() // the log may have been pruned
     }
 
     fun clearLogs() {
@@ -914,6 +931,7 @@ class ProtectionManager private constructor(private val context: Context) {
         contentClassifier.clear()
         shieldText.clear()
         logger.reset()
+        onActivity()
     }
 
     /** Called when the user erases all app data from Flutter. */

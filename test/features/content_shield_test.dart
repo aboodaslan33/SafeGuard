@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:safeguard/app/app_dependencies.dart';
 import 'package:safeguard/app/router/routes.dart';
 import 'package:safeguard/app/safeguard_app.dart';
 import 'package:safeguard/features/protection/domain/protection.dart';
@@ -300,5 +301,52 @@ void main() {
         expect(engine.shieldMax, isFalse);
       },
     );
+  });
+
+  group('live counters', () {
+    test('snapshot carries the activity version', () {
+      expect(EngineSnapshot.fromMap({'activityVersion': 7}).activityVersion, 7);
+      expect(EngineSnapshot.fromMap({}).activityVersion, 0);
+    });
+
+    testWidgets('new blocks update the numbers without leaving the screen', (
+      tester,
+    ) async {
+      final engine = FakeProtectionEngine(permissionGranted: true);
+      await tester.pumpWidget(
+        SafeGuardApp(dependencies: testDependencies(engine: engine)),
+      );
+      await tester.pumpAndSettle();
+      await openPinSetup(tester);
+      await createPinAndSkipWizard(tester, '739154');
+      final protection = AppScope.of(
+        tester.element(find.byType(Scaffold).first),
+      ).protection;
+      final before = protection.stats.today ?? 0;
+      for (var i = 0; i < 3; i++) {
+        engine.logs.add(
+          BlockEvent(
+            time: DateTime.now(),
+            domain: 'com.instagram.android',
+            category: ProtectionCategory.sexual,
+            source: EventSourceKind.ai,
+            ruleType: 'ai_shield:image:sexual:gantman-nsfw-mnv2@110:skip',
+          ),
+        );
+      }
+      final s = engine.current;
+      engine.emit(
+        EngineSnapshot(
+          vpnState: s.vpnState,
+          dnsFilterActive: s.dnsFilterActive,
+          rulesReady: s.rulesReady,
+          protectionEnabled: s.protectionEnabled,
+          activityVersion: s.activityVersion + 1,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(protection.stats.today, before + 3);
+      expect(protection.activityVersion, s.activityVersion + 1);
+    });
   });
 }

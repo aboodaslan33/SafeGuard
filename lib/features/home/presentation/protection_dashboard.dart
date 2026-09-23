@@ -245,6 +245,16 @@ class DashboardPanel extends StatelessWidget {
             tr('المحجوب اليوم', 'Blocked today'),
             today == null ? '—' : '$today',
           ),
+          row(
+            tr('آخر 7 أيام', 'Last 7 days'),
+            protection.stats.last7Days == null
+                ? '—'
+                : '${protection.stats.last7Days}',
+          ),
+          row(
+            tr('الإجمالي', 'Total'),
+            protection.stats.total == null ? '—' : '${protection.stats.total}',
+          ),
         ],
       ),
     );

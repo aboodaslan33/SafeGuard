@@ -5,6 +5,7 @@ import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
+import '../../protection/presentation/live_activity.dart';
 import '../../protection/presentation/protection_ui.dart';
 
 enum _Period { today, week, month }
@@ -18,7 +19,8 @@ class StatisticsScreen extends StatefulWidget {
   State<StatisticsScreen> createState() => _StatisticsScreenState();
 }
 
-class _StatisticsScreenState extends State<StatisticsScreen> {
+class _StatisticsScreenState extends State<StatisticsScreen>
+    with LiveActivityRefresh {
   DetailedStats? _stats;
   String? _error;
   _Period _period = _Period.today;
@@ -28,6 +30,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
+
+  @override
+  Future<void> onActivity() => _load();
 
   Future<void> _load() async {
     try {

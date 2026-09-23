@@ -36,6 +36,12 @@ data class ProtectionStatus(
     val upstreamAvailable: Boolean = false,
     val lastError: String? = null,
     val startedAt: Long? = null,
+    /**
+     * Bumped whenever a protection event is recorded (any layer: DNS,
+     * search, apps, AI shield), so the UI refreshes counters and logs live.
+     * Carries no content.
+     */
+    val activityVersion: Long = 0,
 ) {
     val isActive: Boolean
         get() = vpnState == VpnState.RUNNING && dnsFilterActive && rulesReady
@@ -48,6 +54,7 @@ data class ProtectionStatus(
         "blockingRuleCount" to blockingRuleCount,
         "enabledCategories" to enabledCategories,
         "protectionEnabled" to protectionEnabled,
+        "activityVersion" to activityVersion,
         "otherVpnActive" to otherVpnActive,
         "privateDnsStrict" to privateDnsStrict,
         "upstreamAvailable" to upstreamAvailable,
@@ -84,6 +91,9 @@ class ProtectionStatusHolder(initial: ProtectionStatus = ProtectionStatus()) {
     // Lifecycle transitions, kept here so they're unit-testable.
 
     fun starting() = update { it.copy(vpnState = VpnState.STARTING, lastError = null) }
+
+    /** New events were recorded (or the log was cleared): counters must be re-read. */
+    fun activityChanged() = update { it.copy(activityVersion = it.activityVersion + 1) }
 
     fun running(now: Long) = update {
         it.copy(vpnState = VpnState.RUNNING, dnsFilterActive = true, startedAt = now, lastError = null)

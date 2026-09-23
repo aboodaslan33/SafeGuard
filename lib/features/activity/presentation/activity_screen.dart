@@ -8,6 +8,7 @@ import '../../../core/design_system/design_system.dart';
 import '../../../core/error/failures.dart';
 import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
+import '../../protection/presentation/live_activity.dart';
 import '../../protection/presentation/protection_ui.dart';
 
 /// Local block log: time, category, domain. Nothing else is recorded.
@@ -18,7 +19,8 @@ class ActivityScreen extends StatefulWidget {
   State<ActivityScreen> createState() => _ActivityScreenState();
 }
 
-class _ActivityScreenState extends State<ActivityScreen> {
+class _ActivityScreenState extends State<ActivityScreen>
+    with LiveActivityRefresh {
   List<BlockEvent>? _events;
   String? _error;
 
@@ -29,6 +31,9 @@ class _ActivityScreenState extends State<ActivityScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
+
+  @override
+  Future<void> onActivity() => _load();
 
   Future<void> _load() async {
     try {

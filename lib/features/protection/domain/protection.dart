@@ -176,6 +176,7 @@ class EngineSnapshot {
     this.upstreamAvailable = false,
     this.lastError,
     this.startedAt,
+    this.activityVersion = 0,
   });
 
   static const unsupported = EngineSnapshot(vpnState: VpnState.unsupported);
@@ -193,6 +194,9 @@ class EngineSnapshot {
   final bool upstreamAvailable;
   final String? lastError;
   final DateTime? startedAt;
+
+  /// Changes whenever the native side recorded new events (live counters).
+  final int activityVersion;
 
   bool get isSupported => vpnState != VpnState.unsupported;
 
@@ -223,6 +227,7 @@ class EngineSnapshot {
       startedAt: started == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(started),
+      activityVersion: get<int>('activityVersion') ?? 0,
     );
   }
 }

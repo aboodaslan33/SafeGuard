@@ -373,12 +373,18 @@ class ProtectionController extends ChangeNotifier {
     super.dispose();
   }
 
+  /// Bumps when new protection events were recorded (see [LiveActivityRefresh]).
+  int get activityVersion => _snapshot.activityVersion;
+
   void _onSnapshot(EngineSnapshot next) {
     final wasActive = _snapshot.isActive;
     final stateChanged = next.vpnState != _snapshot.vpnState;
+    final newActivity = next.activityVersion != _snapshot.activityVersion;
     _snapshot = next;
     notifyListeners();
-    if (next.isActive && !wasActive) unawaited(refreshStats());
+    // Live counters: new blocks anywhere refresh the numbers everywhere.
+    if ((next.isActive && !wasActive) || newActivity) unawaited(refreshStats());
+    if (newActivity) unawaited(refreshAi());
     // VPN transitions change health (and may be interruptions).
     if (stateChanged) unawaited(refreshHealth());
   }

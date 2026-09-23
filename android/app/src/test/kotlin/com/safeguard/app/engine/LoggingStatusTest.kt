@@ -188,4 +188,24 @@ class LoggingStatusTest {
         holder.revoked()
         assertFalse("stale network facts cleared when the VPN stops", holder.current.upstreamAvailable)
     }
+
+    @Test
+    fun recordedEventsBumpTheLiveActivityVersion() {
+        val store = InMemoryBlockEventStore()
+        val logger = BlockLogger(store, direct, clock = { 1000L })
+        val status = ProtectionStatusHolder()
+        var pushed = 0
+        status.addListener { pushed++ }
+        logger.onRecorded = { status.activityChanged() }
+        logger.onBlocked(blocked("adult.test"))
+        logger.onBlocked(blocked("casino.test"))
+        assertEquals(2L, status.current.activityVersion)
+        assertEquals(2, pushed)
+        assertEquals(2L, status.current.toMap()["activityVersion"])
+        // Nothing stored (log off) → no pulse.
+        val off = BlockLogger(store, direct, retention = { com.safeguard.app.engine.logging.LogRetention.NEVER })
+        off.onRecorded = { status.activityChanged() }
+        off.onBlocked(blocked("other.test"))
+        assertEquals(2L, status.current.activityVersion)
+    }
 }

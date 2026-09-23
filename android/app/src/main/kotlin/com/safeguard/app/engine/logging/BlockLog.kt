@@ -148,6 +148,9 @@ class BlockLogger(
      * Records any event (DNS, SEARCH, APP…). Callers are responsible for
      * [BlockEvent.subject] being non-sensitive; see `SearchEventRecorder`.
      */
+    /** Called on the log thread after an event was stored (for live counters). */
+    @Volatile var onRecorded: (() -> Unit)? = null
+
     fun record(event: BlockEvent) {
         val policy = retention()
         if (!policy.keepsLog) return
@@ -163,6 +166,7 @@ class BlockLogger(
             // it the VPN): losing one log row is the safe failure.
             try {
                 store.insert(event)
+                onRecorded?.invoke()
                 if (++insertsSincePrune >= 200) {
                     insertsSincePrune = 0
                     store.prune(now - policy.retentionMs, maxRows)
