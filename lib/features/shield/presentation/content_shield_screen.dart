@@ -9,6 +9,7 @@ import '../../../core/i18n/i18n.dart';
 import '../../protection/domain/protection.dart';
 import '../../protection/presentation/protection_guard.dart';
 import '../../search/presentation/search_protection_screen.dart' show SgNote;
+import 'shield_diagnostics_sheet.dart';
 
 /// AI Content Shield: on-device checking of content shown in supported
 /// apps. Shows the real state: which parts actually run (text), which
@@ -339,6 +340,24 @@ class _ContentShieldScreenState extends State<ContentShieldScreen> {
           ),
           SectionHeader(title: tr('الخصوصية', 'Privacy')),
           const _PrivacyCard(),
+          SectionHeader(title: tr('تشخيص', 'Diagnostics')),
+          SgGroupedCard(
+            children: [
+              SecuritySettingTile(
+                icon: Icons.troubleshoot_rounded,
+                title: tr('فحص عمل الدرع', 'Check the shield'),
+                subtitle: tr(
+                  'يعرض مباشرةً أي مرحلة تعمل وأيها متوقفة',
+                  'Shows live which stage works and which one stops',
+                ),
+                onTap: () => showSgBottomSheet<void>(
+                  context,
+                  title: tr('فحص عمل الدرع', 'Check the shield'),
+                  builder: (_) => ShieldDiagnosticsSheet(engine: _engine),
+                ),
+              ),
+            ],
+          ),
         ],
       ],
     );

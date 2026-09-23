@@ -300,6 +300,8 @@ class ContentShieldEngine(
     private val imageWatchdog: InferenceWatchdog = InferenceWatchdog(limitMs = 1_500),
     /** A second block of the same app within this time is the same content (debounce). */
     private val blockCooldownMs: Long = 1_200,
+    /** Content-free counters for the diagnostics screen. */
+    val diagnostics: ShieldDiagnostics = ShieldDiagnostics(clock),
 ) {
     private val textGate = FrameGate(minIntervalMs = 1_000, settleMs = 400, maxWaitMs = 2_500, sameScreenBits = 0)
     private val imageGate = FrameGate()
@@ -364,14 +366,23 @@ class ContentShieldEngine(
             ClassificationResult(ClassificationStatus.UNAVAILABLE)
         }
         textWatchdog.record(clock(), clock() - start)
-        return decide(pkg, AiClassification.fromText(result), textConfirm, textGate).also {
+        val classified = AiClassification.fromText(result)
+        diagnostics.onClassified(classified)
+        return decide(pkg, classified, textConfirm, textGate).also {
             textPending = it is ShieldOutcome.Pending
         }
     }
 
     /** [frame] is read in place and must be released by the caller afterwards. */
     fun onFrame(pkg: String, frame: RgbaFrame): ShieldOutcome {
-        if (!isActiveFor(pkg, ContentKind.IMAGE) || !image.isUsable) return ShieldOutcome.Skipped
+        if (!isActiveFor(pkg, ContentKind.IMAGE)) {
+            diagnostics.framesInactive.incrementAndGet()
+            return ShieldOutcome.Skipped
+        }
+        if (!image.isUsable) {
+            diagnostics.framesNoModel.incrementAndGet()
+            return ShieldOutcome.Skipped
+        }
         val max = settings().maxSensitivity
         val gate = if (max) imageGateFast else imageGate
         val now = clock()
@@ -379,6 +390,7 @@ class ContentShieldEngine(
         if (!gate.shouldSample(now, FrameHash.dHash(frame), true)) return ShieldOutcome.Skipped
         val c = image.classify(frame)
         imageWatchdog.record(clock(), clock() - now)
+        diagnostics.onClassified(c)
         return decide(pkg, c, if (max) imageConfirmMax else imageConfirm, gate, maxSensitivity = max)
     }
 

@@ -93,8 +93,11 @@ class ContentShieldService : AccessibilityService() {
 
     private val snapshot = Runnable { takeSnapshot() }
 
+    private val diag get() = manager.shield.diagnostics
+
     override fun onServiceConnected() {
         instance = WeakReference(this)
+        diag.serviceConnected = true
         applyConfig()
     }
 
@@ -106,6 +109,7 @@ class ContentShieldService : AccessibilityService() {
         // unset); they are used for the foreground app, never for text.
         val supported = SupportedApps.forPackage(pkg) != null
         val engine = manager.shield
+        engine.diagnostics.onEvent(pkg, supported)
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
                 // The keyboard isn't "the app in front".
@@ -114,6 +118,7 @@ class ContentShieldService : AccessibilityService() {
                     cover.hide()
                     lastQuery = null
                     foreground = pkg
+                    engine.diagnostics.foreground = pkg
                     manager.shieldForeground = pkg
                     engine.onForeground(pkg)
                     ScreenCaptureService.updateActive()
@@ -141,6 +146,7 @@ class ContentShieldService : AccessibilityService() {
             checkSearch(root, pkg)
             if (busy.get()) return reschedule()
             if (!engine.wantsText(pkg)) return reschedule()
+            engine.diagnostics.textSnapshots.incrementAndGet()
             VisibleTextExtractor.extract(root, Nodes)
         } catch (e: RuntimeException) {
             return // window changed while reading
@@ -187,10 +193,15 @@ class ContentShieldService : AccessibilityService() {
         }
         if (query == lastQuery) return
         lastQuery = query
+        diag.searchFields.incrementAndGet()
         try {
             worker.execute {
                 val d = manager.shieldSearch(pkg, query) ?: return@execute
-                if (d.action == RuleAction.BLOCK) main.post { onSearchBlocked(pkg) }
+                diag.searchChecks.incrementAndGet()
+                if (d.action == RuleAction.BLOCK) {
+                    diag.searchBlocks.incrementAndGet()
+                    main.post { onSearchBlocked(pkg) }
+                }
             }
         } catch (e: RejectedExecutionException) {
             // service is shutting down
@@ -236,6 +247,7 @@ class ContentShieldService : AccessibilityService() {
         if (destroyed || e.packageName != foreground || cover.showing) return
         val action = escalation.next(e.packageName, e.timestamp)
         if (!manager.onShieldBlock(e, action)) return
+        diag.onBlocked(e, action)
         manager.shield.onContentChanged() // the screen is about to change: let it settle
         when (action) {
             BlockAction.SKIP -> {
@@ -284,8 +296,14 @@ class ContentShieldService : AccessibilityService() {
             // Protection off or paused: app switches only (no content), to notice when it resumes.
             else -> AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
         }
-        info.flags = AccessibilityServiceInfo.DEFAULT
+        // View ids: to recognise an app's search box. Not-important views:
+        // Instagram and Facebook mark much of their feed that way.
+        info.flags = AccessibilityServiceInfo.DEFAULT or
+            AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+            AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
         serviceInfo = info
+        diag.eventTypesConfigured = info.eventTypes
+        diag.packagesConfigured = info.packageNames?.size ?: -1
         if (!active) {
             main.removeCallbacks(snapshot)
             cover.hide()
@@ -314,6 +332,7 @@ class ContentShieldService : AccessibilityService() {
 
     override fun onDestroy() {
         destroyed = true
+        diag.serviceConnected = false
         main.removeCallbacks(snapshot)
         cover.hide()
         worker.shutdownNow()

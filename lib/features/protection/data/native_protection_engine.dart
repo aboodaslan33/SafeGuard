@@ -257,6 +257,12 @@ class NativeProtectionEngine implements ProtectionEngine {
   Future<void> stopScreenCapture() => _channel.stopScreenCapture();
 
   @override
+  Future<Map<String, Object?>> shieldDiagnostics() async => {
+    for (final e in (await _channel.getShieldDiagnostics()).entries)
+      if (e.key is String) e.key! as String: e.value,
+  };
+
+  @override
   Future<AlertsState> alertsState() async =>
       AlertsState.fromMap(await _channel.getAlertsState());
 

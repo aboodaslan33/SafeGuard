@@ -169,6 +169,39 @@ void main() {
       expect(find.textContaining('فحص الصور متوقف'), findsWidgets);
     });
 
+    testWidgets('diagnostics show live where the shield stops', (tester) async {
+      final engine = await open(tester);
+      engine.shieldAccessibility = AccessibilityStatus.enabled;
+      await tester.tap(switchOf('درع المحتوى الذكي'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('فحص عمل الدرع'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(find.text('فحص عمل الدرع'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('لم يصل أي حدث'), findsOneWidget);
+      expect(find.text('أحداث من التطبيقات المدعومة'), findsOneWidget);
+
+      // Live: the next refresh shows the new state.
+      engine.shieldDiag = {
+        'verdict': null,
+        'serviceConnected': true,
+        'eventsFromSupported': 42,
+        'captureRunning': true,
+        'lastImage': 'sexual 95%',
+      };
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('كل المراحل تعمل'), findsOneWidget);
+      expect(find.text('42'), findsOneWidget);
+      expect(find.text('sexual 95%'), findsOneWidget);
+
+      Navigator.of(tester.element(find.text('42'))).pop();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('turning the shield or an app off needs the PIN', (
       tester,
     ) async {

@@ -817,6 +817,14 @@ class ProtectionManager private constructor(private val context: Context) {
 
     val shieldImageModelState: ImageModelState get() = shieldImage.state
 
+    /** Where the shield pipeline stops on this device (content-free, memory only). */
+    fun shieldDiagnostics(): Map<String, Any?> {
+        val front = shieldForeground
+        val supportedInFront = front != null && SupportedApps.forPackage(front) != null && shield.isActiveFor(front)
+        return shield.diagnostics.toMap(shieldStatus(), ScreenCaptureService.running, supportedInFront) +
+            mapOf("imageModel" to shieldImage.state.id)
+    }
+
     /** Turning the shield off (or an app off) needs the PIN; the UI checks it. */
     fun setShieldEnabled(enabled: Boolean) {
         config.shieldSettings = config.shieldSettings.copy(enabled = enabled)

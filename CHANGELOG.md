@@ -17,11 +17,20 @@ carrying the previous code (see docs/RELEASE.md).
   keeps coming back (a single post, a profile, results), the cover stays
   until you tap **Next** or **Back**. The old Back → Home escalation is
   gone.
+- The shield service now asks Android for view ids and for views marked
+  "not important" (Instagram and Facebook use them heavily); without
+  them search boxes weren't recognised by id and much of the feed text
+  was invisible to the shield.
 - App protection warns before adding an app the Content Shield covers
   (Instagram, Facebook…): it would block the whole app, not just the
   content.
 
 ### Added
+- **"Check the shield" diagnostics** (Content Shield screen): live,
+  content-free counters for each stage (service connected, events from
+  the apps, text checks, search boxes seen, screen capture, frames, last
+  model result, blocks) and the first stage that isn't working, with what
+  to do about it.
 - **Search blocking inside supported apps:** the query typed into the
   app's own search box (Instagram, Facebook, TikTok, YouTube…) is checked
   by search protection once typing pauses, with the same categories,

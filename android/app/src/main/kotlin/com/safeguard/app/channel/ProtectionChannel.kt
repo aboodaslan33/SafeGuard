@@ -311,6 +311,7 @@ class ProtectionChannel(
                 "getDiagnostics" -> manager.diagnostics()
                 // AI Content Shield. Loosening (off / an app off) needs the PIN in the UI.
                 "getShieldState" -> shieldState()
+                "getShieldDiagnostics" -> manager.shieldDiagnostics()
                 "setShieldEnabled" -> {
                     manager.setShieldEnabled(call.argument<Boolean>("enabled") ?: throw bad("enabled"))
                     shieldState()

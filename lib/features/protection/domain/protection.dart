@@ -669,6 +669,10 @@ abstract interface class ProtectionEngine {
 
   /// Ends screen capture (the UI asks for the PIN first).
   Future<void> stopScreenCapture();
+
+  /// Live, content-free counters showing where the shield stops on this
+  /// device (`verdict` names the first failing stage, or null).
+  Future<Map<String, Object?>> shieldDiagnostics();
 }
 
 /// Engine for platforms without the native layer (tests, previews): reports
@@ -838,6 +842,9 @@ class UnavailableProtectionEngine implements ProtectionEngine {
   Future<bool> requestScreenCapture() async => false;
   @override
   Future<void> stopScreenCapture() async {}
+
+  @override
+  Future<Map<String, Object?>> shieldDiagnostics() async => const {};
 }
 
 abstract interface class ProtectionRepository {

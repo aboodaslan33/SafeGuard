@@ -661,6 +661,16 @@ class FakeProtectionEngine implements ProtectionEngine {
   @override
   Future<void> stopScreenCapture() async => screenCapture = false;
 
+  Map<String, Object?> shieldDiag = {
+    'verdict': 'no_events',
+    'serviceConnected': true,
+    'eventsFromSupported': 0,
+    'captureRunning': false,
+  };
+
+  @override
+  Future<Map<String, Object?>> shieldDiagnostics() async => shieldDiag;
+
   @override
   Future<ShieldStatus> setShieldDisclosure({required bool accepted}) async {
     shieldDisclosureAnswers.add(accepted);

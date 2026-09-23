@@ -150,6 +150,9 @@ class ProtectionChannel {
 
   Future<void> stopScreenCapture() => _call<bool>('stopScreenCapture');
 
+  Future<Map<Object?, Object?>> getShieldDiagnostics() =>
+      _map('getShieldDiagnostics');
+
   Future<Map<Object?, Object?>> getAlertsState() => _map('getAlertsState');
 
   Future<Map<Object?, Object?>> setAlertsEnabled(bool enabled) =>

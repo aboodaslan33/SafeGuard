@@ -117,6 +117,7 @@ class ScreenCaptureService : Service() {
             val pkg = manager.shieldForeground ?: return
             // SafeGuard's cover is on screen: the frame shows the cover, not the app.
             if (ContentShieldService.covering) return
+            manager.shield.diagnostics.framesReceived.incrementAndGet()
             val plane = image.planes[0]
             val frame = RgbaFrame(image.width, image.height, plane.buffer, plane.rowStride, plane.pixelStride)
             val outcome = manager.shield.onFrame(pkg, frame)
