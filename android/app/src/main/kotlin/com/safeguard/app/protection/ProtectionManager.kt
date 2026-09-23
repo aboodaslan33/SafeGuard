@@ -32,6 +32,7 @@ import com.safeguard.app.engine.ai.ContentKind
 import com.safeguard.app.engine.ai.DecisionPolicy
 import com.safeguard.app.engine.ai.FalsePositiveReport
 import com.safeguard.app.engine.ai.GuardedContentClassifier
+import com.safeguard.app.engine.ai.InferenceBudget
 import com.safeguard.app.engine.ai.ProtectionDecision
 import com.safeguard.app.engine.ai.ProtectionDecisionEngine
 import com.safeguard.app.engine.ai.RuleSignal
@@ -94,11 +95,20 @@ import com.safeguard.app.engine.search.SearchDecisionListener
 import com.safeguard.app.engine.search.SearchFilterService
 import com.safeguard.app.engine.search.SearchNormalizer
 import com.safeguard.app.engine.search.SearchQuery
+import com.safeguard.app.engine.shield.BuiltInImagePacks
+import com.safeguard.app.engine.shield.ContentShieldEngine
+import com.safeguard.app.engine.shield.ImageModelState
+import com.safeguard.app.engine.shield.ShieldEvent
+import com.safeguard.app.engine.shield.ShieldImageClassifier
+import com.safeguard.app.engine.shield.ShieldStatus
+import com.safeguard.app.engine.shield.ShieldStatusResolver
+import com.safeguard.app.engine.shield.SupportedApps
 import com.safeguard.app.engine.stats.BlockStatistics
 import com.safeguard.app.engine.stats.DetailedStatistics
 import com.safeguard.app.engine.stats.StatisticsService
 import com.safeguard.app.engine.status.ProtectionStatusHolder
 import com.safeguard.app.engine.status.VpnState
+import com.safeguard.app.shield.ContentShieldService
 import com.safeguard.app.vpn.NetworkMonitor
 import com.safeguard.app.vpn.SafeGuardVpnService
 import com.safeguard.app.vpn.UpstreamNetwork
@@ -176,6 +186,35 @@ class ProtectionManager private constructor(private val context: Context) {
     )
 
     val keywords = CustomKeywords(SqliteCustomKeywordStore(database))
+
+    // ---- AI Content Shield (final AI phase) -------------------------------
+
+    /**
+     * Text classification for the shield: the same verified on-device text
+     * model, behind its own cache and a separate budget so screen text can
+     * never starve search filtering (over budget → UNKNOWN, not BLOCK).
+     */
+    private val shieldText = GuardedContentClassifier(
+        AdapterContentClassifier(listOf(textAdapter)),
+        macs = hmacKey,
+        budget = InferenceBudget(mapOf(ContentKind.TEXT to 40, ContentKind.IMAGE to 0)),
+        capacity = 64,
+    )
+
+    /**
+     * Screen-image classification. No image model pack ships
+     * ([BuiltInImagePacks] is empty) and no inference runtime is compiled
+     * in, so this reports NOT_BUNDLED and image AI is unavailable.
+     */
+    private val shieldImage = ShieldImageClassifier(BuiltInImagePacks.all.firstOrNull(), readModel = { null }, runtimes = { null })
+
+    val shield = ContentShieldEngine(
+        classifyText = shieldText::classifyText,
+        image = shieldImage,
+        policy = { DecisionPolicy(config.filteringActive, config.effectiveCategories, config.effectiveAi) },
+        settings = { config.shieldSettings },
+        protectionActive = { config.filteringActive },
+    )
 
     /** Content-free debug trace of recent decisions (off by default, memory only). */
     val trace = DecisionTrace()
@@ -260,6 +299,7 @@ class ProtectionManager private constructor(private val context: Context) {
             return false
         }
         SafeGuardVpnService.start(context)
+        onShieldStateChanged()
         return true
     }
 
@@ -267,6 +307,7 @@ class ProtectionManager private constructor(private val context: Context) {
         config.update(enabled = false)
         status.update { it.copy(protectionEnabled = false) }
         SafeGuardVpnService.stop(context)
+        onShieldStateChanged()
     }
 
     /** Re-checks conditions outside our control (another VPN). Safe to call anytime. */
@@ -289,6 +330,7 @@ class ProtectionManager private constructor(private val context: Context) {
     fun setConfiguration(enabled: Boolean, categories: Set<Category>, mode: ProtectionMode? = null) {
         val policy = config.update(enabled = enabled, categories = categories, mode = mode)
         status.update { it.copy(protectionEnabled = policy.enabled, enabledCategories = config.effectiveCategories.size) }
+        onShieldStateChanged()
     }
 
     fun setCategory(category: Category, enabled: Boolean) {
@@ -316,10 +358,14 @@ class ProtectionManager private constructor(private val context: Context) {
                 ruleType = BlockEvent.RULE_TYPE_TEMPORARY_UNLOCK,
             ),
         )
+        onShieldStateChanged()
         return p
     }
 
-    fun endPause() = config.endPause()
+    fun endPause() {
+        config.endPause()
+        onShieldStateChanged()
+    }
 
     /**
      * Safe Mode: stops the VPN so a filtering problem can't keep the device
@@ -328,6 +374,7 @@ class ProtectionManager private constructor(private val context: Context) {
     fun enterSafeMode() {
         config.safeMode = true
         SafeGuardVpnService.stop(context)
+        onShieldStateChanged()
     }
 
     fun recordIncident(kind: IncidentKind) = config.addIncident(Incident(System.currentTimeMillis(), kind))
@@ -507,6 +554,9 @@ class ProtectionManager private constructor(private val context: Context) {
             "aiEnabled" to config.effectiveAi.enabled,
             "aiTextModel" to safe { contentClassifier.isAvailable(ContentKind.TEXT) },
             "aiImageModel" to safe { contentClassifier.isAvailable(ContentKind.IMAGE) },
+            "shieldState" to safe { shieldStatus().state.id },
+            "shieldImageModel" to shieldImage.state.id,
+            "shieldAccessibility" to safe { shieldAccessibilityState().name.lowercase() },
             "databaseOk" to safe { databaseOk() },
             "logRetention" to config.logRetention.id,
             "logWriteFailures" to logger.failedWrites,
@@ -668,6 +718,87 @@ class ProtectionManager private constructor(private val context: Context) {
         )
     }
 
+    // ---- AI Content Shield ---------------------------------------------
+
+    /** Packages the shield's accessibility service should receive events from (empty when off). */
+    fun shieldPackages(): List<String> = config.shieldSettings.monitoredPackages()
+
+    /** Whether screen content may be read right now (protection on, not paused, AI on). */
+    fun shieldContentActive(): Boolean = config.filteringActive && config.effectiveAi.enabled
+
+    fun shieldAccessibilityState(): AccessibilityState {
+        val am = context.getSystemService(AccessibilityManager::class.java)
+        val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        return AccessibilityStateResolver.resolve(
+            frameworkAvailable = am != null,
+            enabledServices = enabled,
+            ourComponent = ComponentName(context, ContentShieldService::class.java).flattenToString(),
+            disclosureDeclined = config.shieldDisclosureDeclined,
+        )
+    }
+
+    /** The shield's real state (never ACTIVE while image AI is unavailable). */
+    fun shieldStatus(): ShieldStatus {
+        val a11y = shieldAccessibilityState()
+        return ShieldStatusResolver.resolve(
+            settings = config.shieldSettings,
+            protectionActive = config.filteringActive,
+            aiEnabled = config.effectiveAi.enabled,
+            accessibilityEnabled = a11y == AccessibilityState.ENABLED,
+            accessibilityAvailable = a11y != AccessibilityState.UNAVAILABLE,
+            textModelAvailable = contentClassifier.isAvailable(ContentKind.TEXT),
+            imageModelAvailable = shieldImage.isUsable,
+            textSlow = shield.textSlow,
+            imageSlow = shield.imageSlow,
+        )
+    }
+
+    val shieldImageModelState: ImageModelState get() = shieldImage.state
+
+    /** Turning the shield off (or an app off) needs the PIN; the UI checks it. */
+    fun setShieldEnabled(enabled: Boolean) {
+        config.shieldSettings = config.shieldSettings.copy(enabled = enabled)
+        if (enabled) config.shieldDisclosureDeclined = false
+        onShieldStateChanged()
+    }
+
+    fun setShieldAppEnabled(key: String, enabled: Boolean) {
+        require(SupportedApps.byKey(key) != null) { "unknown app" }
+        val s = config.shieldSettings
+        config.shieldSettings = s.copy(disabledApps = if (enabled) s.disabledApps - key else s.disabledApps + key)
+        onShieldStateChanged()
+    }
+
+    fun declineShieldDisclosure() {
+        config.shieldDisclosureDeclined = true
+    }
+
+    /**
+     * Logs a shield block (metadata only: time, app, category, confidence
+     * bucket, model version). Returns false if protection stopped in the
+     * meantime, in which case nothing is blocked.
+     */
+    fun onShieldBlock(e: ShieldEvent): Boolean {
+        if (!shield.isActiveFor(e.packageName)) return false
+        logger.record(
+            BlockEvent(
+                timestamp = e.timestamp,
+                subject = e.packageName,
+                category = e.category,
+                source = EventSource.AI,
+                confidence = e.confidenceBucket / 100.0,
+                ruleType = e.ruleType,
+            ),
+        )
+        return true
+    }
+
+    /** Protection, pause or shield settings changed: re-apply to the service; free the model when idle. */
+    private fun onShieldStateChanged() {
+        if (!config.shieldSettings.enabled || !shieldContentActive()) shield.release()
+        ContentShieldService.refresh()
+    }
+
     /** Launchers, the default dialer: blocking them would lock the owner out. */
     @Volatile private var exemptCache: Pair<Long, Set<String>>? = null
 
@@ -712,6 +843,7 @@ class ProtectionManager private constructor(private val context: Context) {
         events.clear()
         aiStats.clear()
         contentClassifier.clear()
+        shieldText.clear()
         logger.reset()
     }
 
@@ -726,6 +858,8 @@ class ProtectionManager private constructor(private val context: Context) {
         rules.deleteSource(RuleSource.USER)
         protectedApps.clear()
         config.clear()
+        shieldText.clear()
+        onShieldStateChanged() // the shield is off again after a full erase
         hmacKey.rotate()
         onRulesChanged()
     }

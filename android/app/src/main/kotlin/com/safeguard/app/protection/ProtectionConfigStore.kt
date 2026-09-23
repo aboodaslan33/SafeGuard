@@ -20,6 +20,8 @@ import com.safeguard.app.engine.rules.UnknownDomainPolicy
 import com.safeguard.app.engine.safesearch.SafeSearchConfig
 import com.safeguard.app.engine.safesearch.YouTubeMode
 import com.safeguard.app.engine.search.SearchPolicyConfig
+import com.safeguard.app.engine.shield.ShieldSettings
+import com.safeguard.app.engine.shield.SupportedApps
 
 /**
  * Native copy of the protection settings.
@@ -267,6 +269,26 @@ class ProtectionConfigStore(
         get() = prefs.getBoolean(KEY_A11Y_DECLINED, false)
         set(value) = prefs.edit().putBoolean(KEY_A11Y_DECLINED, value).apply()
 
+    /**
+     * AI Content Shield: on/off (off until the user turns it on) and the
+     * supported apps they switched off. Unknown app keys are ignored.
+     */
+    var shieldSettings: ShieldSettings
+        get() = ShieldSettings(
+            enabled = prefs.getBoolean(KEY_SHIELD_ENABLED, false),
+            disabledApps = prefs.getString(KEY_SHIELD_DISABLED_APPS, "").orEmpty().split(',')
+                .filter { key -> SupportedApps.byKey(key) != null }.toSet(),
+        )
+        set(value) = prefs.edit()
+            .putBoolean(KEY_SHIELD_ENABLED, value.enabled)
+            .putString(KEY_SHIELD_DISABLED_APPS, value.disabledApps.filter { SupportedApps.byKey(it) != null }.sorted().joinToString(","))
+            .apply()
+
+    /** The user declined the shield's accessibility disclosure. */
+    var shieldDisclosureDeclined: Boolean
+        get() = prefs.getBoolean(KEY_SHIELD_DECLINED, false)
+        set(value) = prefs.edit().putBoolean(KEY_SHIELD_DECLINED, value).apply()
+
     private fun readSafeSearch() = SafeSearchConfig(
         // Search protection follows the Phase 1 "فلترة البحث" preference; on by default.
         enabled = prefs.getBoolean(KEY_SEARCH, true),
@@ -335,6 +357,9 @@ class ProtectionConfigStore(
         const val KEY_SS_DDG = "safesearch_ddg"
         const val KEY_SS_YOUTUBE = "safesearch_youtube"
         const val KEY_A11Y_DECLINED = "a11y_disclosure_declined"
+        const val KEY_SHIELD_ENABLED = "shield_enabled"
+        const val KEY_SHIELD_DISABLED_APPS = "shield_disabled_apps"
+        const val KEY_SHIELD_DECLINED = "shield_disclosure_declined"
         const val KEY_A11Y_WAS_ENABLED = "a11y_was_enabled"
         const val KEY_AI_ENABLED = "ai_enabled"
         const val KEY_AI_MODE = "ai_mode"

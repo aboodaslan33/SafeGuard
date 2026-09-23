@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AI Content Shield. Least privilege:
+  - packageNames limits events to the supported apps (SupportedApps.kt; a
+    test keeps both lists equal). The service narrows it further at runtime
+    to the apps the user left on, and switches content events off while
+    the shield or protection is off.
+  - canRetrieveWindowContent is needed to read visible text in those apps.
+    Editable and password fields are never read; text is classified in
+    memory and discarded.
+  - No gestures other than "Home", no overlays, no screenshots.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="true"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="300"
+    android:packageNames="com.android.chrome,com.google.android.youtube,com.instagram.android,com.reddit.frontpage,com.ss.android.ugc.trill,com.zhiliaoapp.musically,org.mozilla.firefox"
+    android:description="@string/content_shield_description"
+    android:summary="@string/content_shield_summary" />

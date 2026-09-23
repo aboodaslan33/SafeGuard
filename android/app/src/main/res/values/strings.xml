@@ -5,4 +5,7 @@
     <string name="app_guard_label">SafeGuard app protection</string>
     <string name="app_guard_summary">Stops the apps you chose to protect from opening.</string>
     <string name="app_guard_description">SafeGuard uses this service only to learn the name of the app that opened, so it can stop the apps you added to “Protected apps”. It doesn\'t read screen content or what you type, and sends no data off your device. You can turn the service off here at any time.</string>
+    <string name="content_shield_label">SafeGuard AI Content Shield</string>
+    <string name="content_shield_summary">Checks text shown in supported apps (such as Instagram, YouTube and Chrome) against your protection settings, on your device.</string>
+    <string name="content_shield_description">SafeGuard uses this service only in the supported apps you left on in SafeGuard (Instagram, TikTok, YouTube, Reddit, Chrome, Firefox). It reads the text those apps show on screen and checks it on your device against your protection settings. It never reads what you type or password fields, never stores or sends the text, and takes no screenshots. If content is blocked, you are sent to the home screen. You can turn the service off here at any time.</string>
 </resources>

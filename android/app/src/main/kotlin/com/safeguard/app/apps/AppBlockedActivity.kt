@@ -29,6 +29,10 @@ class AppBlockedActivity : Activity() {
         val en = ProtectionManager.get(this).config.uiLanguage == "en"
         fun tr(ar: String, english: String) = if (en) english else ar
         val label = intent.getStringExtra(EXTRA_LABEL)?.take(80) ?: tr("هذا التطبيق", "this app")
+        // KIND_CONTENT: the AI Content Shield blocked something inside an app.
+        // Only the category is shown — never the content itself.
+        val content = intent.getStringExtra(EXTRA_KIND) == KIND_CONTENT
+        val category = categoryName(intent.getStringExtra(EXTRA_CATEGORY), en)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -38,18 +42,34 @@ class AppBlockedActivity : Activity() {
             setPadding(dp(24), dp(24), dp(24), dp(24))
         }
         root.addView(text("🛡", 44f, ACCENT))
-        root.addView(text(tr("هذا التطبيق محمي", "This app is protected"), 22f, TEXT_PRIMARY, top = 16))
-        root.addView(
-            text(
-                tr(
-                    "أضفت «$label» إلى التطبيقات المحمية في SafeGuard، لذلك لا يمكن فتحه الآن.",
-                    "You added “$label” to protected apps in SafeGuard, so it can't be opened now.",
+        if (content) {
+            root.addView(text(tr("تم حظر هذا المحتوى", "This content was blocked"), 22f, TEXT_PRIMARY, top = 16))
+            root.addView(
+                text(
+                    tr(
+                        "تم اكتشاف محتوى لا يتوافق مع إعدادات الحماية.",
+                        "Content that doesn't match your protection settings was detected.",
+                    ),
+                    15f,
+                    TEXT_SECONDARY,
+                    top = 8,
                 ),
-                15f,
-                TEXT_SECONDARY,
-                top = 8,
-            ),
-        )
+            )
+            if (category != null) root.addView(text(tr("الفئة: $category", "Category: $category"), 14f, TEXT_SECONDARY, top = 8))
+        } else {
+            root.addView(text(tr("هذا التطبيق محمي", "This app is protected"), 22f, TEXT_PRIMARY, top = 16))
+            root.addView(
+                text(
+                    tr(
+                        "أضفت «$label» إلى التطبيقات المحمية في SafeGuard، لذلك لا يمكن فتحه الآن.",
+                        "You added “$label” to protected apps in SafeGuard, so it can't be opened now.",
+                    ),
+                    15f,
+                    TEXT_SECONDARY,
+                    top = 8,
+                ),
+            )
+        }
         root.addView(
             Button(this).apply {
                 text = tr("العودة إلى الشاشة الرئيسية", "Back to home screen")
@@ -96,8 +116,22 @@ class AppBlockedActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    /** Localised name of a category id, or null for ids SafeGuard doesn't show. */
+    private fun categoryName(id: String?, en: Boolean): String? = when (id) {
+        "sexual" -> if (en) "Sexual content" else "محتوى جنسي"
+        "violence" -> if (en) "Violence" else "عنف"
+        "gore" -> if (en) "Gore" else "محتوى دموي"
+        "gambling" -> if (en) "Gambling" else "قمار"
+        "drugs" -> if (en) "Drugs" else "مخدرات"
+        "dangerous" -> if (en) "Dangerous content" else "محتوى خطير"
+        else -> null
+    }
+
     companion object {
         const val EXTRA_LABEL = "label"
+        const val EXTRA_KIND = "kind"
+        const val EXTRA_CATEGORY = "category"
+        const val KIND_CONTENT = "content"
         private val BACKGROUND = Color.parseColor("#0D1012")
         private val ACCENT = Color.parseColor("#5BB89F")
         private val ON_ACCENT = Color.parseColor("#05201A")

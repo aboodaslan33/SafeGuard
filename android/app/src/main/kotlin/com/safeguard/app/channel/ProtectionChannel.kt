@@ -19,23 +19,24 @@ import com.safeguard.app.engine.ai.ThresholdProfiles
 import com.safeguard.app.engine.ai.image.ImageLimits
 import com.safeguard.app.engine.ai.model.BuiltInModels
 import com.safeguard.app.engine.apps.AppRuleException
-import com.safeguard.app.engine.logging.EventSource
+import com.safeguard.app.engine.explain.DecisionExplainer
 import com.safeguard.app.engine.health.HealthReport
-import com.safeguard.app.engine.modes.ProtectionMode
-import com.safeguard.app.engine.rules.UserRuleException
-import com.safeguard.app.engine.search.CustomKeyword
-import com.safeguard.app.engine.search.KeywordException
-import com.safeguard.app.engine.stats.WindowStatistics
 import com.safeguard.app.engine.logging.BlockEvent
-import com.safeguard.app.engine.safesearch.SafeSearchConfig
-import com.safeguard.app.engine.safesearch.YouTubeMode
+import com.safeguard.app.engine.logging.EventSource
+import com.safeguard.app.engine.logging.LogRetention
+import com.safeguard.app.engine.modes.ProtectionMode
+import com.safeguard.app.engine.pause.TemporaryUnlock
 import com.safeguard.app.engine.rules.Category
 import com.safeguard.app.engine.rules.Rule
 import com.safeguard.app.engine.rules.RuleAction
 import com.safeguard.app.engine.rules.RuleSource
-import com.safeguard.app.engine.explain.DecisionExplainer
-import com.safeguard.app.engine.logging.LogRetention
-import com.safeguard.app.engine.pause.TemporaryUnlock
+import com.safeguard.app.engine.rules.UserRuleException
+import com.safeguard.app.engine.safesearch.SafeSearchConfig
+import com.safeguard.app.engine.safesearch.YouTubeMode
+import com.safeguard.app.engine.search.CustomKeyword
+import com.safeguard.app.engine.search.KeywordException
+import com.safeguard.app.engine.shield.SupportedApps
+import com.safeguard.app.engine.stats.WindowStatistics
 import com.safeguard.app.engine.status.ProtectionStatus
 import com.safeguard.app.protection.ProtectionManager
 import io.flutter.plugin.common.BinaryMessenger
@@ -288,6 +289,21 @@ class ProtectionChannel(
                     true
                 }
                 "getDiagnostics" -> manager.diagnostics()
+                // AI Content Shield. Loosening (off / an app off) needs the PIN in the UI.
+                "getShieldState" -> shieldState()
+                "setShieldEnabled" -> {
+                    manager.setShieldEnabled(call.argument<Boolean>("enabled") ?: throw bad("enabled"))
+                    shieldState()
+                }
+                "setShieldAppEnabled" -> {
+                    val key = call.argument<String>("app")?.takeIf { SupportedApps.byKey(it) != null } ?: throw bad("app")
+                    manager.setShieldAppEnabled(key, call.argument<Boolean>("enabled") ?: throw bad("enabled"))
+                    shieldState()
+                }
+                "setShieldDisclosure" -> {
+                    if (call.argument<Boolean>("accepted") != true) manager.declineShieldDisclosure()
+                    shieldState()
+                }
                 "getAlertsState" -> alertsState()
                 "setAlertsEnabled" -> {
                     manager.config.alertsEnabled = call.argument<Boolean>("enabled") ?: throw bad("enabled")
@@ -450,6 +466,37 @@ class ProtectionChannel(
         Settings.Global.getInt(activity.contentResolver, Settings.Global.BOOT_COUNT)
     } catch (e: Settings.SettingNotFoundException) {
         -1
+    }
+
+    /** Shield state for the UI: ids and flags only, no content. */
+    private fun shieldState(): Map<String, Any?> {
+        val settings = manager.config.shieldSettings
+        val status = manager.shieldStatus()
+        val pm = activity.packageManager
+        return mapOf(
+            "enabled" to settings.enabled,
+            "state" to status.state.id,
+            "issues" to status.issues.map { it.id },
+            "textActive" to status.textActive,
+            "imageActive" to status.imageActive,
+            "accessibility" to manager.shieldAccessibilityState().id,
+            "textModel" to BuiltInModels.TEXT_V1.id,
+            "textModelAvailable" to manager.contentClassifier.isAvailable(ContentKind.TEXT),
+            "imageModelState" to manager.shieldImageModelState.id,
+            "apps" to SupportedApps.all.map { app ->
+                mapOf(
+                    "key" to app.key,
+                    "name" to app.displayName,
+                    "packages" to app.packages,
+                    "level" to app.level.id,
+                    "methods" to app.methods.map { it.id },
+                    "limitations" to app.limitations.map { it.id },
+                    "enabled" to settings.isAppEnabled(app),
+                    "installed" to app.packages.any { pm.getLaunchIntentForPackage(it) != null },
+                    "verifiedOnDevice" to app.verifiedOnDevice,
+                )
+            },
+        )
     }
 
     private fun alertsState() = mapOf(

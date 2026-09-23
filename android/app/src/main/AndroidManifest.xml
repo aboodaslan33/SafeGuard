@@ -95,6 +95,26 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_service_config" />
         </service>
+        <!--
+          AI Content Shield (optional, off until the user turns it on in
+          SafeGuard and enables it in Android's accessibility settings after
+          SafeGuard's disclosure). Receives events only from the supported
+          apps listed in its config; reads visible text there for on-device
+          classification. Separate from App Protection so each permission is
+          granted for its own purpose.
+        -->
+        <service
+            android:name=".shield.ContentShieldService"
+            android:exported="false"
+            android:label="@string/content_shield_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/content_shield_config" />
+        </service>
         <activity
             android:name=".apps.AppBlockedActivity"
             android:exported="false"
