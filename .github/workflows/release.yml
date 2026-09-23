@@ -59,7 +59,7 @@ jobs:
       - name: Remove signing material
         if: always()
         run: rm -f android/key.properties "$RUNNER_TEMP/upload.jks"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: safeguard-${{ github.ref_name }}-aab
           path: build/app/outputs/bundle/prodRelease/*.aab
